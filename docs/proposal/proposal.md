@@ -75,6 +75,22 @@
 > separate, clearly-defined tasks, and that those responsibilities substantially cover all of the work required
 > for the project.
 
+
+### Risk Register
+
+> You are to complete a risk register to demonstrate how you will account for the potential risks (i.e. something going wrong) when youa re working on your proiject. 
+> The purpose of a risk register is to identify potential issues beforehand and plan mitigation strategies to ensure the success of the project. 
+> The reisks are different for each project by some examples include 
+
+> if you are using physical components (e..g sensors), what happens if they never arrive, or if they break, or if they are not suitable?
+> if you are creating an AI/ML method , what happens if there is no suitable training data, or if the model performs poorly after training? 
+
+| Description | Likelyhood | Severity | Mitigation |
+|-------------|------------|----------|------------|
+|             |            |          |            |
+|             |            |          |            |
+|             |            |          |            |
+
 #### Student 1
 
 > *Student 1 should complete this section.*
