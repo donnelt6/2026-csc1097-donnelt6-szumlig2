@@ -111,7 +111,7 @@ Both students will collaborate on the overall architecture design, documentation
 | Description | Likelyhood | Severity | Mitigation |
 |-------------|------------|----------|------------|
 | Variability in document formats causes ingestion failures | Medium | High | Implement fallback plain-text extraction, add automated regression tests, and expose retry tooling for users. |
-| Web scraping blocked by site policies | Medium | Medium | Respect robots.txt, provide manual upload fallback, and log blocked URLs for review. |
+| Web scraping blocked by site policies | Medium | Medium | Respect robots.txt and provide manual upload fallback |
 | Supabase outage impacts data access | Low | High | Enable automatic retries, maintain regular backups. |
 | Users upload very large files exceeding limits | Medium | Medium | Set size caps, provide clear error messages, and suggest splitting documents. |
 | Embedding generation fails due to API downtime | Medium | Medium | Queue requests, retry later, and surface placeholders until recovery. |
