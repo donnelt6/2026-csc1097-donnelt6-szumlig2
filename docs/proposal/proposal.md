@@ -144,7 +144,9 @@ Both students will collaborate on the overall architecture design, documentation
 
 > *Gavin Szumlicki's signature.*
 
-
+<p align="center">
+  <img src="./res/gavin_signature.png" width="200px">
+</p>
 
 ### Risk Register
 
