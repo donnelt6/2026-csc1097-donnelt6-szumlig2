@@ -144,21 +144,15 @@ Both students will collaborate on the overall architecture design, documentation
 
 #### Student 1
 
-> *Student 1 should complete this section.*
+> *Tadhg Donnelly's signature.*
+
+<p align="center">
+  <img src="./res/tadhg_signature.png" width="300px">
+</p>
 
 #### Student 2
 
-> *Student 2 should complete this section.*
-
-## Example
-
-> Example: Here's how you can include images in markdown documents...
-
-<!-- Basically, just use HTML! -->
-
-<p align="center">
-  <img src="./res/cat.png" width="300px">
-</p>
+> *Gavin Szumlicki's signature.*
 
 ### References
 
