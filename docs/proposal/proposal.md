@@ -33,7 +33,7 @@ During his internship, Tadhg experimented with addressing this problem by buildi
 
 The completed system will deliver a platform where individuals and teams-alike can consolidate and query onboarding and professional documentation. Core features include:
 
-- Upload and ingestion of PDFs, DOCX, TXT, Markdown, webpages, and (stretch goal) YouTube training videos.. 
+- Upload and ingestion of PDFs, DOCX, TXT, Markdown, webpages, and (stretch goal) YouTube training videos.
 - Organisation of content inside shared hubs, where managers or team-leads can invite collaborators and maintain a trusted knowledge base.
 - A conversational interface with a toggle to either limit answers to hub content or expand to the model’s broader knowledge, with citations included in every response.
 - Automated detection of due dates, responsibilities, and action items within documentation, prompting users to create reminders that surface via email or in-app alerts.
