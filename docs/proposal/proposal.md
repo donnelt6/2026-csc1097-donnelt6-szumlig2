@@ -131,6 +131,21 @@ Both students will collaborate on the overall architecture design, documentation
 - Architecture design, UI/UX design and project documentation.
 - Comprehensive user testing and iterative feedback loops.
 
+
+#### Student 1
+
+> *Tadhg Donnelly's signature.*
+
+<p align="center">
+  <img src="./res/tadhg_signature.png" width="200px">
+</p>
+
+#### Student 2
+
+> *Gavin Szumlicki's signature.*
+
+
+
 ### Risk Register
 
 | Description | Likelyhood | Severity | Mitigation |
@@ -141,18 +156,6 @@ Both students will collaborate on the overall architecture design, documentation
 | Users upload very large files exceeding limits | Medium | Medium | Set size caps, provide clear error messages, and suggest splitting documents. |
 | Embedding generation fails due to API downtime | Medium | Medium | Queue requests, retry later, and surface placeholders until recovery. |
 
-
-#### Student 1
-
-> *Tadhg Donnelly's signature.*
-
-<p align="center">
-  <img src="./res/tadhg_signature.png" width="300px">
-</p>
-
-#### Student 2
-
-> *Gavin Szumlicki's signature.*
 
 ### References
 
