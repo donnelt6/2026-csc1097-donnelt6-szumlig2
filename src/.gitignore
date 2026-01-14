@@ -1,0 +1,32 @@
+# Node / Next.js
+node_modules
+.next
+.turbo
+.vercel
+
+# Python
+__pycache__/
+.venv
+.pytest_cache
+.mypy_cache
+
+# Env files
+.env
+.env.*
+!.env.example
+!**/.env.example
+
+# Editor
+.DS_Store
+*.swp
+*.swo
+*.log
+.idea/
+.vscode/
+
+# Build artifacts
+dist/
+build/
+
+# Python packaging metadata
+*.egg-info/
