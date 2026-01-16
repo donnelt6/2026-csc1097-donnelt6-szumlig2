@@ -9,7 +9,6 @@ class Settings(BaseSettings):
     supabase_anon_key: str = ""
     supabase_service_role_key: str = ""
     supabase_storage_bucket: str = "sources"
-    dev_user_id: str = ""
     redis_url: str = "redis://localhost:6379/0"
     openai_api_key: str = ""
     embedding_model: str = "text-embedding-3-small"

@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .core.config import get_settings
-from .routers import chat, hubs, sources
+from .routers import chat, hubs, memberships, sources, users
 
 settings = get_settings()
 
@@ -23,6 +23,8 @@ app.add_middleware(
 app.include_router(hubs.router)
 app.include_router(sources.router)
 app.include_router(chat.router)
+app.include_router(memberships.router)
+app.include_router(users.router)
 
 
 @app.get("/health")

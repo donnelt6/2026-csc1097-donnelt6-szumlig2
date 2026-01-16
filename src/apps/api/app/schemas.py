@@ -10,16 +10,57 @@ class HubScope(str, Enum):
     global_scope = "global"
 
 
+class MembershipRole(str, Enum):
+    owner = "owner"
+    editor = "editor"
+    viewer = "viewer"
+
+
 class Hub(BaseModel):
     id: str
+    owner_id: str
     name: str
     description: Optional[str] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
+    role: Optional[MembershipRole] = None
 
 
 class HubCreate(BaseModel):
     name: str
     description: Optional[str] = None
+
+
+class CurrentUser(BaseModel):
+    id: str
+    email: Optional[str] = None
+
+
+class HubMember(BaseModel):
+    hub_id: str
+    user_id: str
+    role: MembershipRole
+    invited_at: Optional[datetime] = None
+    accepted_at: Optional[datetime] = None
+    email: Optional[str] = None
+
+
+class HubInviteRequest(BaseModel):
+    email: str
+    role: MembershipRole = MembershipRole.viewer
+
+
+class HubInviteResponse(BaseModel):
+    member: HubMember
+
+
+class HubMemberUpdate(BaseModel):
+    role: MembershipRole
+
+
+class PendingInvite(BaseModel):
+    hub: Hub
+    role: MembershipRole
+    invited_at: Optional[datetime] = None
 
 
 class SourceStatus(str, Enum):
