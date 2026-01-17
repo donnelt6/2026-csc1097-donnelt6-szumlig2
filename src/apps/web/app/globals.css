@@ -65,6 +65,20 @@ a {
   font-size: 0.95rem;
 }
 
+.role-pill {
+  display: inline-block;
+  margin-top: 8px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid #22304b;
+  background: #0f1726;
+  color: var(--text);
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
 input,
 textarea {
   width: 100%;

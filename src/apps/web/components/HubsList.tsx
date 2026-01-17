@@ -41,6 +41,7 @@ export function HubsList() {
           <Link key={hub.id} href={`/hubs/${hub.id}`} className="card" style={{ borderColor: "#22304b" }}>
             <strong>{hub.name}</strong>
             <p className="muted">{hub.description || "No description yet"}</p>
+            {hub.role && <span className="role-pill">{hub.role}</span>}
           </Link>
         ))}
       </div>

@@ -9,9 +9,10 @@ interface Props {
   hubId: string;
   sources: Source[];
   onRefresh: () => void;
+  canUpload?: boolean;
 }
 
-export function UploadPanel({ hubId, sources, onRefresh }: Props) {
+export function UploadPanel({ hubId, sources, onRefresh, canUpload = true }: Props) {
   const [file, setFile] = useState<File | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
@@ -53,11 +54,13 @@ export function UploadPanel({ hubId, sources, onRefresh }: Props) {
           type="file"
           onChange={(e) => setFile(e.target.files?.[0] ?? null)}
           accept=".pdf,.doc,.docx,.txt,.md"
+          disabled={!canUpload}
         />
       </label>
-      <button className="button" onClick={() => mutation.mutate()} disabled={mutation.isPending || !file}>
+      <button className="button" onClick={() => mutation.mutate()} disabled={!canUpload || mutation.isPending || !file}>
         {mutation.isPending ? "Uploading..." : "Upload"}
       </button>
+      {!canUpload && <p className="muted">You only have view access. Ask the hub owner to grant edit permissions.</p>}
       {statusMessage && <p className="muted">{statusMessage}</p>}
       <div className="grid" style={{ gap: "10px" }}>
         {sortedSources.map((source) => (

@@ -1,22 +1,41 @@
-import type { ChatResponse, Hub, Source } from "./types";
+import { getAccessToken } from "./supabaseClient";
+import type { ChatResponse, Hub, HubMember, PendingInvite, Source } from "./types";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 
 async function handle<T>(res: Response): Promise<T> {
   if (!res.ok) {
     const detail = await res.text();
+    try {
+      const parsed = JSON.parse(detail);
+      if (parsed?.detail) {
+        throw new Error(parsed.detail);
+      }
+    } catch {
+      // Ignore JSON parse errors and fall back to raw text.
+    }
     throw new Error(detail || `Request failed with status ${res.status}`);
   }
   return res.json() as Promise<T>;
 }
 
+async function authedFetch(url: string, init: RequestInit = {}) {
+  const token = await getAccessToken();
+  if (!token) {
+    throw new Error("You must be signed in to continue.");
+  }
+  const headers = new Headers(init.headers);
+  headers.set("Authorization", `Bearer ${token}`);
+  return fetch(url, { ...init, headers });
+}
+
 export async function listHubs(): Promise<Hub[]> {
-  const res = await fetch(`${API_BASE}/hubs`, { cache: "no-store" });
+  const res = await authedFetch(`${API_BASE}/hubs`, { cache: "no-store" });
   return handle<Hub[]>(res);
 }
 
 export async function createHub(data: { name: string; description?: string }): Promise<Hub> {
-  const res = await fetch(`${API_BASE}/hubs`, {
+  const res = await authedFetch(`${API_BASE}/hubs`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
@@ -25,12 +44,12 @@ export async function createHub(data: { name: string; description?: string }): P
 }
 
 export async function listSources(hubId: string): Promise<Source[]> {
-  const res = await fetch(`${API_BASE}/sources/${hubId}`, { cache: "no-store" });
+  const res = await authedFetch(`${API_BASE}/sources/${hubId}`, { cache: "no-store" });
   return handle<Source[]>(res);
 }
 
 export async function createSource(data: { hub_id: string; original_name: string }): Promise<{ source: Source; upload_url: string }> {
-  const res = await fetch(`${API_BASE}/sources`, {
+  const res = await authedFetch(`${API_BASE}/sources`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
@@ -39,22 +58,71 @@ export async function createSource(data: { hub_id: string; original_name: string
 }
 
 export async function getSourceStatus(sourceId: string): Promise<{ id: string; status: string; failure_reason?: string }> {
-  const res = await fetch(`${API_BASE}/sources/${sourceId}/status`, { cache: "no-store" });
+  const res = await authedFetch(`${API_BASE}/sources/${sourceId}/status`, { cache: "no-store" });
   return handle(res);
 }
 
 export async function enqueueSource(sourceId: string): Promise<{ status: string }> {
-  const res = await fetch(`${API_BASE}/sources/${sourceId}/enqueue`, {
+  const res = await authedFetch(`${API_BASE}/sources/${sourceId}/enqueue`, {
     method: "POST",
   });
   return handle(res);
 }
 
 export async function askQuestion(data: { hub_id: string; scope: "hub" | "global"; question: string }): Promise<ChatResponse> {
-  const res = await fetch(`${API_BASE}/chat`, {
+  const res = await authedFetch(`${API_BASE}/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
   });
   return handle<ChatResponse>(res);
+}
+
+export async function listMembers(hubId: string): Promise<HubMember[]> {
+  const res = await authedFetch(`${API_BASE}/hubs/${hubId}/members`, { cache: "no-store" });
+  return handle<HubMember[]>(res);
+}
+
+export async function inviteMember(hubId: string, data: { email: string; role: "owner" | "editor" | "viewer" }): Promise<HubMember> {
+  const res = await authedFetch(`${API_BASE}/hubs/${hubId}/members/invite`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  const payload = await handle<{ member: HubMember }>(res);
+  return payload.member;
+}
+
+export async function acceptInvite(hubId: string): Promise<HubMember> {
+  const res = await authedFetch(`${API_BASE}/hubs/${hubId}/members/accept`, {
+    method: "POST",
+  });
+  return handle<HubMember>(res);
+}
+
+export async function updateMemberRole(
+  hubId: string,
+  userId: string,
+  data: { role: "owner" | "editor" | "viewer" }
+): Promise<HubMember> {
+  const res = await authedFetch(`${API_BASE}/hubs/${hubId}/members/${userId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  return handle<HubMember>(res);
+}
+
+export async function removeMember(hubId: string, userId: string): Promise<void> {
+  const res = await authedFetch(`${API_BASE}/hubs/${hubId}/members/${userId}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) {
+    await handle(res);
+  }
+}
+
+export async function listInvites(): Promise<PendingInvite[]> {
+  const res = await authedFetch(`${API_BASE}/invites`, { cache: "no-store" });
+  return handle<PendingInvite[]>(res);
 }
