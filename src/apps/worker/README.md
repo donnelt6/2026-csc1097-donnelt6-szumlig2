@@ -10,7 +10,7 @@ pip install -r requirements.txt
 celery -A worker.tasks worker --loglevel=info
 ```
 
-Configure `REDIS_URL`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and `OPENAI_API_KEY` in `.env.example` for local development.
+Configure `REDIS_URL`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and `OPENAI_API_KEY` in `.env.example` for local development. The worker uses the service role key so it can write chunks through RLS.
 
 ## Files and purpose
 - `.env.example` - Template for required env vars (no secrets).

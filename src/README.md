@@ -16,9 +16,8 @@ This `src/` folder contains the scaffold for Caddie: a Next.js frontend, FastAPI
 4) Run worker: `cd apps/worker && celery -A worker.tasks worker --loglevel=info`
 5) Run web: `cd apps/web && npm run dev` (expects `NEXT_PUBLIC_API_BASE_URL=http://localhost:8000`)
 
-
 Supabase/OpenAI/Redis env placeholders live in each app's `.env.example`. The API and worker require these to run.
-Note: the API currently uses `SUPABASE_SERVICE_ROLE_KEY` and a `DEV_USER_ID` (a Supabase auth user id) until auth is wired into the web app.
+Note: the API expects Supabase Auth JWTs for user-scoped access and uses the service role key only for storage/admin tasks.
 
 ## Daily run commands (PowerShell)
 Use three terminals so each process keeps running.
@@ -45,6 +44,12 @@ npm run dev
 Run the SQL migration in Supabase SQL Editor:
 `2026-csc1097-donnelt6-szumlig2/src/apps/api/migrations/001_init.sql`
 `2026-csc1097-donnelt6-szumlig2/src/apps/api/migrations/002_match_source_chunks.sql`
+`2026-csc1097-donnelt6-szumlig2/src/apps/api/migrations/003_auth_roles.sql`
+`2026-csc1097-donnelt6-szumlig2/src/apps/api/migrations/004_fix_hub_members_rls.sql`
+`2026-csc1097-donnelt6-szumlig2/src/apps/api/migrations/005_fix_hub_members_rls_functions.sql`
+
+## Auth note
+Sign in via `/auth` using Supabase email/password auth. The web app stores the Supabase session and sends `Authorization: Bearer <JWT>` on API requests. The API enforces RLS with the user token and only uses the service role key for storage/admin tasks (ingestion, member lookups).
 
 ## Chat note
 Chat streaming is not implemented yet; it is planned as a future improvement.
