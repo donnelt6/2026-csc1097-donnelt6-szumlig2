@@ -1,0 +1,99 @@
+"""Unit tests for store.chat with stubbed clients and match results."""
+
+from types import SimpleNamespace
+
+from app.schemas import ChatRequest
+from app.services.store import store
+
+
+class FakeResponse:
+    def __init__(self, data: list[dict]) -> None:
+        self.data = data
+
+
+class FakeTable:
+    def __init__(self, client: "FakeClient", name: str) -> None:
+        self.client = client
+        self.name = name
+        self._payload = None
+
+    def insert(self, payload: dict) -> "FakeTable":
+        self._payload = payload
+        self.client.inserted.setdefault(self.name, []).append(payload)
+        return self
+
+    def execute(self) -> FakeResponse:
+        if self.name == "chat_sessions":
+            return FakeResponse([{"id": "session-1"}])
+        if self.name == "messages":
+            self.client.message_count += 1
+            return FakeResponse([{"id": f"message-{self.client.message_count}"}])
+        return FakeResponse([{}])
+
+
+class FakeClient:
+    def __init__(self) -> None:
+        self.message_count = 0
+        self.inserted: dict[str, list[dict]] = {}
+
+    def table(self, name: str) -> FakeTable:
+        return FakeTable(self, name)
+
+
+class FakeCompletion:
+    def __init__(self, content: str) -> None:
+        self.choices = [SimpleNamespace(message=SimpleNamespace(content=content))]
+        self.usage = None
+
+
+class FakeChatCompletions:
+    def __init__(self, content: str) -> None:
+        self._content = content
+
+    def create(self, **kwargs) -> FakeCompletion:
+        return FakeCompletion(self._content)
+
+
+class FakeChat:
+    def __init__(self, content: str) -> None:
+        self.completions = FakeChatCompletions(content)
+
+
+class FakeLLMClient:
+    def __init__(self, content: str) -> None:
+        self.chat = FakeChat(content)
+
+
+def test_chat_returns_fallback_when_no_matches(monkeypatch) -> None:
+    # Forces empty matches; expect fallback answer and no citations.
+    fake_client = FakeClient()
+    monkeypatch.setattr(store, "_embed_query", lambda text: [0.1])
+    monkeypatch.setattr(store, "_match_chunks", lambda client, hub_id, embedding, top_k: [])
+
+    payload = ChatRequest(hub_id="hub-1", question="What is this?")
+    result = store.chat(fake_client, "user-1", payload)
+
+    assert result.answer.startswith("I couldn't find")
+    assert result.citations == []
+
+
+def test_chat_includes_citations_when_matches(monkeypatch) -> None:
+    # Provides a match and fake LLM; expect citations and stored messages.
+    fake_client = FakeClient()
+    monkeypatch.setattr(store, "_embed_query", lambda text: [0.1])
+    monkeypatch.setattr(
+        store,
+        "_match_chunks",
+        lambda client, hub_id, embedding, top_k: [
+            {"source_id": "src-1", "text": "Snippet", "chunk_index": 0, "similarity": 0.9}
+        ],
+    )
+    monkeypatch.setattr(store, "llm_client", FakeLLMClient("Answer"))
+
+    payload = ChatRequest(hub_id="hub-1", question="What is this?")
+    result = store.chat(fake_client, "user-1", payload)
+
+    assert result.answer == "Answer"
+    assert len(result.citations) == 1
+    assert result.citations[0].source_id == "src-1"
+    assert len(fake_client.inserted.get("messages", [])) == 2
