@@ -189,13 +189,24 @@ a {
 
 .notification-card {
   display: grid;
-  grid-template-columns: auto 1fr auto;
-  gap: 10px;
-  padding: 10px;
+  gap: 12px;
+  padding: 12px;
   border-radius: 12px;
   background: #0f1726;
   border-left: 4px solid #f56565;
-  align-items: center;
+}
+
+.notification-content {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 10px;
+  align-items: start;
+}
+
+.notification-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .notification-icon {
@@ -217,10 +228,70 @@ a {
   font-size: 0.9rem;
 }
 
-.notification-meta {
-  margin: 4px 0 0;
+.notification-meta-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.notification-hub {
+  font-weight: 600;
+  font-size: 0.85rem;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.notification-meta-right {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.notification-role {
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid #22304b;
+  background: #0b1221;
   color: var(--muted);
-  font-size: 0.8rem;
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+
+.notification-time {
+  color: var(--muted);
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
+.notification-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.notification-accept {
+  border: none;
+  border-radius: 8px;
+  padding: 6px 10px;
+  background: linear-gradient(120deg, #4fd1c5, #00b5d8);
+  color: #0b1221;
+  font-weight: 700;
+  font-size: 0.7rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.notification-accept:disabled {
+  opacity: 0.7;
+  cursor: wait;
 }
 
 .notification-dismiss {
@@ -244,6 +315,16 @@ a {
   border-radius: 12px;
   border: 1px dashed var(--border);
   color: var(--muted);
+}
+
+.notifications-error {
+  margin: 0;
+  padding: 12px;
+  text-align: center;
+  border-radius: 12px;
+  border: 1px dashed #f56565;
+  color: #f56565;
+  font-size: 0.85rem;
 }
 
 .profile-trigger {
