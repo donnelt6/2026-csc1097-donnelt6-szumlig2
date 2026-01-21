@@ -1,11 +1,9 @@
 import { HubsList } from "../components/HubsList";
 import { InvitesPanel } from "../components/InvitesPanel";
-import { UserMenu } from "../components/auth/UserMenu";
 
 export default function HomePage() {
   return (
     <main className="page grid" style={{ gap: "24px" }}>
-      <UserMenu />
       <header className="grid card">
         <h1 style={{ margin: 0 }}>Caddie</h1>
         <p className="muted">

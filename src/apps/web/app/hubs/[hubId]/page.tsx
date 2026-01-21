@@ -5,7 +5,6 @@ import { useQuery } from "@tanstack/react-query";
 import { ChatPanel } from "../../../components/ChatPanel";
 import { MembersPanel } from "../../../components/MembersPanel";
 import { UploadPanel } from "../../../components/UploadPanel";
-import { UserMenu } from "../../../components/auth/UserMenu";
 import { listHubs, listSources } from "../../../lib/api";
 
 export default function HubDetail({ params }: { params: { hubId: string } }) {
@@ -25,7 +24,6 @@ export default function HubDetail({ params }: { params: { hubId: string } }) {
 
   return (
     <main className="page grid" style={{ gap: "20px" }}>
-      <UserMenu />
       <Link href="/" className="muted">
         ← Back to hubs
       </Link>
