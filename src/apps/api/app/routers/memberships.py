@@ -1,10 +1,11 @@
 from typing import List
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from postgrest.exceptions import APIError
 from supabase import Client
 
-from ..dependencies import CurrentUser, get_current_user, get_supabase_user_client
+from ..dependencies import CurrentUser, get_current_user, get_supabase_user_client, rate_limit_user_ip
 from ..schemas import HubInviteRequest, HubInviteResponse, HubMember, HubMemberUpdate, PendingInvite
 from ..services.store import store
 from .errors import raise_postgrest_error
@@ -44,9 +45,13 @@ def _attach_emails(members: List[HubMember]) -> List[HubMember]:
     return members
 
 
-@router.get("/hubs/{hub_id}/members", response_model=list[HubMember])
+@router.get(
+    "/hubs/{hub_id}/members",
+    response_model=list[HubMember],
+    dependencies=[Depends(rate_limit_user_ip("memberships:read", "rate_limit_read_per_minute"))],
+)
 def list_members(
-    hub_id: str,
+    hub_id: UUID,
     current_user: CurrentUser = Depends(get_current_user),
     client: Client = Depends(get_supabase_user_client),
 ) -> list[HubMember]:
@@ -62,7 +67,11 @@ def list_members(
         raise_postgrest_error(exc)
 
 
-@router.get("/invites", response_model=list[PendingInvite])
+@router.get(
+    "/invites",
+    response_model=list[PendingInvite],
+    dependencies=[Depends(rate_limit_user_ip("memberships:read", "rate_limit_read_per_minute"))],
+)
 def list_pending_invites(
     current_user: CurrentUser = Depends(get_current_user),
     client: Client = Depends(get_supabase_user_client),
@@ -73,9 +82,14 @@ def list_pending_invites(
         raise_postgrest_error(exc)
 
 
-@router.post("/hubs/{hub_id}/members/invite", response_model=HubInviteResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/hubs/{hub_id}/members/invite",
+    response_model=HubInviteResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(rate_limit_user_ip("memberships:write", "rate_limit_write_per_minute"))],
+)
 def invite_member(
-    hub_id: str,
+    hub_id: UUID,
     payload: HubInviteRequest,
     current_user: CurrentUser = Depends(get_current_user),
     client: Client = Depends(get_supabase_user_client),
@@ -94,9 +108,13 @@ def invite_member(
         raise_postgrest_error(exc)
 
 
-@router.post("/hubs/{hub_id}/members/accept", response_model=HubMember)
+@router.post(
+    "/hubs/{hub_id}/members/accept",
+    response_model=HubMember,
+    dependencies=[Depends(rate_limit_user_ip("memberships:write", "rate_limit_write_per_minute"))],
+)
 def accept_invite(
-    hub_id: str,
+    hub_id: UUID,
     current_user: CurrentUser = Depends(get_current_user),
     client: Client = Depends(get_supabase_user_client),
 ) -> HubMember:
@@ -108,10 +126,14 @@ def accept_invite(
         raise_postgrest_error(exc)
 
 
-@router.patch("/hubs/{hub_id}/members/{user_id}", response_model=HubMember)
+@router.patch(
+    "/hubs/{hub_id}/members/{user_id}",
+    response_model=HubMember,
+    dependencies=[Depends(rate_limit_user_ip("memberships:write", "rate_limit_write_per_minute"))],
+)
 def update_member_role(
-    hub_id: str,
-    user_id: str,
+    hub_id: UUID,
+    user_id: UUID,
     payload: HubMemberUpdate,
     current_user: CurrentUser = Depends(get_current_user),
     client: Client = Depends(get_supabase_user_client),
@@ -128,10 +150,14 @@ def update_member_role(
         raise_postgrest_error(exc)
 
 
-@router.delete("/hubs/{hub_id}/members/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/hubs/{hub_id}/members/{user_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(rate_limit_user_ip("memberships:write", "rate_limit_write_per_minute"))],
+)
 def remove_member(
-    hub_id: str,
-    user_id: str,
+    hub_id: UUID,
+    user_id: UUID,
     current_user: CurrentUser = Depends(get_current_user),
     client: Client = Depends(get_supabase_user_client),
 ) -> None:

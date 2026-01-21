@@ -6,5 +6,5 @@ def test_get_me_returns_current_user(client) -> None:
     resp = client.get("/users/me")
     assert resp.status_code == 200
     data = resp.json()
-    assert data["id"] == "user-1"
+    assert data["id"] == "00000000-0000-0000-0000-000000000001"
     assert data["email"] == "user@example.com"

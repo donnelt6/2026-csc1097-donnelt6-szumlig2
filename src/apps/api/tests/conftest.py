@@ -14,18 +14,28 @@ from app.core import config as config_module
 
 config_module.get_settings.cache_clear()
 
-from app.dependencies import CurrentUser, get_current_user, get_supabase_user_client
+from app.dependencies import CurrentUser, get_current_user, get_rate_limiter, get_supabase_user_client
 from app.main import app
+from app.services.rate_limit import RateLimitResult
 
 
 class DummyClient:
     pass
 
 
+class AllowAllRateLimiter:
+    def check(self, key: str, limit: int, window_seconds: int = 60) -> RateLimitResult:
+        return RateLimitResult(allowed=True, remaining=limit, reset_in_seconds=window_seconds)
+
+
 @pytest.fixture
 def client() -> TestClient:
     # Overrides auth/client dependencies so router tests run offline.
-    app.dependency_overrides[get_current_user] = lambda: CurrentUser(id="user-1", email="user@example.com")
+    app.dependency_overrides[get_current_user] = lambda: CurrentUser(
+        id="00000000-0000-0000-0000-000000000001",
+        email="user@example.com",
+    )
+    app.dependency_overrides[get_rate_limiter] = lambda: AllowAllRateLimiter()
     app.dependency_overrides[get_supabase_user_client] = lambda: DummyClient()
     with TestClient(app) as test_client:
         yield test_client

@@ -4,10 +4,11 @@ from dataclasses import dataclass
 from typing import Optional
 
 import httpx
-from fastapi import Depends, Header, HTTPException, status
+from fastapi import Depends, Header, HTTPException, Request, Response, status
 from supabase import Client, create_client
 
 from .core.config import Settings, get_settings
+from .services.rate_limit import RateLimitResult, RateLimiter, rate_limiter
 
 
 @dataclass
@@ -63,3 +64,95 @@ def get_supabase_service_client(settings: Settings = Depends(get_settings)) -> C
     if not settings.supabase_url or not settings.supabase_service_role_key:
         raise RuntimeError("Supabase credentials missing. Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.")
     return create_client(settings.supabase_url, settings.supabase_service_role_key)
+
+
+def get_rate_limiter() -> RateLimiter:
+    return rate_limiter
+
+
+def _get_client_ip(request: Request, settings: Settings) -> str:
+    # Trust proxy headers only when explicitly enabled to avoid IP spoofing.
+    if settings.trust_proxy_headers:
+        forwarded = request.headers.get("x-forwarded-for")
+        if forwarded:
+            return forwarded.split(",")[0].strip()
+    if request.client:
+        return request.client.host
+    return "unknown"
+
+
+def _rate_limit_headers(limit: int, result: RateLimitResult, include_retry: bool) -> dict[str, str]:
+    headers = {
+        "X-RateLimit-Limit": str(limit),
+        "X-RateLimit-Remaining": str(result.remaining),
+        "X-RateLimit-Reset": str(result.reset_in_seconds),
+    }
+    if include_retry:
+        headers["Retry-After"] = str(result.reset_in_seconds)
+    return headers
+
+
+def _select_rate_limit_result(
+    user_limit: int,
+    user_result: RateLimitResult,
+    ip_limit: int,
+    ip_result: RateLimitResult,
+) -> tuple[int, RateLimitResult]:
+    if not user_result.allowed:
+        return user_limit, user_result
+    if not ip_result.allowed:
+        return ip_limit, ip_result
+    if ip_result.remaining < user_result.remaining:
+        return ip_limit, ip_result
+    return user_limit, user_result
+
+
+def rate_limit_user_ip(scope: str, limit_setting: str):
+    def _rate_limit(
+        request: Request,
+        response: Response,
+        current_user: CurrentUser = Depends(get_current_user),
+        settings: Settings = Depends(get_settings),
+        limiter: RateLimiter = Depends(get_rate_limiter),
+    ) -> None:
+        limit = getattr(settings, limit_setting)
+        ip_limit = max(1, int(limit * settings.rate_limit_ip_multiplier))
+        ip = _get_client_ip(request, settings)
+        # Enforce both user and IP buckets to curb token sharing and IP rotation.
+        user_result = limiter.check(f"{scope}:user:{current_user.id}", limit)
+        ip_result = limiter.check(f"{scope}:ip:{ip}", ip_limit)
+        header_limit, header_result = _select_rate_limit_result(limit, user_result, ip_limit, ip_result)
+        for key, value in _rate_limit_headers(header_limit, header_result, include_retry=False).items():
+            response.headers[key] = value
+        if not (user_result.allowed and ip_result.allowed):
+            headers = _rate_limit_headers(header_limit, header_result, include_retry=True)
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail=f"Rate limit exceeded. Try again in {header_result.reset_in_seconds}s.",
+                headers=headers,
+            )
+
+    return _rate_limit
+
+
+def rate_limit_ip_only(scope: str, limit_setting: str):
+    def _rate_limit(
+        request: Request,
+        response: Response,
+        settings: Settings = Depends(get_settings),
+        limiter: RateLimiter = Depends(get_rate_limiter),
+    ) -> None:
+        limit = getattr(settings, limit_setting)
+        ip = _get_client_ip(request, settings)
+        result = limiter.check(f"{scope}:ip:{ip}", limit)
+        for key, value in _rate_limit_headers(limit, result, include_retry=False).items():
+            response.headers[key] = value
+        if not result.allowed:
+            headers = _rate_limit_headers(limit, result, include_retry=True)
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail=f"Rate limit exceeded. Try again in {result.reset_in_seconds}s.",
+                headers=headers,
+            )
+
+    return _rate_limit
