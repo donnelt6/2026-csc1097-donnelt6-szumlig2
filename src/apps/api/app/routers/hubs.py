@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from postgrest.exceptions import APIError
 from supabase import Client
 
-from ..dependencies import CurrentUser, get_current_user, get_supabase_user_client
+from ..dependencies import CurrentUser, get_current_user, get_supabase_user_client, rate_limit_user_ip
 from ..schemas import Hub, HubCreate
 from ..services.store import store
 from .errors import raise_postgrest_error
@@ -10,7 +10,11 @@ from .errors import raise_postgrest_error
 router = APIRouter(prefix="/hubs", tags=["hubs"])
 
 
-@router.get("", response_model=list[Hub])
+@router.get(
+    "",
+    response_model=list[Hub],
+    dependencies=[Depends(rate_limit_user_ip("hubs:read", "rate_limit_read_per_minute"))],
+)
 def list_hubs(
     current_user: CurrentUser = Depends(get_current_user),
     client: Client = Depends(get_supabase_user_client),
@@ -21,7 +25,12 @@ def list_hubs(
         raise_postgrest_error(exc)
 
 
-@router.post("", response_model=Hub, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "",
+    response_model=Hub,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(rate_limit_user_ip("hubs:write", "rate_limit_write_per_minute"))],
+)
 def create_hub(
     payload: HubCreate,
     current_user: CurrentUser = Depends(get_current_user),

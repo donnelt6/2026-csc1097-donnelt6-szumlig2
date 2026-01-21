@@ -1,5 +1,7 @@
+import re
 import uuid
 from datetime import datetime
+from pathlib import PurePath
 from typing import Any, Dict, List, Optional, Tuple
 
 from openai import OpenAI
@@ -80,13 +82,16 @@ class SupabaseStore:
 
     def create_source(self, client: Client, payload: SourceCreate) -> Tuple[Source, str]:
         source_id = str(uuid.uuid4())
-        storage_path = f"{payload.hub_id}/{source_id}/{payload.original_name}"
+        hub_id = str(payload.hub_id)
+        safe_name = _sanitize_filename(payload.original_name)
+        # Use a sanitized filename for storage paths to avoid path traversal edge cases.
+        storage_path = f"{hub_id}/{source_id}/{safe_name}"
         response = (
             client.table("sources")
             .insert(
                 {
                     "id": source_id,
-                    "hub_id": payload.hub_id,
+                    "hub_id": hub_id,
                     "original_name": payload.original_name,
                     "storage_path": storage_path,
                     "status": SourceStatus.queued.value,
@@ -104,11 +109,17 @@ class SupabaseStore:
         return Source(**row), upload_url
 
     def list_sources(self, client: Client, hub_id: str) -> List[Source]:
-        response = client.table("sources").select("*").eq("hub_id", hub_id).order("created_at", desc=True).execute()
+        response = (
+            client.table("sources")
+            .select("*")
+            .eq("hub_id", str(hub_id))
+            .order("created_at", desc=True)
+            .execute()
+        )
         return [Source(**row) for row in response.data]
 
     def get_source(self, client: Client, source_id: str) -> Source:
-        response = client.table("sources").select("*").eq("id", source_id).limit(1).execute()
+        response = client.table("sources").select("*").eq("id", str(source_id)).limit(1).execute()
         if not response.data:
             raise KeyError("Source not found")
         return Source(**response.data[0])
@@ -117,14 +128,14 @@ class SupabaseStore:
         response = (
             client.table("sources")
             .update({"status": status.value, "failure_reason": failure_reason})
-            .eq("id", source_id)
+            .eq("id", str(source_id))
             .execute()
         )
         row = response.data[0]
         return Source(**row)
 
     def get_source_status(self, client: Client, source_id: str) -> SourceStatusResponse:
-        response = client.table("sources").select("id,status,failure_reason").eq("id", source_id).execute()
+        response = client.table("sources").select("id,status,failure_reason").eq("id", str(source_id)).execute()
         if not response.data:
             raise KeyError("Source not found")
         row = response.data[0]
@@ -134,8 +145,8 @@ class SupabaseStore:
         response = (
             client.table("hub_members")
             .select("hub_id,user_id,role,invited_at,accepted_at")
-            .eq("hub_id", hub_id)
-            .eq("user_id", user_id)
+            .eq("hub_id", str(hub_id))
+            .eq("user_id", str(user_id))
             .limit(1)
             .execute()
         )
@@ -144,7 +155,11 @@ class SupabaseStore:
         return HubMember(**response.data[0])
 
     def list_members(self, client: Client, hub_id: str, include_pending: bool) -> List[HubMember]:
-        query = client.table("hub_members").select("hub_id,user_id,role,invited_at,accepted_at").eq("hub_id", hub_id)
+        query = (
+            client.table("hub_members")
+            .select("hub_id,user_id,role,invited_at,accepted_at")
+            .eq("hub_id", str(hub_id))
+        )
         if not include_pending:
             query = query.not_.is_("accepted_at", "null")
         response = query.order("invited_at", desc=True).execute()
@@ -154,7 +169,7 @@ class SupabaseStore:
         response = (
             client.table("hub_members")
             .select("hub_id,role,invited_at, hubs (id, owner_id, name, description, created_at)")
-            .eq("user_id", user_id)
+            .eq("user_id", str(user_id))
             .is_("accepted_at", "null")
             .order("invited_at", desc=True)
             .execute()
@@ -180,7 +195,7 @@ class SupabaseStore:
             client.table("hub_members")
             .insert(
                 {
-                    "hub_id": hub_id,
+                    "hub_id": str(hub_id),
                     "user_id": target.id,
                     "role": payload.role.value,
                 }
@@ -195,8 +210,8 @@ class SupabaseStore:
         response = (
             client.table("hub_members")
             .update({"accepted_at": datetime.utcnow().isoformat()})
-            .eq("hub_id", hub_id)
-            .eq("user_id", user_id)
+            .eq("hub_id", str(hub_id))
+            .eq("user_id", str(user_id))
             .is_("accepted_at", "null")
             .execute()
         )
@@ -208,8 +223,8 @@ class SupabaseStore:
         response = (
             client.table("hub_members")
             .update({"role": role.value})
-            .eq("hub_id", hub_id)
-            .eq("user_id", user_id)
+            .eq("hub_id", str(hub_id))
+            .eq("user_id", str(user_id))
             .execute()
         )
         if not response.data:
@@ -217,14 +232,21 @@ class SupabaseStore:
         return HubMember(**response.data[0])
 
     def remove_member(self, client: Client, hub_id: str, user_id: str) -> None:
-        response = client.table("hub_members").delete().eq("hub_id", hub_id).eq("user_id", user_id).execute()
+        response = (
+            client.table("hub_members")
+            .delete()
+            .eq("hub_id", str(hub_id))
+            .eq("user_id", str(user_id))
+            .execute()
+        )
         if not response.data:
             raise KeyError("Member not found")
 
     def chat(self, client: Client, user_id: str, payload: ChatRequest) -> ChatResponse:
+        hub_id = str(payload.hub_id)
         session_row = (
             client.table("chat_sessions")
-            .insert({"hub_id": payload.hub_id, "scope": payload.scope.value, "created_by": user_id})
+            .insert({"hub_id": hub_id, "scope": payload.scope.value, "created_by": user_id})
             .execute()
         )
         session_id = session_row.data[0]["id"]
@@ -234,7 +256,7 @@ class SupabaseStore:
         ).execute()
 
         query_embedding = self._embed_query(payload.question)
-        raw_matches = self._match_chunks(client, payload.hub_id, query_embedding, self.top_k)
+        raw_matches = self._match_chunks(client, hub_id, query_embedding, self.top_k)
         matches = [m for m in raw_matches if (m.get("similarity") or 0) >= self.min_similarity]
         matches = matches[: self.max_citations]
         if not matches and raw_matches:
@@ -296,9 +318,23 @@ class SupabaseStore:
     def _match_chunks(self, client: Client, hub_id: str, embedding: List[float], top_k: int) -> List[Dict[str, Any]]:
         response = client.rpc(
             "match_source_chunks",
-            {"query_embedding": embedding, "match_count": top_k, "match_hub": hub_id},
+            {"query_embedding": embedding, "match_count": top_k, "match_hub": str(hub_id)},
         ).execute()
         return response.data or []
 
 
 store = SupabaseStore()
+
+
+_FILENAME_SAFE_RE = re.compile(r"[^A-Za-z0-9._ -]")
+
+
+def _sanitize_filename(name: str) -> str:
+    base = PurePath(name).name.strip()
+    base = _FILENAME_SAFE_RE.sub("_", base)
+    base = base.strip(" ._-")
+    if not base:
+        raise ValueError("Invalid file name.")
+    if len(base) > 255:
+        base = base[:255]
+    return base

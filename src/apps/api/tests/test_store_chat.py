@@ -70,7 +70,7 @@ def test_chat_returns_fallback_when_no_matches(monkeypatch) -> None:
     monkeypatch.setattr(store, "_embed_query", lambda text: [0.1])
     monkeypatch.setattr(store, "_match_chunks", lambda client, hub_id, embedding, top_k: [])
 
-    payload = ChatRequest(hub_id="hub-1", question="What is this?")
+    payload = ChatRequest(hub_id="11111111-1111-1111-1111-111111111111", question="What is this?")
     result = store.chat(fake_client, "user-1", payload)
 
     assert result.answer.startswith("I couldn't find")
@@ -90,7 +90,7 @@ def test_chat_includes_citations_when_matches(monkeypatch) -> None:
     )
     monkeypatch.setattr(store, "llm_client", FakeLLMClient("Answer"))
 
-    payload = ChatRequest(hub_id="hub-1", question="What is this?")
+    payload = ChatRequest(hub_id="11111111-1111-1111-1111-111111111111", question="What is this?")
     result = store.chat(fake_client, "user-1", payload)
 
     assert result.answer == "Answer"

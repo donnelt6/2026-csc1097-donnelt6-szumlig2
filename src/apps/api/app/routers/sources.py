@@ -1,22 +1,24 @@
 from fastapi import APIRouter, Depends, HTTPException, status
+from uuid import UUID
 from postgrest.exceptions import APIError
 from supabase import Client
 
 from ..schemas import Source, SourceCreate, SourceEnqueueResponse, SourceStatusResponse
-from ..core.config import get_settings
-from ..dependencies import CurrentUser, get_current_user, get_supabase_user_client
+from ..dependencies import CurrentUser, get_current_user, get_supabase_user_client, rate_limit_user_ip
 from ..services.queue import celery_app
-from ..services.rate_limit import rate_limiter
 from ..services.store import store
 from .errors import raise_postgrest_error
 
 router = APIRouter(prefix="/sources", tags=["sources"])
-settings = get_settings()
 
 
-@router.get("/{hub_id}", response_model=list[Source])
+@router.get(
+    "/{hub_id}",
+    response_model=list[Source],
+    dependencies=[Depends(rate_limit_user_ip("sources:read", "rate_limit_read_per_minute"))],
+)
 def list_sources(
-    hub_id: str,
+    hub_id: UUID,
     client: Client = Depends(get_supabase_user_client),
     current_user: CurrentUser = Depends(get_current_user),
 ) -> list[Source]:
@@ -27,19 +29,17 @@ def list_sources(
         raise_postgrest_error(exc)
 
 
-@router.post("", response_model=SourceEnqueueResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "",
+    response_model=SourceEnqueueResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(rate_limit_user_ip("sources:write", "rate_limit_sources_per_minute"))],
+)
 def create_source(
     payload: SourceCreate,
     client: Client = Depends(get_supabase_user_client),
     current_user: CurrentUser = Depends(get_current_user),
 ) -> SourceEnqueueResponse:
-    limit = settings.rate_limit_sources_per_minute
-    rl = rate_limiter.check(f"sources:{current_user.id}", limit)
-    if not rl.allowed:
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail=f"Rate limit exceeded. Try again in {rl.reset_in_seconds}s.",
-        )
     try:
         source, upload_url = store.create_source(client, payload)
         return SourceEnqueueResponse(source=source, upload_url=upload_url)
@@ -49,9 +49,13 @@ def create_source(
         raise_postgrest_error(exc)
 
 
-@router.get("/{source_id}/status", response_model=SourceStatusResponse)
+@router.get(
+    "/{source_id}/status",
+    response_model=SourceStatusResponse,
+    dependencies=[Depends(rate_limit_user_ip("sources:read", "rate_limit_read_per_minute"))],
+)
 def get_source_status(
-    source_id: str,
+    source_id: UUID,
     client: Client = Depends(get_supabase_user_client),
     current_user: CurrentUser = Depends(get_current_user),
 ) -> SourceStatusResponse:
@@ -64,19 +68,15 @@ def get_source_status(
         raise_postgrest_error(exc)
 
 
-@router.post("/{source_id}/enqueue")
+@router.post(
+    "/{source_id}/enqueue",
+    dependencies=[Depends(rate_limit_user_ip("sources:write", "rate_limit_sources_per_minute"))],
+)
 def enqueue_source(
-    source_id: str,
+    source_id: UUID,
     client: Client = Depends(get_supabase_user_client),
     current_user: CurrentUser = Depends(get_current_user),
 ) -> dict[str, str]:
-    limit = settings.rate_limit_sources_per_minute
-    rl = rate_limiter.check(f"sources:{current_user.id}", limit)
-    if not rl.allowed:
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail=f"Rate limit exceeded. Try again in {rl.reset_in_seconds}s.",
-        )
     try:
         source = store.get_source(client, source_id)
     except KeyError as exc:

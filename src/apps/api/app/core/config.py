@@ -18,6 +18,11 @@ class Settings(BaseSettings):
     max_citations: int = 3
     rate_limit_chat_per_minute: int = 20
     rate_limit_sources_per_minute: int = 30
+    rate_limit_read_per_minute: int = 120
+    rate_limit_write_per_minute: int = 60
+    rate_limit_health_per_minute: int = 60
+    rate_limit_ip_multiplier: float = 3.0
+    trust_proxy_headers: bool = False
     environment: str = "local"
     allowed_origins: str = "http://localhost:3000"
 
