@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { Providers } from "../components/Providers";
 import { ProfileMenu } from "../components/navigation/ProfileMenu";
+import { NotificationsMenu } from "../components/navigation/NotificationsMenu";
 
 export const metadata: Metadata = {
   title: "Caddie",
@@ -19,7 +20,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 <span className="brand-mark" aria-hidden="true" />
                 Caddie
               </a>
-              <ProfileMenu />
+              <div className="nav-actions">
+                <NotificationsMenu />
+                <ProfileMenu />
+              </div>
             </div>
           </header>
           <div className="app-content">{children}</div>
