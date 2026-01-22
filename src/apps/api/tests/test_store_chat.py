@@ -2,7 +2,7 @@
 
 from types import SimpleNamespace
 
-from app.schemas import ChatRequest
+from app.schemas import ChatRequest, HubScope
 from app.services.store import store
 
 
@@ -64,6 +64,40 @@ class FakeLLMClient:
         self.chat = FakeChat(content)
 
 
+class FakeWebSearchResponse:
+    def __init__(self, content: str) -> None:
+        self.output_text = content
+        self.output = [
+            {
+                "type": "web_search_call",
+                "web_search_call": {
+                    "results": [
+                        {
+                            "title": "Example",
+                            "url": "https://example.com",
+                            "snippet": "Example snippet",
+                        }
+                    ]
+                },
+            }
+        ]
+        self.usage = None
+
+
+class FakeResponsesClient:
+    def __init__(self, response: FakeWebSearchResponse) -> None:
+        self._response = response
+
+    def create(self, **kwargs) -> FakeWebSearchResponse:
+        return self._response
+
+
+class FakeLLMClientWithResponses:
+    def __init__(self, response: FakeWebSearchResponse) -> None:
+        self.responses = FakeResponsesClient(response)
+        self.chat = FakeChat("Fallback")
+
+
 def test_chat_returns_fallback_when_no_matches(monkeypatch) -> None:
     # Forces empty matches; expect fallback answer and no citations.
     fake_client = FakeClient()
@@ -97,3 +131,22 @@ def test_chat_includes_citations_when_matches(monkeypatch) -> None:
     assert len(result.citations) == 1
     assert result.citations[0].source_id == "src-1"
     assert len(fake_client.inserted.get("messages", [])) == 2
+
+
+def test_chat_global_uses_web_search(monkeypatch) -> None:
+    fake_client = FakeClient()
+    monkeypatch.setattr(store, "_embed_query", lambda text: [0.1])
+    monkeypatch.setattr(store, "_match_chunks", lambda client, hub_id, embedding, top_k: [])
+    response = FakeWebSearchResponse("Global answer")
+    monkeypatch.setattr(store, "llm_client", FakeLLMClientWithResponses(response))
+
+    payload = ChatRequest(
+        hub_id="11111111-1111-1111-1111-111111111111",
+        scope=HubScope.global_scope,
+        question="What is this?",
+    )
+    result = store.chat(fake_client, "user-1", payload)
+
+    assert result.answer == "Global answer"
+    assert result.citations
+    assert result.citations[0].source_id == "https://example.com"

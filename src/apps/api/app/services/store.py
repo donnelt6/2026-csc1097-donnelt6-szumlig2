@@ -16,6 +16,7 @@ from ..schemas import (
     HubCreate,
     HubInviteRequest,
     HubMember,
+    HubScope,
     MembershipRole,
     Source,
     SourceCreate,
@@ -101,10 +102,7 @@ class SupabaseStore:
         )
         row = response.data[0]
 
-        upload = self.service_client.storage.from_(self.storage_bucket).create_signed_upload_url(storage_path)
-        upload_url = upload.get("signedURL") or upload.get("signedUrl") or upload.get("signed_url")
-        if not upload_url:
-            raise RuntimeError("Failed to create signed upload URL")
+        upload_url = self.create_upload_url(storage_path)
 
         return Source(**row), upload_url
 
@@ -124,6 +122,18 @@ class SupabaseStore:
             raise KeyError("Source not found")
         return Source(**response.data[0])
 
+    def delete_source(self, client: Client, source_id: str) -> None:
+        source = self.get_source(client, source_id)
+        response = client.table("sources").delete().eq("id", str(source_id)).execute()
+        if not response.data:
+            raise KeyError("Source not found")
+        if source.storage_path:
+            try:
+                self.service_client.storage.from_(self.storage_bucket).remove([source.storage_path])
+            except Exception:  # noqa: BLE001
+                # Storage cleanup failure should not block source deletion.
+                pass
+
     def set_source_status(self, client: Client, source_id: str, status: SourceStatus, failure_reason: Optional[str] = None) -> Source:
         response = (
             client.table("sources")
@@ -131,6 +141,8 @@ class SupabaseStore:
             .eq("id", str(source_id))
             .execute()
         )
+        if not response.data:
+            raise KeyError("Source not found")
         row = response.data[0]
         return Source(**row)
 
@@ -140,6 +152,13 @@ class SupabaseStore:
             raise KeyError("Source not found")
         row = response.data[0]
         return SourceStatusResponse(id=row["id"], status=row["status"], failure_reason=row.get("failure_reason"))
+
+    def create_upload_url(self, storage_path: str) -> str:
+        upload = self.service_client.storage.from_(self.storage_bucket).create_signed_upload_url(storage_path)
+        upload_url = upload.get("signedURL") or upload.get("signedUrl") or upload.get("signed_url")
+        if not upload_url:
+            raise RuntimeError("Failed to create signed upload URL")
+        return upload_url
 
     def get_member_role(self, client: Client, hub_id: str, user_id: str) -> HubMember:
         response = (
@@ -271,6 +290,24 @@ class SupabaseStore:
             )
             context_blocks.append(f"[{idx}] {snippet}")
 
+        if payload.scope == HubScope.global_scope:
+            answer, web_citations, usage = self._answer_with_web_search(payload.question, context_blocks)
+            all_citations = citations + web_citations
+            assistant_row = (
+                client.table("messages")
+                .insert(
+                    {
+                        "session_id": session_id,
+                        "role": "assistant",
+                        "content": answer,
+                        "citations": [c.model_dump() for c in all_citations],
+                        "token_usage": usage,
+                    }
+                )
+                .execute()
+            )
+            return ChatResponse(answer=answer, citations=all_citations, message_id=assistant_row.data[0]["id"])
+
         system_prompt = (
             "You are Caddie, an onboarding assistant. Answer using the provided context only. "
             "If the context is insufficient, say you don't have enough information. "
@@ -311,6 +348,53 @@ class SupabaseStore:
         )
         return ChatResponse(answer=answer, citations=citations, message_id=assistant_row.data[0]["id"])
 
+    def _answer_with_web_search(
+        self,
+        question: str,
+        context_blocks: List[str],
+    ) -> tuple[str, List[Citation], Optional[dict]]:
+        system_prompt = (
+            "You are Caddie, an onboarding assistant. Use hub context and web search results. "
+            "If hub context is relevant, cite it with [n] matching the context list."
+        )
+        hub_context = "\n".join(context_blocks) if context_blocks else "None."
+        user_prompt = f"Question: {question}\n\nHub context:\n{hub_context}"
+
+        try:
+            responses_client = getattr(self.llm_client, "responses", None)
+            if responses_client is None:
+                raise RuntimeError("Responses API unavailable for web search")
+            response = responses_client.create(
+                model=self.chat_model,
+                input=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                tools=[{"type": "web_search_preview"}],
+                temperature=0.2,
+            )
+            answer = _extract_response_text(response) or ""
+            web_citations = _build_web_citations(response)
+            usage = _extract_usage(response)
+            if not answer:
+                answer = "I couldn't find enough information to answer that."
+            return answer, web_citations, usage
+        except Exception:  # noqa: BLE001
+            # Fall back to a hub-only answer if web search is unavailable.
+            completion = self.llm_client.chat.completions.create(
+                model=self.chat_model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                temperature=0.2,
+            )
+            answer = completion.choices[0].message.content or ""
+            usage = completion.usage.model_dump() if completion.usage else None
+            if not answer:
+                answer = "I couldn't find enough information to answer that."
+            return answer, [], usage
+
     def _embed_query(self, text: str) -> List[float]:
         response = self.llm_client.embeddings.create(model=self.embedding_model, input=text)
         return response.data[0].embedding
@@ -338,3 +422,79 @@ def _sanitize_filename(name: str) -> str:
     if len(base) > 255:
         base = base[:255]
     return base
+
+
+def _get_attr(obj: Any, name: str, default: Any = None) -> Any:
+    if isinstance(obj, dict):
+        return obj.get(name, default)
+    return getattr(obj, name, default)
+
+
+def _extract_response_text(response: Any) -> str:
+    text = _get_attr(response, "output_text")
+    if isinstance(text, str) and text.strip():
+        return text
+    output = _get_attr(response, "output", []) or []
+    for item in output:
+        if _get_attr(item, "type") != "message":
+            continue
+        content = _get_attr(item, "content", [])
+        if isinstance(content, list):
+            for part in content:
+                part_type = _get_attr(part, "type")
+                if part_type in {"output_text", "text"}:
+                    text = _get_attr(part, "text")
+                    if isinstance(text, str) and text.strip():
+                        return text
+        text = _get_attr(item, "text")
+        if isinstance(text, str) and text.strip():
+            return text
+    return ""
+
+
+def _extract_usage(response: Any) -> Optional[dict]:
+    usage = _get_attr(response, "usage")
+    if usage is None:
+        return None
+    if isinstance(usage, dict):
+        return usage
+    dump = getattr(usage, "model_dump", None)
+    if callable(dump):
+        return dump()
+    return None
+
+
+def _extract_web_results(response: Any) -> list[Any]:
+    output = _get_attr(response, "output", []) or []
+    results: list[Any] = []
+    for item in output:
+        if _get_attr(item, "type") != "web_search_call":
+            continue
+        call = _get_attr(item, "web_search_call", item)
+        call_results = _get_attr(call, "results", None)
+        if call_results:
+            results.extend(call_results)
+    return results
+
+
+def _format_web_snippet(title: str, snippet: str, url: str) -> str:
+    parts = []
+    if title:
+        parts.append(title)
+    if snippet:
+        parts.append(snippet)
+    if url:
+        parts.append(f"source: {url}")
+    return " - ".join(parts)
+
+
+def _build_web_citations(response: Any) -> List[Citation]:
+    results = _extract_web_results(response)
+    citations: List[Citation] = []
+    for idx, result in enumerate(results, start=1):
+        title = _get_attr(result, "title", "") or ""
+        snippet = _get_attr(result, "snippet", "") or _get_attr(result, "content", "") or ""
+        url = _get_attr(result, "url", "") or _get_attr(result, "link", "") or ""
+        citation_id = url or f"web-{idx}"
+        citations.append(Citation(source_id=citation_id, snippet=_format_web_snippet(title, snippet, url)))
+    return citations

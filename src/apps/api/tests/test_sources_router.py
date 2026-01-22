@@ -106,6 +106,11 @@ def test_enqueue_source_success(client, monkeypatch) -> None:
         storage_path="11111111-1111-1111-1111-111111111111/src-4/doc.txt",
     )
     monkeypatch.setattr(store_module.store, "get_source", lambda _client, source_id: source)
+    monkeypatch.setattr(
+        store_module.store,
+        "set_source_status",
+        lambda _client, source_id, status, failure_reason=None: source,
+    )
 
     sent = {}
 
@@ -118,3 +123,59 @@ def test_enqueue_source_success(client, monkeypatch) -> None:
     resp = client.post("/sources/44444444-4444-4444-4444-444444444444/enqueue")
     assert resp.status_code == 200
     assert resp.json()["status"] == "queued"
+
+
+def test_create_upload_url_success(client, monkeypatch) -> None:
+    # Mocks upload URL creation; expect 200 with upload URL payload.
+    source = Source(
+        id="src-5",
+        hub_id="11111111-1111-1111-1111-111111111111",
+        original_name="doc.txt",
+        status=SourceStatus.queued,
+        storage_path="11111111-1111-1111-1111-111111111111/src-5/doc.txt",
+    )
+    monkeypatch.setattr(store_module.store, "get_source", lambda _client, source_id: source)
+    monkeypatch.setattr(store_module.store, "create_upload_url", lambda _path: "http://upload.retry")
+
+    resp = client.post("/sources/55555555-5555-5555-5555-555555555555/upload-url")
+    assert resp.status_code == 200
+    assert resp.json()["upload_url"] == "http://upload.retry"
+
+
+def test_create_upload_url_missing_storage_path(client, monkeypatch) -> None:
+    # Mocks source without storage path; expect 400 response.
+    source = Source(
+        id="src-6",
+        hub_id="11111111-1111-1111-1111-111111111111",
+        original_name="doc.txt",
+        status=SourceStatus.queued,
+    )
+    monkeypatch.setattr(store_module.store, "get_source", lambda _client, source_id: source)
+
+    resp = client.post("/sources/66666666-6666-6666-6666-666666666666/upload-url")
+    assert resp.status_code == 400
+
+
+def test_fail_source_success(client, monkeypatch) -> None:
+    # Mocks status update; expect 200 with failed status.
+    source = Source(
+        id="src-7",
+        hub_id="11111111-1111-1111-1111-111111111111",
+        original_name="doc.txt",
+        status=SourceStatus.failed,
+        failure_reason="upload failed",
+    )
+    monkeypatch.setattr(
+        store_module.store,
+        "set_source_status",
+        lambda _client, source_id, status, failure_reason=None: source,
+    )
+
+    resp = client.post(
+        "/sources/77777777-7777-7777-7777-777777777777/fail",
+        json={"failure_reason": "upload failed"},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == SourceStatus.failed.value
+    assert data["failure_reason"] == "upload failed"

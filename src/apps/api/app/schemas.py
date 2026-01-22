@@ -109,10 +109,18 @@ class SourceEnqueueResponse(BaseModel):
     upload_url: str
 
 
+class SourceUploadUrlResponse(BaseModel):
+    upload_url: str
+
+
 class SourceStatusResponse(BaseModel):
     id: str
     status: SourceStatus
     failure_reason: Optional[str] = None
+
+
+class SourceFailureRequest(StrictModel):
+    failure_reason: str = Field(..., min_length=1, max_length=500)
 
 
 class Citation(BaseModel):

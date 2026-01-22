@@ -3,7 +3,15 @@ from uuid import UUID
 from postgrest.exceptions import APIError
 from supabase import Client
 
-from ..schemas import Source, SourceCreate, SourceEnqueueResponse, SourceStatusResponse
+from ..schemas import (
+    Source,
+    SourceCreate,
+    SourceEnqueueResponse,
+    SourceFailureRequest,
+    SourceStatus,
+    SourceStatusResponse,
+    SourceUploadUrlResponse,
+)
 from ..dependencies import CurrentUser, get_current_user, get_supabase_user_client, rate_limit_user_ip
 from ..services.queue import celery_app
 from ..services.store import store
@@ -49,6 +57,34 @@ def create_source(
         raise_postgrest_error(exc)
 
 
+@router.post(
+    "/{source_id}/upload-url",
+    response_model=SourceUploadUrlResponse,
+    dependencies=[Depends(rate_limit_user_ip("sources:write", "rate_limit_sources_per_minute"))],
+)
+def create_upload_url(
+    source_id: UUID,
+    client: Client = Depends(get_supabase_user_client),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> SourceUploadUrlResponse:
+    _ = current_user
+    try:
+        source = store.get_source(client, source_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Source not found") from exc
+    except APIError as exc:
+        raise_postgrest_error(exc)
+
+    if not source.storage_path:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Source storage path missing")
+
+    try:
+        upload_url = store.create_upload_url(source.storage_path)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)) from exc
+    return SourceUploadUrlResponse(upload_url=upload_url)
+
+
 @router.get(
     "/{source_id}/status",
     response_model=SourceStatusResponse,
@@ -87,5 +123,52 @@ def enqueue_source(
     if not source.storage_path:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Source storage path missing")
 
+    try:
+        store.set_source_status(client, source.id, SourceStatus.queued, failure_reason=None)
+    except KeyError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Source not found") from exc
+    except APIError as exc:
+        raise_postgrest_error(exc)
+
     celery_app.send_task("ingest_source", args=[source.id, source.hub_id, source.storage_path])
     return {"status": "queued"}
+
+
+@router.delete(
+    "/{source_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(rate_limit_user_ip("sources:write", "rate_limit_sources_per_minute"))],
+)
+def delete_source(
+    source_id: UUID,
+    client: Client = Depends(get_supabase_user_client),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> None:
+    _ = current_user
+    try:
+        store.delete_source(client, source_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Source not found") from exc
+    except APIError as exc:
+        raise_postgrest_error(exc)
+
+
+@router.post(
+    "/{source_id}/fail",
+    response_model=SourceStatusResponse,
+    dependencies=[Depends(rate_limit_user_ip("sources:write", "rate_limit_sources_per_minute"))],
+)
+def fail_source(
+    source_id: UUID,
+    payload: SourceFailureRequest,
+    client: Client = Depends(get_supabase_user_client),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> SourceStatusResponse:
+    _ = current_user
+    try:
+        source = store.set_source_status(client, source_id, SourceStatus.failed, failure_reason=payload.failure_reason)
+    except KeyError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Source not found") from exc
+    except APIError as exc:
+        raise_postgrest_error(exc)
+    return SourceStatusResponse(id=source.id, status=source.status, failure_reason=source.failure_reason)
