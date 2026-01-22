@@ -10,7 +10,7 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload --port 8000
 ```
 
-Environment variables live in `.env.example`. Provide `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `REDIS_URL`, and `OPENAI_API_KEY` for local development. The API expects a Supabase Auth JWT in the `Authorization: Bearer` header for user-scoped routes.
+Environment variables live in `.env.example`. Provide `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `REDIS_URL`, and `OPENAI_API_KEY` for local development. The API expects a Supabase Auth JWT in the `Authorization: Bearer` header for user-scoped routes. Optional rate-limit settings include `RATE_LIMIT_READ_PER_MINUTE`, `RATE_LIMIT_WRITE_PER_MINUTE`, `RATE_LIMIT_HEALTH_PER_MINUTE`, `RATE_LIMIT_IP_MULTIPLIER`, and `TRUST_PROXY_HEADERS`.
 
 ## Files and purpose
 - `.env.example` - Template for required env vars (no secrets).
@@ -28,9 +28,9 @@ Environment variables live in `.env.example`. Provide `SUPABASE_URL`, `SUPABASE_
 - `app/schemas.py` - Pydantic request/response models including memberships.
 - `app/core/config.py` - Settings loader and defaults.
 - `app/routers/__init__.py` - Router module export.
-- `app/routers/chat.py` - Chat endpoint and error handling.
+- `app/routers/chat.py` - Chat endpoint (hub-only or hub + web search).
 - `app/routers/hubs.py` - Hubs CRUD endpoints.
-- `app/routers/sources.py` - Source upload/status endpoints.
+- `app/routers/sources.py` - Source upload/status endpoints (signed upload URL, fail, enqueue).
 - `app/routers/memberships.py` - Invites and member management endpoints.
 - `app/routers/users.py` - Current user endpoint.
 - `app/routers/errors.py` - PostgREST error mapper.

@@ -6,7 +6,7 @@ They run in a jsdom environment and do not require a backend.
 What is tested
 - Auth routing behavior in `AuthGate`.
 - Hub listing and create form in `HubsList`.
-- Upload flow and permissions in `UploadPanel`.
+- Upload flow, retries, and permissions in `UploadPanel`.
 
 Run the tests
 ```

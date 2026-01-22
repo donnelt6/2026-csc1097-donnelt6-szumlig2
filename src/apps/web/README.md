@@ -1,6 +1,6 @@
 # Caddie Web (Next.js)
 
-Next.js 14 frontend with hubs list, hub detail page, upload widget, and chat flow.
+Next.js 14 frontend with hubs list, hub detail page, upload widget (retry/delete on failed uploads), and chat flow (hub-only or hub + web search).
 
 ## Run locally
 ```bash
@@ -24,12 +24,12 @@ Environment variables: see `.env.example`. Set `NEXT_PUBLIC_API_BASE_URL` to you
 - `app/auth/page.tsx` - Email/password sign in and sign up.
 - `app/globals.css` - Global styles and theme variables.
 - `app/hubs/[hubId]/page.tsx` - Hub detail page with upload + chat.
-- `components/ChatPanel.tsx` - Chat UI with citations.
+- `components/ChatPanel.tsx` - Chat UI with citations and hub/global scope.
 - `components/HubsList.tsx` - Hub list and create form.
 - `components/InvitesPanel.tsx` - Pending invite list and accept actions.
 - `components/MembersPanel.tsx` - Member list and role management.
 - `components/Providers.tsx` - React Query + auth provider setup.
-- `components/UploadPanel.tsx` - Upload widget with status list.
+- `components/UploadPanel.tsx` - Upload widget with status list and retry/delete for failures.
 - `components/auth/AuthProvider.tsx` - Supabase session provider.
 - `components/auth/AuthGate.tsx` - Route guard for authenticated pages.
 - `components/auth/UserMenu.tsx` - Current user menu and sign out.

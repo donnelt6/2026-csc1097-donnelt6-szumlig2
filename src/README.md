@@ -52,9 +52,12 @@ Run the SQL migration in Supabase SQL Editor:
 Sign in via `/auth` using Supabase email/password auth. The web app stores the Supabase session and sends `Authorization: Bearer <JWT>` on API requests. The API enforces RLS with the user token and only uses the service role key for storage/admin tasks (ingestion, member lookups).
 
 ## Chat note
-Chat streaming is not implemented yet; it is planned as a future improvement.
+Chat supports hub-only context or hub + web search when `global` scope is selected. Streaming is not implemented yet; it is planned as a future improvement.
 
 ## Rate limits (API)
 Defaults (configurable in `apps/api/.env`):
 - Chat: 20 requests per minute
 - Sources: 30 requests per minute
+- Read endpoints: 120 requests per minute
+- Write endpoints: 60 requests per minute
+- Health endpoint: 60 requests per minute
