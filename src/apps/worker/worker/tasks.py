@@ -2,6 +2,7 @@ import io
 import logging
 from pathlib import Path
 from typing import Iterable, List, Optional
+from urllib.parse import quote
 
 import httpx
 from celery import Celery
@@ -74,7 +75,8 @@ def _get_supabase_client() -> Client:
 def _download_from_storage(storage_path: str) -> bytes:
     if not settings.supabase_url or not settings.supabase_service_role_key:
         raise RuntimeError("Supabase credentials missing for storage download")
-    storage_url = f"{settings.supabase_url}/storage/v1/object/{settings.storage_bucket}/{storage_path}"
+    safe_path = quote(storage_path, safe="/")
+    storage_url = f"{settings.supabase_url}/storage/v1/object/{settings.storage_bucket}/{safe_path}"
     headers = {
         "Authorization": f"Bearer {settings.supabase_service_role_key}",
         "apikey": settings.supabase_service_role_key,
