@@ -102,7 +102,14 @@ class SupabaseStore:
         )
         row = response.data[0]
 
-        upload_url = self.create_upload_url(storage_path)
+        try:
+            upload_url = self.create_upload_url(storage_path)
+        except Exception:  
+            try:
+                client.table("sources").delete().eq("id", source_id).execute()
+            except Exception:  
+                pass
+            raise
 
         return Source(**row), upload_url
 
@@ -130,7 +137,7 @@ class SupabaseStore:
         if source.storage_path:
             try:
                 self.service_client.storage.from_(self.storage_bucket).remove([source.storage_path])
-            except Exception:  # noqa: BLE001
+            except Exception:
                 # Storage cleanup failure should not block source deletion.
                 pass
 
@@ -379,7 +386,7 @@ class SupabaseStore:
             if not answer:
                 answer = "I couldn't find enough information to answer that."
             return answer, web_citations, usage
-        except Exception:  # noqa: BLE001
+        except Exception:
             # Fall back to a hub-only answer if web search is unavailable.
             completion = self.llm_client.chat.completions.create(
                 model=self.chat_model,

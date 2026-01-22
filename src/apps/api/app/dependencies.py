@@ -36,7 +36,7 @@ def get_current_user(
     try:
         with httpx.Client(timeout=10) as client:
             resp = client.get(url, headers=headers)
-    except httpx.HTTPError as exc:  # noqa: BLE001
+    except httpx.HTTPError as exc:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Auth service unreachable.") from exc
     if resp.status_code == status.HTTP_401_UNAUTHORIZED:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired token.")

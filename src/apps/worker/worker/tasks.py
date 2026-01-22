@@ -34,7 +34,7 @@ def ingest_source(self, source_id: str, hub_id: str, storage_path: str) -> dict:
 
     try:
         raw = _download_from_storage(storage_path)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.warning("Download failed for %s, retrying: %s", storage_path, exc)
         raise self.retry(exc=exc)
 
@@ -60,7 +60,7 @@ def ingest_source(self, source_id: str, hub_id: str, storage_path: str) -> dict:
         _update_source(client, source_id, status="complete", ingestion_metadata=metadata)
         logger.info("Completed ingestion for source %s", source_id)
         return {"source_id": source_id, "hub_id": hub_id, "chunks": len(chunks)}
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.exception("Ingestion failed for source %s", source_id)
         _update_source(client, source_id, status="failed", failure_reason=str(exc)[:500])
         raise
