@@ -22,11 +22,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   }, [loading, user, onAuthRoute, router]);
 
   if (loading) {
-    return (
-      <main className="page">
-        <p className="muted">Checking your session...</p>
-      </main>
-    );
+    return <main className="page" aria-busy="true" aria-live="polite" />;
   }
 
   if (!user && !onAuthRoute) {
