@@ -8,7 +8,7 @@ import { UploadPanel } from "../../../components/UploadPanel";
 import { listHubs, listSources } from "../../../lib/api";
 
 export default function HubDetail({ params }: { params: { hubId: string } }) {
-  const { data: hubs } = useQuery({ queryKey: ["hubs"], queryFn: listHubs });
+  const { data: hubs, isLoading: hubsLoading } = useQuery({ queryKey: ["hubs"], queryFn: listHubs });
   const {
     data: sources,
     isLoading: sourcesLoading,
@@ -20,7 +20,8 @@ export default function HubDetail({ params }: { params: { hubId: string } }) {
   });
 
   const hub = hubs?.find((h) => h.id === params.hubId);
-  const canUpload = hub?.role ? hub.role === "owner" || hub.role === "editor" : true;
+  const canUpload = hub?.role === "owner" || hub?.role === "editor";
+  const roleResolved = !hubsLoading;
 
   return (
     <main className="page grid" style={{ gap: "20px" }}>
@@ -32,7 +33,18 @@ export default function HubDetail({ params }: { params: { hubId: string } }) {
         <p className="muted">{hub?.description ?? params.hubId}</p>
       </header>
       <div className="grid" style={{ gap: "20px" }}>
-        <UploadPanel hubId={params.hubId} sources={sources ?? []} onRefresh={() => refetch()} canUpload={canUpload} />
+        {roleResolved ? (
+          <UploadPanel
+            hubId={params.hubId}
+            sources={sources ?? []}
+            onRefresh={() => refetch()}
+            canUpload={canUpload}
+          />
+        ) : (
+          <div className="card">
+            <p className="muted">Loading permissions...</p>
+          </div>
+        )}
         {hub && <MembersPanel hubId={params.hubId} role={hub.role ?? undefined} />}
         {sourcesLoading && <p className="muted">Loading sources...</p>}
         <ChatPanel hubId={params.hubId} />
