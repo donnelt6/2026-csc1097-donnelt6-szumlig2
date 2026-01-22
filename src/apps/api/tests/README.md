@@ -9,11 +9,13 @@ What is tested
 - PostgREST error mapping in `app/routers/errors.py`.
 - Router behavior for hubs, sources, chat, memberships, and users.
 - Chat flow in `app/services/store.py` with stubbed matches and LLM output.
+- Source creation cleanup in `app/services/store.py` when upload URL generation fails.
 
 How it works
 - `tests/conftest.py` sets safe env defaults and overrides FastAPI dependencies.
 - Routers are exercised via `TestClient` and store calls are monkeypatched.
 - The goal is to validate request handling, status codes, and response shapes.
+- Store unit tests use lightweight fake clients and tables instead of Supabase.
 
 Run the tests
 ```
