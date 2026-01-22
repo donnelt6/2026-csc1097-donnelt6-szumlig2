@@ -129,7 +129,7 @@ export function UploadPanel({ hubId, sources, onRefresh, canUpload = true }: Pro
         <input
           type="file"
           onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-          accept=".pdf,.doc,.docx,.txt,.md"
+          accept=".pdf,.docx,.txt,.md"
           disabled={!canUpload}
         />
       </label>
@@ -209,8 +209,6 @@ function resolveContentType(file: File): string {
   switch (extension) {
     case "pdf":
       return "application/pdf";
-    case "doc":
-      return "application/msword";
     case "docx":
       return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
     case "txt":

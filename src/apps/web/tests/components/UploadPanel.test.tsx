@@ -62,6 +62,15 @@ describe("UploadPanel", () => {
     expect(await screen.findByText(/Upload enqueued/)).toBeInTheDocument();
   });
 
+  it("limits accepted file extensions", () => {
+    const { container } = renderWithQueryClient(
+      <UploadPanel hubId="hub-1" sources={[]} onRefresh={() => undefined} />
+    );
+
+    const input = container.querySelector("input[type='file']") as HTMLInputElement;
+    expect(input.accept).toBe(".pdf,.docx,.txt,.md");
+  });
+
   it("marks the source failed when upload fails", async () => {
     const onRefresh = vi.fn();
     vi.mocked(createSource).mockResolvedValue({
