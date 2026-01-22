@@ -57,6 +57,22 @@ export async function createSource(data: { hub_id: string; original_name: string
   return handle(res);
 }
 
+export async function createSourceUploadUrl(sourceId: string): Promise<{ upload_url: string }> {
+  const res = await authedFetch(`${API_BASE}/sources/${sourceId}/upload-url`, {
+    method: "POST",
+  });
+  return handle(res);
+}
+
+export async function failSource(sourceId: string, failureReason: string): Promise<{ id: string; status: string; failure_reason?: string }> {
+  const res = await authedFetch(`${API_BASE}/sources/${sourceId}/fail`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ failure_reason: failureReason }),
+  });
+  return handle(res);
+}
+
 export async function getSourceStatus(sourceId: string): Promise<{ id: string; status: string; failure_reason?: string }> {
   const res = await authedFetch(`${API_BASE}/sources/${sourceId}/status`, { cache: "no-store" });
   return handle(res);
@@ -67,6 +83,15 @@ export async function enqueueSource(sourceId: string): Promise<{ status: string 
     method: "POST",
   });
   return handle(res);
+}
+
+export async function deleteSource(sourceId: string): Promise<void> {
+  const res = await authedFetch(`${API_BASE}/sources/${sourceId}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) {
+    await handle(res);
+  }
 }
 
 export async function askQuestion(data: { hub_id: string; scope: "hub" | "global"; question: string }): Promise<ChatResponse> {
