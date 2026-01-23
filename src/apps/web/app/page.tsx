@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useIsFetching, useQueryClient } from "@tanstack/react-query";
 import { HubsList } from "../components/HubsList";
-import { InvitesPanel } from "../components/InvitesPanel";
 
 const MIN_HUBS_LOADING_MS = 1500;
 const LOADING_FADE_MS = 0; // adjust as necessary - for now , no fade. gives appearance of quickerloading.
@@ -121,7 +120,6 @@ export default function HomePage() {
           then upload a file and ask a question.
         </p>
       </header>
-      <InvitesPanel />
       <HubsList />
     </main>
   );
