@@ -1,12 +1,13 @@
 'use client';
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useRef, useEffect } from "react";
 import { useAuth } from "../auth/AuthProvider";
 import { supabase } from "../../lib/supabaseClient";
 
 export function ProfileMenu() {
   const { user } = useAuth();
   const [loading, setLoading] = useState(false);
+  const detailsRef = useRef<HTMLDetailsElement>(null);
 
   const displayName = useMemo(() => {
     if (!user) return "Profile";
@@ -22,10 +23,21 @@ export function ProfileMenu() {
     setLoading(false);
   };
 
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (detailsRef.current && !detailsRef.current.contains(event.target as Node)) {
+        detailsRef.current.open = false;
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
   if (!user) return null;
 
   return (
-    <details className="profile-menu">
+    <details className="profile-menu" ref={detailsRef}>
       <summary className="profile-trigger" aria-label="Open profile menu">
         <span className="profile-avatar" aria-hidden="true">
           {initial}

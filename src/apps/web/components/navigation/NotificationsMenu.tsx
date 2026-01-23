@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useRef, useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { acceptInvite, listInvites } from "../../lib/api";
 import { useAuth } from "../auth/AuthProvider";
@@ -25,6 +25,7 @@ export function NotificationsMenu() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [dismissedInvites, setDismissedInvites] = useState<string[]>([]);
+  const detailsRef = useRef<HTMLDetailsElement>(null);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["invites"],
@@ -55,10 +56,21 @@ export function NotificationsMenu() {
     setDismissedInvites((prev) => (prev.includes(hubId) ? prev : [...prev, hubId]));
   };
 
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (detailsRef.current && !detailsRef.current.contains(event.target as Node)) {
+        detailsRef.current.open = false;
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
   if (!user) return null;
 
   return (
-    <details className="notifications-menu">
+    <details className="notifications-menu" ref={detailsRef}>
       <summary className="notifications-trigger" aria-label={summaryLabel}>
         <span className="notifications-icon" aria-hidden="true">
           <svg viewBox="0 0 24 24" role="presentation">
