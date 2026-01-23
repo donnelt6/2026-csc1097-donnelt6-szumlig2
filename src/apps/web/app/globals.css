@@ -254,13 +254,13 @@ a {
   gap: 12px;
   padding: 12px;
   border-radius: 12px;
-  background: #0f1726;
+  background: #0d1117;
   border-left: 4px solid #f56565;
   transition: all var(--transition-fast);
 }
 
 .notification-card:hover {
-  background: #131d30;
+  background: #13171f;
   box-shadow: var(--shadow-md);
   transform: translateX(2px);
 }
@@ -324,8 +324,8 @@ a {
 .notification-role {
   padding: 2px 8px;
   border-radius: 999px;
-  border: 1px solid #22304b;
-  background: #0b1221;
+  border: 1px solid var(--border);
+  background: var(--bg);
   color: var(--muted);
   font-size: 0.65rem;
   font-weight: 700;
@@ -349,8 +349,8 @@ a {
   border: none;
   border-radius: 8px;
   padding: 6px 10px;
-  background: linear-gradient(120deg, #4fd1c5, #00b5d8);
-  color: #0b1221;
+  background: var(--accent);
+  color: #ffffff;
   font-weight: 700;
   font-size: 0.7rem;
   letter-spacing: 0.12em;
@@ -360,9 +360,9 @@ a {
 }
 
 .notification-accept:hover:not(:disabled) {
-  background: linear-gradient(120deg, #38b2a9, #0095b8);
+  background: var(--accent-hover);
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(79, 209, 197, 0.3);
+  box-shadow: 0 4px 12px rgba(107, 127, 215, 0.3);
 }
 
 .notification-accept:active:not(:disabled) {
@@ -418,14 +418,14 @@ a {
   padding: 6px;
   border-radius: 999px;
   border: 1px solid var(--border);
-  background: #0f1726;
+  background: #0d1117;
   cursor: pointer;
   list-style: none;
   transition: all var(--transition-fast);
 }
 
 .profile-trigger:hover {
-  background: #131d30;
+  background: var(--card);
   border-color: var(--border-focus);
   transform: translateY(-1px);
   box-shadow: var(--shadow-sm);
@@ -436,8 +436,8 @@ a {
 }
 
 .profile-menu[open] .profile-trigger {
-  border-color: #2d3748;
-  box-shadow: 0 0 0 2px rgba(79, 209, 197, 0.15);
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 2px rgba(107, 127, 215, 0.12);
 }
 
 .profile-trigger:focus-visible {
@@ -453,8 +453,8 @@ a {
   align-items: center;
   justify-content: center;
   font-weight: 800;
-  color: #0b1221;
-  background: linear-gradient(135deg, #4fd1c5, #00b5d8);
+  color: #ffffff;
+  background: linear-gradient(135deg, var(--accent), #8b5cf6);
 }
 
 .profile-text {
@@ -546,12 +546,12 @@ a {
 }
 
 .menu-item:hover {
-  background: #0f1726;
+  background: #0d1117;
   transform: translateX(2px);
 }
 
 .menu-item:focus-visible {
-  outline: 2px solid rgba(79, 209, 197, 0.45);
+  outline: 2px solid rgba(107, 127, 215, 0.45);
   outline-offset: 2px;
 }
 
@@ -590,8 +590,8 @@ a {
   padding: 28px 32px;
   border-radius: 16px;
   border: 1px solid var(--border);
-  background: rgba(17, 26, 45, 0.9);
-  box-shadow: 0 20px 55px rgba(0, 0, 0, 0.45);
+  background: rgba(22, 27, 34, 0.95);
+  box-shadow: 0 20px 55px rgba(0, 0, 0, 0.5);
   text-align: center;
   opacity: 0;
   transform: translateY(10px);
@@ -607,10 +607,10 @@ a {
   width: 48px;
   height: 48px;
   border-radius: 999px;
-  border: 4px solid rgba(79, 209, 197, 0.2);
+  border: 4px solid rgba(107, 127, 215, 0.2);
   border-top-color: var(--accent);
   animation: spin-fast 0.45s linear infinite;
-  box-shadow: 0 0 16px rgba(79, 209, 197, 0.3);
+  box-shadow: 0 0 16px rgba(107, 127, 215, 0.25);
 }
 
 .loading-text {
@@ -657,8 +657,8 @@ a {
   border: none;
   padding: 10px 16px;
   border-radius: 10px;
-  background: linear-gradient(120deg, #4fd1c5, #00b5d8);
-  color: #0b1221;
+  background: var(--accent);
+  color: #ffffff;
   font-weight: 700;
   cursor: pointer;
   transition: all var(--transition-fast);
@@ -673,7 +673,7 @@ a {
   left: -100%;
   width: 100%;
   height: 100%;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.15), transparent);
   transition: left 0.5s ease;
 }
 
@@ -683,13 +683,13 @@ a {
 
 .button:hover {
   transform: translateY(-2px);
-  box-shadow: 0 12px 24px rgba(79, 209, 197, 0.35);
-  background: linear-gradient(120deg, #38b2a9, #0095b8);
+  box-shadow: 0 12px 24px rgba(107, 127, 215, 0.3);
+  background: var(--accent-hover);
 }
 
 .button:active {
   transform: translateY(0);
-  box-shadow: 0 4px 12px rgba(79, 209, 197, 0.25);
+  box-shadow: 0 4px 12px rgba(107, 127, 215, 0.2);
 }
 
 .button:disabled {
@@ -708,8 +708,8 @@ a {
   margin-top: 8px;
   padding: 4px 10px;
   border-radius: 999px;
-  border: 1px solid #22304b;
-  background: #0f1726;
+  border: 1px solid var(--border);
+  background: #0d1117;
   color: var(--text);
   font-size: 0.75rem;
   font-weight: 700;
@@ -723,8 +723,16 @@ textarea {
   padding: 10px 12px;
   border-radius: 10px;
   border: 1px solid var(--border);
-  background: #0f1726;
+  background: #0d1117;
   color: var(--text);
+  transition: border-color var(--transition-fast);
+}
+
+input:focus,
+textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(107, 127, 215, 0.12);
 }
 
 textarea {
