@@ -185,6 +185,26 @@ a {
 .notifications-list {
   display: grid;
   gap: 10px;
+  max-height: 390px;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.notifications-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.notifications-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.notifications-list::-webkit-scrollbar-thumb {
+  background: #2d3748;
+  border-radius: 3px;
+}
+
+.notifications-list::-webkit-scrollbar-thumb:hover {
+  background: #4a5568;
 }
 
 .notification-card {
