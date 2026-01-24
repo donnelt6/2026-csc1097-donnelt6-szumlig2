@@ -742,6 +742,93 @@ textarea {
   resize: vertical;
 }
 
+.create-hub-menu {
+  position: relative;
+}
+
+.create-hub-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: linear-gradient(120deg, var(--accent), var(--accent-secondary));
+  color: #ffffff;
+  font-weight: 700;
+  cursor: pointer;
+  list-style: none;
+  transition: all var(--transition-fast);
+  position: relative;
+  overflow: hidden;
+}
+
+.create-hub-trigger::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  transition: left 0.5s ease;
+}
+
+.create-hub-trigger:hover::before {
+  left: 100%;
+}
+
+.create-hub-trigger:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 24px rgba(124, 142, 245, 0.4), var(--glow-accent);
+  background: linear-gradient(120deg, var(--accent-hover), #8b5cf6);
+}
+
+.create-hub-trigger:active {
+  transform: translateY(0);
+  box-shadow: 0 4px 12px rgba(124, 142, 245, 0.3);
+}
+
+.create-hub-trigger::-webkit-details-marker {
+  display: none;
+}
+
+.create-hub-menu[open] .create-hub-trigger {
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 2px rgba(124, 142, 245, 0.15);
+}
+
+.create-hub-trigger:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.create-hub-dropdown {
+  position: absolute;
+  left: 0;
+  top: calc(100% + 12px);
+  min-width: 320px;
+  max-width: 420px;
+  padding: 16px;
+  border-radius: 14px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-xl);
+  display: none;
+  opacity: 0;
+  transform: translateY(-10px);
+  transition: opacity var(--transition-base), transform var(--transition-base);
+  z-index: 5;
+}
+
+.create-hub-menu[open] .create-hub-dropdown {
+  display: block;
+  opacity: 1;
+  transform: translateY(0);
+  animation: slideDown 0.2s ease;
+}
+
 @media (max-width: 720px) {
   .nav-content {
     padding: 16px;

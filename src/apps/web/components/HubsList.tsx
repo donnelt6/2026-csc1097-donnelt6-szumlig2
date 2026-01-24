@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { createHub, listHubs } from "../lib/api";
 import type { Hub } from "../lib/types";
 
@@ -19,6 +19,7 @@ export function HubsList() {
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const detailsRef = useRef<HTMLDetailsElement>(null);
 
   const onSubmit = (evt: React.FormEvent) => {
     evt.preventDefault();
@@ -26,7 +27,21 @@ export function HubsList() {
     createMutation.mutate({ name, description });
     setName("");
     setDescription("");
+    if (detailsRef.current) {
+      detailsRef.current.open = false;
+    }
   };
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (detailsRef.current && !detailsRef.current.contains(event.target as Node)) {
+        detailsRef.current.open = false;
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   return (
     <div className="card grid">
@@ -45,19 +60,26 @@ export function HubsList() {
           </Link>
         ))}
       </div>
-      <form onSubmit={onSubmit} className="grid">
-        <label>
-          <span className="muted">Hub name</span>
-          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Onboarding hub" />
-        </label>
-        <label>
-          <span className="muted">Description (optional)</span>
-          <input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="What is this hub for?" />
-        </label>
-        <button className="button" type="submit" disabled={createMutation.isPending}>
-          {createMutation.isPending ? "Creating..." : "Create hub"}
-        </button>
-      </form>
+      <details className="create-hub-menu" ref={detailsRef}>
+        <summary className="create-hub-trigger">
+          Create new hub
+        </summary>
+        <div className="create-hub-dropdown">
+          <form onSubmit={onSubmit} className="grid">
+            <label>
+              <span className="muted">Hub name</span>
+              <input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Onboarding hub" />
+            </label>
+            <label>
+              <span className="muted">Description (optional)</span>
+              <input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="What is this hub for?" />
+            </label>
+            <button className="button" type="submit" disabled={createMutation.isPending}>
+              {createMutation.isPending ? "Creating..." : "Create hub"}
+            </button>
+          </form>
+        </div>
+      </details>
     </div>
   );
 }
