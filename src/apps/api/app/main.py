@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .core.config import get_settings
 from .dependencies import rate_limit_ip_only
-from .routers import chat, hubs, memberships, sources, users
+from .routers import chat, hubs, memberships, reminders, sources, users
 
 settings = get_settings()
 
@@ -26,6 +26,7 @@ app.include_router(sources.router)
 app.include_router(chat.router)
 app.include_router(memberships.router)
 app.include_router(users.router)
+app.include_router(reminders.router)
 
 
 @app.get("/health", dependencies=[Depends(rate_limit_ip_only("health", "rate_limit_health_per_minute"))])

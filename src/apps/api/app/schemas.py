@@ -139,3 +139,118 @@ class ChatResponse(BaseModel):
     answer: str
     citations: List[Citation] = []
     message_id: str
+
+
+class ReminderStatus(str, Enum):
+    scheduled = "scheduled"
+    sent = "sent"
+    completed = "completed"
+    cancelled = "cancelled"
+
+
+class ReminderCandidateStatus(str, Enum):
+    pending = "pending"
+    accepted = "accepted"
+    declined = "declined"
+    expired = "expired"
+
+
+class NotificationStatus(str, Enum):
+    queued = "queued"
+    sent = "sent"
+    failed = "failed"
+
+
+class NotificationChannel(str, Enum):
+    in_app = "in_app"
+
+
+class Reminder(BaseModel):
+    id: str
+    user_id: str
+    hub_id: str
+    source_id: Optional[str] = None
+    due_at: datetime
+    timezone: str
+    message: Optional[str] = None
+    status: ReminderStatus
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    sent_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+
+
+class ReminderCreate(StrictModel):
+    hub_id: UUID
+    source_id: Optional[UUID] = None
+    due_at: datetime
+    timezone: str = Field(..., min_length=1, max_length=64)
+    message: Optional[str] = Field(default=None, max_length=500)
+
+
+class ReminderUpdateAction(str, Enum):
+    complete = "complete"
+    cancel = "cancel"
+    snooze = "snooze"
+
+
+class ReminderUpdate(StrictModel):
+    due_at: Optional[datetime] = None
+    timezone: Optional[str] = Field(default=None, min_length=1, max_length=64)
+    message: Optional[str] = Field(default=None, max_length=500)
+    action: Optional[ReminderUpdateAction] = None
+    snooze_minutes: Optional[int] = Field(default=None, ge=1, le=60 * 24 * 30)
+
+
+class ReminderCandidate(BaseModel):
+    id: str
+    hub_id: str
+    source_id: str
+    snippet: str
+    due_at: datetime
+    timezone: str
+    title_suggestion: Optional[str] = None
+    confidence: float
+    status: ReminderCandidateStatus
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class ReminderCandidateDecision(StrictModel):
+    action: ReminderCandidateStatus
+    edited_due_at: Optional[datetime] = None
+    edited_message: Optional[str] = Field(default=None, max_length=500)
+    timezone: Optional[str] = Field(default=None, min_length=1, max_length=64)
+
+
+class ReminderCandidateDecisionResponse(BaseModel):
+    candidate: ReminderCandidate
+    reminder: Optional[Reminder] = None
+
+
+class Notification(BaseModel):
+    id: str
+    user_id: str
+    reminder_id: str
+    channel: NotificationChannel
+    status: NotificationStatus
+    scheduled_for: datetime
+    sent_at: Optional[datetime] = None
+    provider_id: Optional[str] = None
+
+
+class ReminderSummary(BaseModel):
+    id: str
+    hub_id: str
+    source_id: Optional[str] = None
+    due_at: datetime
+    message: Optional[str] = None
+    status: ReminderStatus
+
+
+class NotificationEvent(BaseModel):
+    id: str
+    reminder_id: str
+    channel: NotificationChannel
+    status: NotificationStatus
+    scheduled_for: datetime
+    sent_at: Optional[datetime] = None
+    reminder: ReminderSummary
