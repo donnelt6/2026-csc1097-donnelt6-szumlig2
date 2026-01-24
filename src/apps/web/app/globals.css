@@ -806,7 +806,7 @@ textarea {
 
 .create-hub-dropdown {
   position: absolute;
-  left: 0;
+  right: 0;
   top: calc(100% + 12px);
   min-width: 320px;
   max-width: 420px;
@@ -829,6 +829,70 @@ textarea {
   animation: slideDown 0.2s ease;
 }
 
+.hubs-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 20px;
+}
+
+.hub-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 140px;
+  padding: 20px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow-sm);
+  transition: all var(--transition-base);
+  text-decoration: none;
+  color: inherit;
+}
+
+.hub-card:hover {
+  border-color: var(--border-focus);
+  box-shadow: var(--shadow-lg), var(--glow-accent);
+  transform: translateY(-2px);
+}
+
+.hub-card-content {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+}
+
+.hub-card-title {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 700;
+  line-height: 1.4;
+  color: var(--text);
+}
+
+.hub-card-description {
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.hub-card-role {
+  display: inline-block;
+  align-self: flex-start;
+  margin-top: 12px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: #0d1117;
+  color: var(--text);
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
 @media (max-width: 720px) {
   .nav-content {
     padding: 16px;
@@ -840,5 +904,16 @@ textarea {
 
   .notifications-panel {
     right: -24px;
+  }
+
+  .hubs-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .create-hub-dropdown {
+    left: 0;
+    right: 0;
+    min-width: unset;
+    max-width: unset;
   }
 }
