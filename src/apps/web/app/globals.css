@@ -856,11 +856,18 @@ textarea {
   transform: translateY(-2px);
 }
 
-.hub-card-content {
+.hub-card-header {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  flex: 1;
+}
+
+.hub-card-footer {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: auto;
+  padding-top: 12px;
 }
 
 .hub-card-title {
@@ -882,13 +889,13 @@ textarea {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-top: 8px;
+  margin-top: 0;
   font-size: 0.8rem;
 }
 
 .hub-stat {
   display: inline-flex;
-  align-items: baseline;
+  align-items: center;
   gap: 4px;
 }
 
@@ -897,18 +904,17 @@ textarea {
   color: var(--text);
 }
 
-.hub-stat-label {
-  color: var(--muted);
-}
-
-.hub-stat-divider {
-  color: var(--border);
+.hub-stat-icon {
+  width: 18px;
+  height: 18px;
+  color: var(--text);
+  opacity: 0.9;
+  flex-shrink: 0;
 }
 
 .hub-card-role {
   display: inline-block;
-  align-self: flex-start;
-  margin-top: 12px;
+  margin-top: 0;
   padding: 4px 10px;
   border-radius: 6px;
   border: 1px solid var(--border);
@@ -918,6 +924,7 @@ textarea {
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.08em;
+  flex-shrink: 0;
 }
 
 @media (max-width: 720px) {
