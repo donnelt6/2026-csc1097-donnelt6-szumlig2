@@ -31,7 +31,7 @@ describe("AuthGate", () => {
         <div>Private</div>
       </AuthGate>
     );
-    expect(screen.getByText("Checking your session...")).toBeInTheDocument();
+    expect(screen.getByRole("main")).toHaveAttribute("aria-busy", "true");
   });
 
   it("redirects unauthenticated users to /auth", async () => {
