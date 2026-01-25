@@ -144,7 +144,7 @@ export function UploadPanel({ hubId, sources, onRefresh, canUpload = true }: Pro
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <div>
                 <strong>{source.original_name}</strong>
-                <p className="muted">{new Date(source.created_at).toLocaleString()}</p>
+                <p className="muted">{formatIrelandDateTime(new Date(source.created_at))}</p>
               </div>
               <StatusPill status={source.status} />
             </div>
@@ -223,4 +223,18 @@ function clampFailureReason(err: unknown): string {
   const message = err instanceof Error ? err.message : "Upload failed.";
   const trimmed = message.trim() || "Upload failed.";
   return trimmed.length > 500 ? trimmed.slice(0, 500) : trimmed;
+}
+
+function formatIrelandDateTime(date: Date) {
+  if (Number.isNaN(date.getTime())) return "";
+  const day = pad2(date.getDate());
+  const month = pad2(date.getMonth() + 1);
+  const year = date.getFullYear();
+  const hours = pad2(date.getHours());
+  const minutes = pad2(date.getMinutes());
+  return `${day}/${month}/${year} ${hours}:${minutes}`;
+}
+
+function pad2(value: number) {
+  return value.toString().padStart(2, "0");
 }

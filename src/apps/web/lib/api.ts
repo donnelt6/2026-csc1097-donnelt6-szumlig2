@@ -1,5 +1,16 @@
 import { getAccessToken } from "./supabaseClient";
-import type { ChatResponse, Hub, HubMember, PendingInvite, Source } from "./types";
+import type {
+  ChatResponse,
+  Hub,
+  HubMember,
+  NotificationEvent,
+  PendingInvite,
+  Reminder,
+  ReminderCandidate,
+  ReminderCandidateStatus,
+  ReminderUpdateAction,
+  Source,
+} from "./types";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 
@@ -150,4 +161,107 @@ export async function removeMember(hubId: string, userId: string): Promise<void>
 export async function listInvites(): Promise<PendingInvite[]> {
   const res = await authedFetch(`${API_BASE}/invites`, { cache: "no-store" });
   return handle<PendingInvite[]>(res);
+}
+
+export async function listReminders(params: {
+  hubId?: string;
+  status?: string;
+  dueFrom?: string;
+  dueTo?: string;
+  sourceId?: string;
+}): Promise<Reminder[]> {
+  const search = new URLSearchParams();
+  if (params.hubId) search.set("hub_id", params.hubId);
+  if (params.status) search.set("status", params.status);
+  if (params.dueFrom) search.set("due_from", params.dueFrom);
+  if (params.dueTo) search.set("due_to", params.dueTo);
+  if (params.sourceId) search.set("source_id", params.sourceId);
+  const url = search.toString() ? `${API_BASE}/reminders?${search}` : `${API_BASE}/reminders`;
+  const res = await authedFetch(url, { cache: "no-store" });
+  return handle<Reminder[]>(res);
+}
+
+export async function createReminder(data: {
+  hub_id: string;
+  source_id?: string;
+  due_at: string;
+  timezone: string;
+  message?: string;
+}): Promise<Reminder> {
+  const res = await authedFetch(`${API_BASE}/reminders`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  return handle<Reminder>(res);
+}
+
+export async function updateReminder(
+  reminderId: string,
+  data: {
+    due_at?: string;
+    timezone?: string;
+    message?: string;
+    action?: ReminderUpdateAction;
+    snooze_minutes?: number;
+  }
+): Promise<Reminder> {
+  const res = await authedFetch(`${API_BASE}/reminders/${reminderId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  return handle<Reminder>(res);
+}
+
+export async function deleteReminder(reminderId: string): Promise<void> {
+  const res = await authedFetch(`${API_BASE}/reminders/${reminderId}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) {
+    await handle(res);
+  }
+}
+
+export async function listReminderCandidates(params: {
+  hubId?: string;
+  sourceId?: string;
+  status?: ReminderCandidateStatus;
+}): Promise<ReminderCandidate[]> {
+  const search = new URLSearchParams();
+  if (params.hubId) search.set("hub_id", params.hubId);
+  if (params.sourceId) search.set("source_id", params.sourceId);
+  if (params.status) search.set("status", params.status);
+  const url = search.toString()
+    ? `${API_BASE}/reminders/candidates?${search}`
+    : `${API_BASE}/reminders/candidates`;
+  const res = await authedFetch(url, { cache: "no-store" });
+  return handle<ReminderCandidate[]>(res);
+}
+
+export async function decideReminderCandidate(
+  candidateId: string,
+  data: {
+    action: ReminderCandidateStatus;
+    edited_due_at?: string;
+    edited_message?: string;
+    timezone?: string;
+  }
+): Promise<{ candidate: ReminderCandidate; reminder?: Reminder }> {
+  const res = await authedFetch(`${API_BASE}/reminders/candidates/${candidateId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  return handle(res);
+}
+
+export async function listReminderNotifications(params: { reminderId?: string } = {}): Promise<NotificationEvent[]> {
+  const search = new URLSearchParams();
+  if (params.reminderId) search.set("reminder_id", params.reminderId);
+  const url = search.toString()
+    ? `${API_BASE}/reminders/notifications?${search}`
+    : `${API_BASE}/reminders/notifications`;
+  const res = await authedFetch(url, { cache: "no-store" });
+  return handle<NotificationEvent[]>(res);
 }

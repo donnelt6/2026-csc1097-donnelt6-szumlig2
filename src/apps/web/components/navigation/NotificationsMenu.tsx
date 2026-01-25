@@ -2,8 +2,9 @@
 
 import { useMemo, useState, useRef, useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { acceptInvite, listInvites } from "../../lib/api";
+import { acceptInvite, listInvites, listReminderNotifications } from "../../lib/api";
 import { useAuth } from "../auth/AuthProvider";
+import type { NotificationEvent } from "../../lib/types";
 
 function formatTimeAgo(value?: string | null) {
   if (!value) return "recently";
@@ -21,16 +22,37 @@ function truncateLabel(value: string, maxLength: number) {
   return `${value.slice(0, maxLength).trimEnd()}...`;
 }
 
+function formatLocalDate(value?: string | null) {
+  if (!value) return "unknown time";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return formatIrelandDateTime(date);
+}
+
 export function NotificationsMenu() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [dismissedInvites, setDismissedInvites] = useState<string[]>([]);
+  const [dismissedReminders, setDismissedReminders] = useState<string[]>([]);
   const detailsRef = useRef<HTMLDetailsElement>(null);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["invites"],
     queryFn: listInvites,
     enabled: !!user,
+  });
+
+  const {
+    data: reminderNotifications,
+    isLoading: remindersLoading,
+    error: remindersError,
+  } = useQuery({
+    queryKey: ["reminder-notifications"],
+    queryFn: () => listReminderNotifications(),
+    enabled: !!user,
+    refetchInterval: 5000,
+    refetchIntervalInBackground: true,
+    refetchOnWindowFocus: true,
   });
 
   const acceptMutation = useMutation({
@@ -46,7 +68,12 @@ export function NotificationsMenu() {
     return data.filter((invite) => !dismissedInvites.includes(invite.hub.id));
   }, [data, dismissedInvites]);
 
-  const count = visibleInvites.length;
+  const visibleReminders = useMemo(() => {
+    if (!reminderNotifications?.length) return [];
+    return reminderNotifications.filter((notice) => !dismissedReminders.includes(notice.id));
+  }, [reminderNotifications, dismissedReminders]);
+
+  const count = visibleInvites.length + visibleReminders.length;
   const summaryLabel = useMemo(() => {
     if (!count) return "Notifications";
     return `${count} new notification${count === 1 ? "" : "s"}`;
@@ -54,6 +81,10 @@ export function NotificationsMenu() {
 
   const dismissInvite = (hubId: string) => {
     setDismissedInvites((prev) => (prev.includes(hubId) ? prev : [...prev, hubId]));
+  };
+
+  const dismissReminder = (notificationId: string) => {
+    setDismissedReminders((prev) => (prev.includes(notificationId) ? prev : [...prev, notificationId]));
   };
 
   useEffect(() => {
@@ -84,13 +115,20 @@ export function NotificationsMenu() {
       </summary>
       <div className="notifications-panel">
         <div className="notifications-header">
-          <p className="notifications-title">Invites</p>
+          <p className="notifications-title">Notifications</p>
           <p className="notifications-subtitle">{count ? `${count} new` : "All caught up"}</p>
         </div>
         <div className="notifications-list">
           {isLoading && <p className="notifications-empty">Loading invites...</p>}
           {error && <p className="notifications-error">Failed to load invites: {(error as Error).message}</p>}
-          {!isLoading && !error && count === 0 && <p className="notifications-empty">No new notifications</p>}
+          {remindersLoading && <p className="notifications-empty">Loading reminders...</p>}
+          {remindersError && <p className="notifications-error">Failed to load reminders: {(remindersError as Error).message}</p>}
+          {!isLoading && !error && !remindersLoading && !remindersError && count === 0 && (
+            <p className="notifications-empty">No new notifications</p>
+          )}
+          {visibleReminders.map((notice) => (
+            <ReminderNotificationCard key={notice.id} notice={notice} onDismiss={dismissReminder} />
+          ))}
           {visibleInvites.map((invite) => {
             const hubLabel = truncateLabel(invite.hub.name, 25);
             return (
@@ -134,4 +172,56 @@ export function NotificationsMenu() {
       </div>
     </details>
   );
+}
+
+function ReminderNotificationCard({
+  notice,
+  onDismiss,
+}: {
+  notice: NotificationEvent;
+  onDismiss: (notificationId: string) => void;
+}) {
+  const title = notice.reminder.message || "Reminder alert";
+  const dueLabel = formatLocalDate(notice.reminder.due_at);
+  const sentLabel = formatTimeAgo(notice.sent_at ?? notice.scheduled_for);
+
+  return (
+    <div className="notification-card">
+      <div className="notification-content">
+        <div className="notification-icon" aria-hidden="true">
+          R
+        </div>
+        <div className="notification-body">
+          <p className="notification-title">{title}</p>
+          <div className="notification-meta-row">
+            <span className="notification-hub">Due {dueLabel}</span>
+          </div>
+          <div className="notification-meta-row">
+            <span className="notification-meta-right">
+              <span className="notification-time">{sentLabel}</span>
+              <span className="notification-role">{notice.channel.replace("_", " ")}</span>
+            </span>
+          </div>
+        </div>
+      </div>
+      <div className="notification-actions">
+        <button className="notification-dismiss" type="button" onClick={() => onDismiss(notice.id)}>
+          Dismiss
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function formatIrelandDateTime(date: Date) {
+  const day = pad2(date.getDate());
+  const month = pad2(date.getMonth() + 1);
+  const year = date.getFullYear();
+  const hours = pad2(date.getHours());
+  const minutes = pad2(date.getMinutes());
+  return `${day}/${month}/${year} ${hours}:${minutes}`;
+}
+
+function pad2(value: number) {
+  return value.toString().padStart(2, "0");
 }

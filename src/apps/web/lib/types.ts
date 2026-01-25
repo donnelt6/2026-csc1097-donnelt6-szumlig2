@@ -46,3 +46,55 @@ export interface PendingInvite {
   role: MembershipRole;
   invited_at?: string | null;
 }
+
+export type ReminderStatus = "scheduled" | "sent" | "completed" | "cancelled";
+export type ReminderCandidateStatus = "pending" | "accepted" | "declined" | "expired";
+export type ReminderUpdateAction = "complete" | "cancel" | "snooze";
+export type NotificationStatus = "queued" | "sent" | "failed";
+export type NotificationChannel = "in_app";
+
+export interface Reminder {
+  id: string;
+  user_id: string;
+  hub_id: string;
+  source_id?: string | null;
+  due_at: string;
+  timezone: string;
+  message?: string | null;
+  status: ReminderStatus;
+  created_at: string;
+  sent_at?: string | null;
+  completed_at?: string | null;
+}
+
+export interface ReminderCandidate {
+  id: string;
+  hub_id: string;
+  source_id: string;
+  snippet: string;
+  due_at: string;
+  timezone: string;
+  title_suggestion?: string | null;
+  confidence: number;
+  status: ReminderCandidateStatus;
+  created_at: string;
+}
+
+export interface ReminderSummary {
+  id: string;
+  hub_id: string;
+  source_id?: string | null;
+  due_at: string;
+  message?: string | null;
+  status: ReminderStatus;
+}
+
+export interface NotificationEvent {
+  id: string;
+  reminder_id: string;
+  channel: NotificationChannel;
+  status: NotificationStatus;
+  scheduled_for: string;
+  sent_at?: string | null;
+  reminder: ReminderSummary;
+}
