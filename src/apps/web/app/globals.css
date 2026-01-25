@@ -878,6 +878,33 @@ textarea {
   color: var(--muted);
 }
 
+.hub-card-stats {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  font-size: 0.8rem;
+}
+
+.hub-stat {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.hub-stat-value {
+  font-weight: 700;
+  color: var(--text);
+}
+
+.hub-stat-label {
+  color: var(--muted);
+}
+
+.hub-stat-divider {
+  color: var(--border);
+}
+
 .hub-card-role {
   display: inline-block;
   align-self: flex-start;

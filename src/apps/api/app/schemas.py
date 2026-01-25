@@ -28,6 +28,8 @@ class Hub(BaseModel):
     description: Optional[str] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
     role: Optional[MembershipRole] = None
+    members_count: Optional[int] = None
+    sources_count: Optional[int] = None
 
 
 class HubCreate(StrictModel):

@@ -79,6 +79,17 @@ export function HubsList() {
             <div className="hub-card-content">
               <h3 className="hub-card-title">{hub.name}</h3>
               <p className="hub-card-description">{hub.description || "No description yet"}</p>
+              <div className="hub-card-stats">
+                <span className="hub-stat">
+                  <span className="hub-stat-value">{hub.members_count ?? 0}</span>
+                  <span className="hub-stat-label">{hub.members_count === 1 ? 'member' : 'members'}</span>
+                </span>
+                <span className="hub-stat-divider">•</span>
+                <span className="hub-stat">
+                  <span className="hub-stat-value">{hub.sources_count ?? 0}</span>
+                  <span className="hub-stat-label">{hub.sources_count === 1 ? 'source' : 'sources'}</span>
+                </span>
+              </div>
             </div>
             {hub.role && <span className="hub-card-role">{hub.role}</span>}
           </Link>
