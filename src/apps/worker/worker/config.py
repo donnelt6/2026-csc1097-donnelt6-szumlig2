@@ -16,6 +16,9 @@ class Settings:
     embedding_model: str = os.getenv("EMBEDDING_MODEL", "text-embedding-3-small")
     chunk_size: int = int(os.getenv("CHUNK_SIZE", "800"))
     chunk_overlap: int = int(os.getenv("CHUNK_OVERLAP", "150"))
+    default_timezone: str = os.getenv("DEFAULT_TIMEZONE", "Europe/Dublin")
+    reminder_lead_hours: int = int(os.getenv("REMINDER_LEAD_HOURS", "24"))
+    reminder_dispatch_window_minutes: int = int(os.getenv("REMINDER_DISPATCH_WINDOW_MINUTES", "15"))
 
 
 def get_settings() -> Settings:
