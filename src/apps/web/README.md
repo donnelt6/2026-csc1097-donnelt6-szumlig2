@@ -1,6 +1,6 @@
 # Caddie Web (Next.js)
 
-Next.js 14 frontend with hubs list, hub detail page, upload widget (retry/delete on failed uploads), and chat flow (hub-only or hub + web search).
+Next.js 14 frontend with hubs list, hub detail page, upload widget (retry/delete on failed uploads), reminder suggestions/management, and chat flow (hub-only or hub + web search).
 
 ## Run locally
 ```bash
@@ -23,16 +23,19 @@ Environment variables: see `.env.example`. Set `NEXT_PUBLIC_API_BASE_URL` to you
 - `app/page.tsx` - Home page listing hubs.
 - `app/auth/page.tsx` - Email/password sign in and sign up.
 - `app/globals.css` - Global styles and theme variables.
-- `app/hubs/[hubId]/page.tsx` - Hub detail page with upload + chat.
+- `app/hubs/[hubId]/page.tsx` - Hub detail page with upload, reminders, and chat.
 - `components/ChatPanel.tsx` - Chat UI with citations and hub/global scope.
 - `components/HubsList.tsx` - Hub list and create form.
 - `components/InvitesPanel.tsx` - Pending invite list and accept actions.
 - `components/MembersPanel.tsx` - Member list and role management.
 - `components/Providers.tsx` - React Query + auth provider setup.
+- `components/ReminderCandidatesPanel.tsx` - Suggested reminders from detected due dates.
+- `components/RemindersPanel.tsx` - Reminder list and management actions.
 - `components/UploadPanel.tsx` - Upload widget with status list and retry/delete for failures.
 - `components/auth/AuthProvider.tsx` - Supabase session provider.
 - `components/auth/AuthGate.tsx` - Route guard for authenticated pages.
 - `components/auth/UserMenu.tsx` - Current user menu and sign out.
+- `components/navigation/NotificationsMenu.tsx` - In-app notifications menu for invites and reminders.
 - `lib/api.ts` - API client helpers.
 - `lib/supabaseClient.ts` - Supabase client initialization.
 - `lib/types.ts` - Shared TypeScript types.

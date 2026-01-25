@@ -8,9 +8,12 @@ cd apps/worker
 python -m venv .venv && .venv/Scripts/activate  # PowerShell: .venv\\Scripts\\Activate.ps1
 pip install -r requirements.txt
 celery -A worker.tasks worker --loglevel=info
+celery -A worker.tasks beat --loglevel=info
 ```
 
 Configure `REDIS_URL`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and `OPENAI_API_KEY` in `.env.example` for local development. The worker uses the service role key so it can write chunks through RLS.
+Reminder delivery uses `DEFAULT_TIMEZONE`.
+For reminder detection, install a spaCy English model (e.g. `python -m spacy download en_core_web_sm`).
 
 ## Files and purpose
 - `.env.example` - Template for required env vars (no secrets).

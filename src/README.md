@@ -14,10 +14,12 @@ This `src/` folder contains the scaffold for Caddie: a Next.js frontend, FastAPI
 2) Set env vars from `.env.example` in each app (Supabase/OpenAI/Redis).
 3) Run API: `cd apps/api && uvicorn app.main:app --reload --port 8000`
 4) Run worker: `cd apps/worker && celery -A worker.tasks worker --loglevel=info`
-5) Run web: `cd apps/web && npm run dev` (expects `NEXT_PUBLIC_API_BASE_URL=http://localhost:8000`)
+5) Run beat (reminders): `cd apps/worker && celery -A worker.tasks beat --loglevel=info`
+6) Run web: `cd apps/web && npm run dev` (expects `NEXT_PUBLIC_API_BASE_URL=http://localhost:8000`)
 
 Supabase/OpenAI/Redis env placeholders live in each app's `.env.example`. The API and worker require these to run.
 Note: the API expects Supabase Auth JWTs for user-scoped access and uses the service role key only for storage/admin tasks.
+Reminder detection uses spaCy; install `en_core_web_sm` in the worker env for due-date suggestions.
 
 ## Daily run commands (PowerShell)
 Use three terminals so each process keeps running.
@@ -34,6 +36,12 @@ cd 2026-csc1097-donnelt6-szumlig2/src/apps/worker
 .\.venv\Scripts\python -m celery -A worker.tasks worker --loglevel=info -P solo
 ```
 
+Beat (reminders):
+```
+cd 2026-csc1097-donnelt6-szumlig2/src/apps/worker
+.\.venv\Scripts\python -m celery -A worker.tasks beat --loglevel=info
+```
+
 Web:
 ```
 cd 2026-csc1097-donnelt6-szumlig2/src/apps/web
@@ -47,6 +55,8 @@ Run the SQL migration in Supabase SQL Editor:
 `2026-csc1097-donnelt6-szumlig2/src/apps/api/migrations/003_auth_roles.sql`
 `2026-csc1097-donnelt6-szumlig2/src/apps/api/migrations/004_fix_hub_members_rls.sql`
 `2026-csc1097-donnelt6-szumlig2/src/apps/api/migrations/005_fix_hub_members_rls_functions.sql`
+`2026-csc1097-donnelt6-szumlig2/src/apps/api/migrations/006_reminders.sql`
+`2026-csc1097-donnelt6-szumlig2/src/apps/api/migrations/007_reminders_in_app_only.sql`
 
 ## Auth note
 Sign in via `/auth` using Supabase email/password auth. The web app stores the Supabase session and sends `Authorization: Bearer <JWT>` on API requests. The API enforces RLS with the user token and only uses the service role key for storage/admin tasks (ingestion, member lookups).
