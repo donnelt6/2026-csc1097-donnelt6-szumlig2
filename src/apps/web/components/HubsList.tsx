@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, useRef, useEffect } from "react";
-import { UsersIcon, DocumentIcon } from "@heroicons/react/24/outline";
+import { UserIcon, UsersIcon, UserGroupIcon, DocumentIcon } from "@heroicons/react/24/outline";
 import { createHub, listHubs } from "../lib/api";
 import type { Hub } from "../lib/types";
 
@@ -85,7 +85,13 @@ export function HubsList() {
               {hub.role && <span className="hub-card-role">{hub.role}</span>}
               <div className="hub-card-stats">
                 <span className="hub-stat" aria-label={`${hub.members_count ?? 0} ${hub.members_count === 1 ? 'member' : 'members'}`}>
-                  <UsersIcon className="hub-stat-icon" aria-hidden="true" />
+                  {(hub.members_count ?? 0) === 1 ? (
+                    <UserIcon className="hub-stat-icon" aria-hidden="true" />
+                  ) : (hub.members_count ?? 0) <= 4 ? (
+                    <UsersIcon className="hub-stat-icon" aria-hidden="true" />
+                  ) : (
+                    <UserGroupIcon className="hub-stat-icon" aria-hidden="true" />
+                  )}
                   <span className="hub-stat-value">{hub.members_count ?? 0}</span>
                 </span>
                 <span className="hub-stat" aria-label={`${hub.sources_count ?? 0} ${hub.sources_count === 1 ? 'source' : 'sources'}`}>
