@@ -833,16 +833,16 @@ textarea {
 
 .hubs-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 20px;
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  gap: 24px;
 }
 
 .hub-card {
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  min-height: 140px;
-  padding: 20px;
+  min-height: 180px;
+  padding: 28px;
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: 12px;
@@ -861,20 +861,20 @@ textarea {
 .hub-card-header {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 12px;
 }
 
 .hub-card-footer {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 16px;
   margin-top: auto;
-  padding-top: 12px;
+  padding-top: 16px;
 }
 
 .hub-card-title {
   margin: 0;
-  font-size: 1.125rem;
+  font-size: 1.25rem;
   font-weight: 700;
   line-height: 1.4;
   color: var(--text);
@@ -882,7 +882,7 @@ textarea {
 
 .hub-card-description {
   margin: 0;
-  font-size: 0.875rem;
+  font-size: 0.95rem;
   line-height: 1.5;
   color: var(--muted);
 }
@@ -890,15 +890,15 @@ textarea {
 .hub-card-stats {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 12px;
   margin-top: 0;
-  font-size: 0.8rem;
+  font-size: 0.875rem;
 }
 
 .hub-stat {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
 }
 
 .hub-stat-value {
@@ -907,8 +907,8 @@ textarea {
 }
 
 .hub-stat-icon {
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
   color: var(--text);
   opacity: 0.9;
   flex-shrink: 0;
@@ -917,12 +917,12 @@ textarea {
 .hub-card-role {
   display: inline-block;
   margin-top: 0;
-  padding: 4px 10px;
-  border-radius: 6px;
+  padding: 6px 12px;
+  border-radius: 8px;
   border: 1px solid var(--border);
   background: #0d1117;
   color: var(--text);
-  font-size: 0.65rem;
+  font-size: 0.7rem;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.08em;
