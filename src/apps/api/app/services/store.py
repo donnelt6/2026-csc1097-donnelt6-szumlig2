@@ -2,6 +2,7 @@ import re
 import uuid
 from datetime import datetime
 from pathlib import PurePath
+from urllib.parse import urlparse
 from typing import Any, Dict, List, Optional, Tuple
 
 from openai import OpenAI
@@ -29,6 +30,8 @@ from ..schemas import (
     SourceCreate,
     SourceStatus,
     SourceStatusResponse,
+    SourceType,
+    WebSourceCreate,
 )
 
 
@@ -103,6 +106,7 @@ class SupabaseStore:
                     "original_name": payload.original_name,
                     "storage_path": storage_path,
                     "status": SourceStatus.queued.value,
+                    "type": SourceType.file.value,
                 }
             )
             .execute()
@@ -119,6 +123,29 @@ class SupabaseStore:
             raise
 
         return Source(**row), upload_url
+
+    def create_web_source(self, client: Client, payload: WebSourceCreate) -> Source:
+        source_id = str(uuid.uuid4())
+        hub_id = str(payload.hub_id)
+        storage_path = _web_storage_path(hub_id, source_id)
+        display_name = _build_web_source_name(payload.url)
+        response = (
+            client.table("sources")
+            .insert(
+                {
+                    "id": source_id,
+                    "hub_id": hub_id,
+                    "type": SourceType.web.value,
+                    "original_name": display_name,
+                    "storage_path": storage_path,
+                    "status": SourceStatus.queued.value,
+                    "ingestion_metadata": {"url": payload.url},
+                }
+            )
+            .execute()
+        )
+        row = response.data[0]
+        return Source(**row)
 
     def list_sources(self, client: Client, hub_id: str) -> List[Source]:
         response = (
@@ -159,6 +186,36 @@ class SupabaseStore:
             raise KeyError("Source not found")
         row = response.data[0]
         return Source(**row)
+
+    def refresh_web_source(self, client: Client, source_id: str) -> tuple[Source, str]:
+        source = self.get_source(client, source_id)
+        if source.type != SourceType.web:
+            raise ValueError("Source is not a web URL")
+        url = None
+        if isinstance(source.ingestion_metadata, dict):
+            url = source.ingestion_metadata.get("url")
+        if not url:
+            raise ValueError("Source URL missing")
+        new_path = _web_storage_path(source.hub_id, source.id)
+        metadata = dict(source.ingestion_metadata or {})
+        metadata["url"] = url
+        metadata["refresh_requested_at"] = datetime.utcnow().isoformat()
+        response = (
+            client.table("sources")
+            .update(
+                {
+                    "storage_path": new_path,
+                    "status": SourceStatus.queued.value,
+                    "failure_reason": None,
+                    "ingestion_metadata": metadata,
+                }
+            )
+            .eq("id", str(source_id))
+            .execute()
+        )
+        if not response.data:
+            raise KeyError("Source not found")
+        return Source(**response.data[0]), url
 
     def get_source_status(self, client: Client, source_id: str) -> SourceStatusResponse:
         response = client.table("sources").select("id,status,failure_reason").eq("id", str(source_id)).execute()
@@ -564,6 +621,22 @@ def _sanitize_filename(name: str) -> str:
     if len(base) > 255:
         base = base[:255]
     return base
+
+
+def _web_storage_path(hub_id: str, source_id: str) -> str:
+    stamp = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+    return f"{hub_id}/{source_id}/web-{stamp}.md"
+
+
+def _build_web_source_name(url: str) -> str:
+    parsed = urlparse(url)
+    host = parsed.netloc or parsed.path or url
+    display = host.strip()
+    if parsed.path and parsed.path not in {"/", ""}:
+        display = f"{display}{parsed.path}"
+    if parsed.query:
+        display = f"{display}?{parsed.query}"
+    return display[:255]
 
 
 def _get_attr(obj: Any, name: str, default: Any = None) -> Any:
