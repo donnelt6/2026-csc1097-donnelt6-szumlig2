@@ -933,20 +933,27 @@ textarea {
 }
 
 .filters-container {
-  display: flex;
-  gap: 24px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(180px, 1fr));
+  gap: 20px 24px;
   padding: 20px;
   background: var(--card);
   border: none;
   border-radius: 0;
-  flex-wrap: wrap;
+  align-items: start;
+}
+
+@media (max-width: 720px) {
+  .filters-container {
+    grid-template-columns: 1fr;
+  }
 }
 
 .filter-group {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  min-width: 150px;
+  min-width: unset;
 }
 
 .filter-label {

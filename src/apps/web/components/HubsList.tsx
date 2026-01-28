@@ -188,45 +188,6 @@ export function HubsList() {
           <div className="filter-dropdown">
             <div className="filters-container">
               <div className="filter-group">
-                <label className="filter-label">Sort by</label>
-                <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="filter-select">
-                  <option value="">Default</option>
-                  <option value="most-members">Most members</option>
-                  <option value="least-members">Least members</option>
-                  <option value="most-sources">Most sources</option>
-                  <option value="least-sources">Least sources</option>
-                </select>
-              </div>
-              <div className="filter-group">
-                <label className="filter-label">Role</label>
-                <div className="checkbox-group">
-                  <label className="checkbox-label">
-                    <input
-                      type="checkbox"
-                      checked={selectedRoles.has("owner")}
-                      onChange={() => toggleRole("owner")}
-                    />
-                    <span>Owner</span>
-                  </label>
-                  <label className="checkbox-label">
-                    <input
-                      type="checkbox"
-                      checked={selectedRoles.has("editor")}
-                      onChange={() => toggleRole("editor")}
-                    />
-                    <span>Editor</span>
-                  </label>
-                  <label className="checkbox-label">
-                    <input
-                      type="checkbox"
-                      checked={selectedRoles.has("viewer")}
-                      onChange={() => toggleRole("viewer")}
-                    />
-                    <span>Viewer</span>
-                  </label>
-                </div>
-              </div>
-              <div className="filter-group">
                 <label className="filter-label">Members</label>
                 <div className="range-inputs">
                   <input
@@ -283,6 +244,45 @@ export function HubsList() {
                   />
                 </div>
                 {sourcesError && <div className="filter-error-message">Min cannot be greater than max</div>}
+              </div>
+              <div className="filter-group">
+                <label className="filter-label">Sort by</label>
+                <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="filter-select">
+                  <option value="">Default</option>
+                  <option value="most-members">Most members</option>
+                  <option value="least-members">Least members</option>
+                  <option value="most-sources">Most sources</option>
+                  <option value="least-sources">Least sources</option>
+                </select>
+              </div>
+              <div className="filter-group">
+                <label className="filter-label">Role</label>
+                <div className="checkbox-group">
+                  <label className="checkbox-label">
+                    <input
+                      type="checkbox"
+                      checked={selectedRoles.has("owner")}
+                      onChange={() => toggleRole("owner")}
+                    />
+                    <span>Owner</span>
+                  </label>
+                  <label className="checkbox-label">
+                    <input
+                      type="checkbox"
+                      checked={selectedRoles.has("editor")}
+                      onChange={() => toggleRole("editor")}
+                    />
+                    <span>Editor</span>
+                  </label>
+                  <label className="checkbox-label">
+                    <input
+                      type="checkbox"
+                      checked={selectedRoles.has("viewer")}
+                      onChange={() => toggleRole("viewer")}
+                    />
+                    <span>Viewer</span>
+                  </label>
+                </div>
               </div>
             </div>
           </div>
