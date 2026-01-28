@@ -97,11 +97,6 @@ export function RemindersPanel({ hubId }: Props) {
     });
   };
 
-  const handleSnooze = (reminderId: string, minutes: number) => {
-    setBusyAction({ id: reminderId, action: `snooze-${minutes}` });
-    updateMutation.mutate({ reminderId, payload: { action: "snooze", snooze_minutes: minutes } });
-  };
-
   const handleComplete = (reminderId: string) => {
     setBusyAction({ id: reminderId, action: "complete" });
     updateMutation.mutate({ reminderId, payload: { action: "complete" } });

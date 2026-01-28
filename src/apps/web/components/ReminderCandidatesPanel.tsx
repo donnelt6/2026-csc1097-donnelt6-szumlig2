@@ -26,8 +26,10 @@ export function ReminderCandidatesPanel({ hubId }: Props) {
     refetchInterval: 4000,
   });
 
+  type ReminderDecisionPayload = Parameters<typeof decideReminderCandidate>[1];
+
   const decisionMutation = useMutation({
-    mutationFn: ({ candidateId, payload }: { candidateId: string; payload: Record<string, unknown> }) =>
+    mutationFn: ({ candidateId, payload }: { candidateId: string; payload: ReminderDecisionPayload }) =>
       decideReminderCandidate(candidateId, payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["reminder-candidates", hubId] });
@@ -59,7 +61,7 @@ export function ReminderCandidatesPanel({ hubId }: Props) {
 
   const handleDecision = (candidate: ReminderCandidate, action: "accepted" | "declined") => {
     const draft = getDraft(candidate);
-    const payload: Record<string, unknown> = { action };
+    const payload: ReminderDecisionPayload = { action };
     if (action === "accepted") {
       payload.timezone = timezone;
       if (draft.dueAt) {

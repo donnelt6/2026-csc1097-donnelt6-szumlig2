@@ -5,6 +5,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { UploadPanel } from "../../components/UploadPanel";
 import { createSource, createSourceUploadUrl, enqueueSource, failSource } from "../../lib/api";
+import type { Source } from "../../lib/types";
 import { renderWithQueryClient } from "../test-utils";
 
 vi.mock("../../lib/api", () => ({
@@ -139,7 +140,7 @@ describe("UploadPanel", () => {
     vi.stubGlobal("fetch", fetchSpy);
 
     const file = new File(["retry"], "retry.txt", { type: "text/plain" });
-    const failedSource = {
+    const failedSource: Source = {
       id: "src-3",
       hub_id: "hub-1",
       original_name: "retry.txt",
