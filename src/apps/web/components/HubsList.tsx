@@ -51,6 +51,30 @@ export function HubsList() {
     setSelectedRoles(newRoles);
   };
 
+  const handleNumberInput = (value: string, setter: (val: string) => void) => {
+    const cleanValue = value.replace(/[^0-9]/g, '');
+
+    if (cleanValue !== '') {
+      const numValue = parseInt(cleanValue, 10);
+      if (numValue > 10000) return;
+    }
+
+    setter(cleanValue);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'e' || e.key === 'E' || e.key === '+' || e.key === '-' || e.key === '.') {
+      e.preventDefault();
+    }
+  };
+
+  const handlePaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    const pastedText = e.clipboardData.getData('text');
+    if (!/^\d+$/.test(pastedText)) {
+      e.preventDefault();
+    }
+  };
+
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (detailsRef.current && !detailsRef.current.contains(event.target as Node)) {
@@ -70,6 +94,9 @@ export function HubsList() {
   const maxMembersNum = maxMembers ? parseInt(maxMembers, 10) : null;
   const minSourcesNum = minSources ? parseInt(minSources, 10) : null;
   const maxSourcesNum = maxSources ? parseInt(maxSources, 10) : null;
+
+  const membersError = minMembersNum !== null && maxMembersNum !== null && minMembersNum > maxMembersNum;
+  const sourcesError = minSourcesNum !== null && maxSourcesNum !== null && minSourcesNum > maxSourcesNum;
 
   let filteredHubs = data?.filter((hub: Hub) => {
     if (normalizedQuery) {
@@ -206,20 +233,27 @@ export function HubsList() {
                     type="number"
                     placeholder="Min"
                     value={minMembers}
-                    onChange={(e) => setMinMembers(e.target.value)}
-                    className="filter-number-input"
+                    onChange={(e) => handleNumberInput(e.target.value, setMinMembers)}
+                    onKeyDown={handleKeyDown}
+                    onPaste={handlePaste}
+                    className={`filter-number-input ${membersError ? 'error' : ''}`}
                     min="0"
+                    max="10000"
                   />
                   <span className="range-separator">-</span>
                   <input
                     type="number"
                     placeholder="Max"
                     value={maxMembers}
-                    onChange={(e) => setMaxMembers(e.target.value)}
-                    className="filter-number-input"
-                    min="0"
+                    onChange={(e) => handleNumberInput(e.target.value, setMaxMembers)}
+                    onKeyDown={handleKeyDown}
+                    onPaste={handlePaste}
+                    className={`filter-number-input ${membersError ? 'error' : ''}`}
+                    min="1"
+                    max="10000"
                   />
                 </div>
+                {membersError && <div className="filter-error-message">Min cannot be greater than max</div>}
               </div>
               <div className="filter-group">
                 <label className="filter-label">Sources</label>
@@ -228,20 +262,27 @@ export function HubsList() {
                     type="number"
                     placeholder="Min"
                     value={minSources}
-                    onChange={(e) => setMinSources(e.target.value)}
-                    className="filter-number-input"
+                    onChange={(e) => handleNumberInput(e.target.value, setMinSources)}
+                    onKeyDown={handleKeyDown}
+                    onPaste={handlePaste}
+                    className={`filter-number-input ${sourcesError ? 'error' : ''}`}
                     min="0"
+                    max="10000"
                   />
                   <span className="range-separator">-</span>
                   <input
                     type="number"
                     placeholder="Max"
                     value={maxSources}
-                    onChange={(e) => setMaxSources(e.target.value)}
-                    className="filter-number-input"
+                    onChange={(e) => handleNumberInput(e.target.value, setMaxSources)}
+                    onKeyDown={handleKeyDown}
+                    onPaste={handlePaste}
+                    className={`filter-number-input ${sourcesError ? 'error' : ''}`}
                     min="0"
+                    max="10000"
                   />
                 </div>
+                {sourcesError && <div className="filter-error-message">Min cannot be greater than max</div>}
               </div>
             </div>
           </div>
