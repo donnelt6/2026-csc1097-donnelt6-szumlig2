@@ -1,0 +1,71 @@
+stages:
+  - lint
+  - test
+  - build
+
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH
+
+variables:
+  NPM_CONFIG_CACHE: "$CI_PROJECT_DIR/.cache/npm"
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+  NEXT_TELEMETRY_DISABLED: "1"
+
+cache:
+  key: "$CI_COMMIT_REF_SLUG"
+  paths:
+    - .cache/npm
+    - .cache/pip
+
+web_lint:
+  image: node:20
+  stage: lint
+  script:
+    - cd src
+    - npm ci
+    - npm run lint:web
+
+web_typecheck:
+  image: node:20
+  stage: lint
+  script:
+    - cd src
+    - npm ci
+    - npm run typecheck:web
+
+web_test:
+  image: node:20
+  stage: test
+  script:
+    - cd src
+    - npm ci
+    - npm --workspace apps/web run test -- --run
+
+web_build:
+  image: node:20
+  stage: build
+  script:
+    - cd src
+    - npm ci
+    - npm run build:web
+
+api_tests:
+  image: python:3.11
+  stage: test
+  script:
+    - cd src/apps/api
+    - python -m pip install --upgrade pip
+    - pip install -r requirements.txt
+    - pytest -q
+
+worker_tests:
+  image: python:3.11
+  stage: test
+  script:
+    - cd src/apps/worker
+    - python -m pip install --upgrade pip
+    - pip install -r requirements.txt
+    - python -m spacy download en_core_web_sm
+    - pytest -q
