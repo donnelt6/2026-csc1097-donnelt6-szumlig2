@@ -57,7 +57,7 @@ class SupabaseStore:
     def list_hubs(self, client: Client, user_id: str) -> List[Hub]:
         response = (
             client.table("hub_members")
-            .select("role, hubs (id, owner_id, name, description, created_at)")
+            .select("role, hubs (id, owner_id, name, description, created_at, members_count, sources_count)")
             .eq("user_id", user_id)
             .not_.is_("accepted_at", "null")
             .order("created_at", desc=True, foreign_table="hubs")

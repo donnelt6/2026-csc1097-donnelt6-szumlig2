@@ -8,6 +8,8 @@ export interface Hub {
   description?: string | null;
   created_at: string;
   role?: MembershipRole | null;
+  members_count?: number | null;
+  sources_count?: number | null;
 }
 
 export interface Source {
