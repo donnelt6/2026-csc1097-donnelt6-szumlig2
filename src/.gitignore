@@ -30,3 +30,6 @@ build/
 
 # Python packaging metadata
 *.egg-info/
+
+# Celery beat schedule
+celerybeat-schedule*
