@@ -831,6 +831,43 @@ textarea {
   animation: slideDown 0.2s ease;
 }
 
+.search-bar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  margin-bottom: 24px;
+}
+
+.search-icon {
+  position: absolute;
+  left: 16px;
+  width: 20px;
+  height: 20px;
+  color: var(--muted);
+  pointer-events: none;
+}
+
+.search-input {
+  width: 100%;
+  padding: 12px 16px 12px 48px;
+  font-size: 1rem;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.search-input:focus {
+  outline: none;
+  border-color: var(--border-focus);
+  box-shadow: var(--shadow-md);
+}
+
+.search-input::placeholder {
+  color: var(--muted);
+}
+
 .hubs-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));

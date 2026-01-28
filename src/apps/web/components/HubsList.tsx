@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, useRef, useEffect } from "react";
-import { UserIcon, UsersIcon, UserGroupIcon, DocumentIcon } from "@heroicons/react/24/outline";
+import { UserIcon, UsersIcon, UserGroupIcon, DocumentIcon, MagnifyingGlassIcon } from "@heroicons/react/24/outline";
 import { createHub, listHubs } from "../lib/api";
 import type { Hub } from "../lib/types";
 
@@ -20,6 +20,7 @@ export function HubsList() {
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
   const detailsRef = useRef<HTMLDetailsElement>(null);
 
   const onSubmit = (evt: React.FormEvent) => {
@@ -43,6 +44,14 @@ export function HubsList() {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  const normalizedQuery = searchQuery.trim().toLowerCase();
+  const filteredHubs = data?.filter((hub: Hub) => {
+    if (!normalizedQuery) return true;
+    const matchesName = hub.name?.toLowerCase().includes(normalizedQuery) ?? false;
+    const matchesDescription = hub.description?.toLowerCase().includes(normalizedQuery) ?? false;
+    return matchesName || matchesDescription;
+  });
 
   return (
     <div className="grid">
@@ -72,10 +81,20 @@ export function HubsList() {
           </div>
         </details>
       </div>
+      <div className="search-bar">
+        <MagnifyingGlassIcon className="search-icon" />
+        <input
+          type="text"
+          placeholder="Search hubs by name or description..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="search-input"
+        />
+      </div>
       {isLoading && <p className="muted">Loading hubs...</p>}
       {error && <p className="muted">Failed to load hubs: {(error as Error).message}</p>}
       <div className="hubs-grid">
-        {data?.map((hub: Hub) => (
+        {filteredHubs?.map((hub: Hub) => (
           <Link key={hub.id} href={`/hubs/${hub.id}`} className="hub-card">
             <div className="hub-card-header">
               <h3 className="hub-card-title">{hub.name}</h3>
