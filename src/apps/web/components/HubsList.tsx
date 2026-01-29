@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, useRef, useEffect } from "react";
-import { UserIcon, UsersIcon, UserGroupIcon, DocumentIcon } from "@heroicons/react/24/outline";
+import { UserIcon, UsersIcon, UserGroupIcon, DocumentIcon, MagnifyingGlassIcon } from "@heroicons/react/24/outline";
 import { createHub, listHubs } from "../lib/api";
 import type { Hub } from "../lib/types";
 
@@ -20,7 +20,15 @@ export function HubsList() {
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [sortBy, setSortBy] = useState("");
+  const [selectedRoles, setSelectedRoles] = useState<Set<string>>(new Set());
+  const [minMembers, setMinMembers] = useState("");
+  const [maxMembers, setMaxMembers] = useState("");
+  const [minSources, setMinSources] = useState("");
+  const [maxSources, setMaxSources] = useState("");
   const detailsRef = useRef<HTMLDetailsElement>(null);
+  const filterDetailsRef = useRef<HTMLDetailsElement>(null);
 
   const onSubmit = (evt: React.FormEvent) => {
     evt.preventDefault();
@@ -33,16 +41,106 @@ export function HubsList() {
     }
   };
 
+  const toggleRole = (role: string) => {
+    const newRoles = new Set(selectedRoles);
+    if (newRoles.has(role)) {
+      newRoles.delete(role);
+    } else {
+      newRoles.add(role);
+    }
+    setSelectedRoles(newRoles);
+  };
+
+  const handleNumberInput = (value: string, setter: (val: string) => void) => {
+    const cleanValue = value.replace(/[^0-9]/g, '');
+
+    if (cleanValue !== '') {
+      const numValue = parseInt(cleanValue, 10);
+      if (numValue > 10000) return;
+    }
+
+    setter(cleanValue);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'e' || e.key === 'E' || e.key === '+' || e.key === '-' || e.key === '.') {
+      e.preventDefault();
+    }
+  };
+
+  const handlePaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    const pastedText = e.clipboardData.getData('text');
+    if (!/^\d+$/.test(pastedText)) {
+      e.preventDefault();
+    }
+  };
+
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (detailsRef.current && !detailsRef.current.contains(event.target as Node)) {
         detailsRef.current.open = false;
+      }
+      if (filterDetailsRef.current && !filterDetailsRef.current.contains(event.target as Node)) {
+        filterDetailsRef.current.open = false;
       }
     };
 
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  const normalizedQuery = searchQuery.trim().toLowerCase();
+  const minMembersNum = minMembers ? parseInt(minMembers, 10) : null;
+  const maxMembersNum = maxMembers ? parseInt(maxMembers, 10) : null;
+  const minSourcesNum = minSources ? parseInt(minSources, 10) : null;
+  const maxSourcesNum = maxSources ? parseInt(maxSources, 10) : null;
+
+  const membersError = minMembersNum !== null && maxMembersNum !== null && minMembersNum > maxMembersNum;
+  const sourcesError = minSourcesNum !== null && maxSourcesNum !== null && minSourcesNum > maxSourcesNum;
+
+  let filteredHubs = data?.filter((hub: Hub) => {
+    if (normalizedQuery) {
+      const matchesName = hub.name?.toLowerCase().includes(normalizedQuery) ?? false;
+      const matchesDescription = hub.description?.toLowerCase().includes(normalizedQuery) ?? false;
+      if (!matchesName && !matchesDescription) return false;
+    }
+
+    if (selectedRoles.size > 0 && hub.role && !selectedRoles.has(hub.role)) {
+      return false;
+    }
+
+    const memberCount = hub.members_count ?? 0;
+    if (minMembersNum !== null && memberCount < minMembersNum) return false;
+    if (maxMembersNum !== null && memberCount > maxMembersNum) return false;
+
+    const sourceCount = hub.sources_count ?? 0;
+    if (minSourcesNum !== null && sourceCount < minSourcesNum) return false;
+    if (maxSourcesNum !== null && sourceCount > maxSourcesNum) return false;
+
+    return true;
+  });
+
+  if (filteredHubs && sortBy) {
+    filteredHubs = [...filteredHubs].sort((a, b) => {
+      const aMembers = a.members_count ?? 0;
+      const bMembers = b.members_count ?? 0;
+      const aSources = a.sources_count ?? 0;
+      const bSources = b.sources_count ?? 0;
+
+      switch (sortBy) {
+        case "most-members":
+          return bMembers - aMembers;
+        case "least-members":
+          return aMembers - bMembers;
+        case "most-sources":
+          return bSources - aSources;
+        case "least-sources":
+          return aSources - bSources;
+        default:
+          return 0;
+      }
+    });
+  }
 
   return (
     <div className="grid">
@@ -72,10 +170,128 @@ export function HubsList() {
           </div>
         </details>
       </div>
+      <div style={{ display: "flex", gap: "16px", marginBottom: "24px" }}>
+        <div className="search-bar" style={{ flex: 1, marginBottom: 0 }}>
+          <MagnifyingGlassIcon className="search-icon" />
+          <input
+            type="text"
+            placeholder="Search hubs by name or description..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="search-input"
+          />
+        </div>
+        <details className="filter-menu" ref={filterDetailsRef}>
+          <summary className="filter-trigger">
+            Filter
+          </summary>
+          <div className="filter-dropdown">
+            <div className="filters-container">
+              <div className="filter-group">
+                <label className="filter-label">Members</label>
+                <div className="range-inputs">
+                  <input
+                    type="number"
+                    placeholder="Min"
+                    value={minMembers}
+                    onChange={(e) => handleNumberInput(e.target.value, setMinMembers)}
+                    onKeyDown={handleKeyDown}
+                    onPaste={handlePaste}
+                    className={`filter-number-input ${membersError ? 'error' : ''}`}
+                    min="0"
+                    max="10000"
+                  />
+                  <span className="range-separator">-</span>
+                  <input
+                    type="number"
+                    placeholder="Max"
+                    value={maxMembers}
+                    onChange={(e) => handleNumberInput(e.target.value, setMaxMembers)}
+                    onKeyDown={handleKeyDown}
+                    onPaste={handlePaste}
+                    className={`filter-number-input ${membersError ? 'error' : ''}`}
+                    min="1"
+                    max="10000"
+                  />
+                </div>
+                {membersError && <div className="filter-error-message">Min cannot be greater than max</div>}
+              </div>
+              <div className="filter-group">
+                <label className="filter-label">Sources</label>
+                <div className="range-inputs">
+                  <input
+                    type="number"
+                    placeholder="Min"
+                    value={minSources}
+                    onChange={(e) => handleNumberInput(e.target.value, setMinSources)}
+                    onKeyDown={handleKeyDown}
+                    onPaste={handlePaste}
+                    className={`filter-number-input ${sourcesError ? 'error' : ''}`}
+                    min="0"
+                    max="10000"
+                  />
+                  <span className="range-separator">-</span>
+                  <input
+                    type="number"
+                    placeholder="Max"
+                    value={maxSources}
+                    onChange={(e) => handleNumberInput(e.target.value, setMaxSources)}
+                    onKeyDown={handleKeyDown}
+                    onPaste={handlePaste}
+                    className={`filter-number-input ${sourcesError ? 'error' : ''}`}
+                    min="0"
+                    max="10000"
+                  />
+                </div>
+                {sourcesError && <div className="filter-error-message">Min cannot be greater than max</div>}
+              </div>
+              <div className="filter-group">
+                <label className="filter-label">Sort by</label>
+                <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="filter-select">
+                  <option value="">Default</option>
+                  <option value="most-members">Most members</option>
+                  <option value="least-members">Least members</option>
+                  <option value="most-sources">Most sources</option>
+                  <option value="least-sources">Least sources</option>
+                </select>
+              </div>
+              <div className="filter-group">
+                <label className="filter-label">Role</label>
+                <div className="checkbox-group">
+                  <label className="checkbox-label">
+                    <input
+                      type="checkbox"
+                      checked={selectedRoles.has("owner")}
+                      onChange={() => toggleRole("owner")}
+                    />
+                    <span>Owner</span>
+                  </label>
+                  <label className="checkbox-label">
+                    <input
+                      type="checkbox"
+                      checked={selectedRoles.has("editor")}
+                      onChange={() => toggleRole("editor")}
+                    />
+                    <span>Editor</span>
+                  </label>
+                  <label className="checkbox-label">
+                    <input
+                      type="checkbox"
+                      checked={selectedRoles.has("viewer")}
+                      onChange={() => toggleRole("viewer")}
+                    />
+                    <span>Viewer</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+          </div>
+        </details>
+      </div>
       {isLoading && <p className="muted">Loading hubs...</p>}
       {error && <p className="muted">Failed to load hubs: {(error as Error).message}</p>}
       <div className="hubs-grid">
-        {data?.map((hub: Hub) => (
+        {filteredHubs?.map((hub: Hub) => (
           <Link key={hub.id} href={`/hubs/${hub.id}`} className="hub-card">
             <div className="hub-card-header">
               <h3 className="hub-card-title">{hub.name}</h3>
