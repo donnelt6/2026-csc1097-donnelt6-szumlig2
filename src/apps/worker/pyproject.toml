@@ -19,7 +19,9 @@ dependencies = [
     "markdown>=3.7",
     "python-dotenv>=1.0.1",
     "dateparser>=1.2.0",
-    "spacy>=3.7.4"
+    "spacy>=3.7.4",
+    "readability-lxml>=0.8.1",
+    "beautifulsoup4>=4.12.3",
 ]
 
 [tool.setuptools.packages.find]

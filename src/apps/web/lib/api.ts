@@ -68,6 +68,15 @@ export async function createSource(data: { hub_id: string; original_name: string
   return handle(res);
 }
 
+export async function createWebSource(data: { hub_id: string; url: string }): Promise<Source> {
+  const res = await authedFetch(`${API_BASE}/sources/web`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  return handle(res);
+}
+
 export async function createSourceUploadUrl(sourceId: string): Promise<{ upload_url: string }> {
   const res = await authedFetch(`${API_BASE}/sources/${sourceId}/upload-url`, {
     method: "POST",
@@ -91,6 +100,13 @@ export async function getSourceStatus(sourceId: string): Promise<{ id: string; s
 
 export async function enqueueSource(sourceId: string): Promise<{ status: string }> {
   const res = await authedFetch(`${API_BASE}/sources/${sourceId}/enqueue`, {
+    method: "POST",
+  });
+  return handle(res);
+}
+
+export async function refreshSource(sourceId: string): Promise<{ status: string }> {
+  const res = await authedFetch(`${API_BASE}/sources/${sourceId}/refresh`, {
     method: "POST",
   });
   return handle(res);

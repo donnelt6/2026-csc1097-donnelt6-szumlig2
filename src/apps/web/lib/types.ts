@@ -15,10 +15,12 @@ export interface Hub {
 export interface Source {
   id: string;
   hub_id: string;
+  type: "file" | "web";
   original_name: string;
   storage_path?: string | null;
   status: "queued" | "processing" | "failed" | "complete";
   failure_reason?: string;
+  ingestion_metadata?: Record<string, unknown> | null;
   created_at: string;
 }
 

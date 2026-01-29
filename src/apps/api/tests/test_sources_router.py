@@ -3,7 +3,7 @@
 from app.dependencies import get_rate_limiter
 from app.main import app
 from app.routers import sources as sources_router
-from app.schemas import Source, SourceStatus
+from app.schemas import Source, SourceStatus, SourceType
 from app.services import rate_limit as rate_limit_module
 from app.services import store as store_module
 
@@ -179,3 +179,69 @@ def test_fail_source_success(client, monkeypatch) -> None:
     data = resp.json()
     assert data["status"] == SourceStatus.failed.value
     assert data["failure_reason"] == "upload failed"
+
+
+def test_create_web_source_success(client, monkeypatch) -> None:
+    # Mocks web source creation; expect ingest_web_source task enqueued.
+    rl = rate_limit_module.RateLimitResult(allowed=True, remaining=1, reset_in_seconds=60)
+    monkeypatch.setitem(app.dependency_overrides, get_rate_limiter, lambda: FixedRateLimiter(rl))
+
+    source = Source(
+        id="src-web-1",
+        hub_id="11111111-1111-1111-1111-111111111111",
+        original_name="example.com/docs",
+        status=SourceStatus.queued,
+        storage_path="11111111-1111-1111-1111-111111111111/src-web-1/web.md",
+        type=SourceType.web,
+    )
+    monkeypatch.setattr(store_module.store, "create_web_source", lambda _client, payload: source)
+
+    sent = {}
+
+    def fake_send_task(name, args):
+        sent["name"] = name
+        sent["args"] = args
+
+    monkeypatch.setattr(sources_router.celery_app, "send_task", fake_send_task)
+
+    resp = client.post(
+        "/sources/web",
+        json={"hub_id": "11111111-1111-1111-1111-111111111111", "url": "https://example.com/docs"},
+    )
+    assert resp.status_code == 201
+    assert sent["name"] == "ingest_web_source"
+    assert sent["args"][0] == "src-web-1"
+
+
+def test_refresh_web_source_success(client, monkeypatch) -> None:
+    # Mocks refresh; expect ingest_web_source task enqueued.
+    rl = rate_limit_module.RateLimitResult(allowed=True, remaining=1, reset_in_seconds=60)
+    monkeypatch.setitem(app.dependency_overrides, get_rate_limiter, lambda: FixedRateLimiter(rl))
+
+    source_id = "22222222-2222-2222-2222-222222222222"
+    source = Source(
+        id=source_id,
+        hub_id="11111111-1111-1111-1111-111111111111",
+        original_name="example.com/docs",
+        status=SourceStatus.queued,
+        storage_path=f"11111111-1111-1111-1111-111111111111/{source_id}/web.md",
+        type=SourceType.web,
+    )
+    monkeypatch.setattr(
+        store_module.store,
+        "refresh_web_source",
+        lambda _client, source_id: (source, "https://example.com/docs"),
+    )
+
+    sent = {}
+
+    def fake_send_task(name, args):
+        sent["name"] = name
+        sent["args"] = args
+
+    monkeypatch.setattr(sources_router.celery_app, "send_task", fake_send_task)
+
+    resp = client.post(f"/sources/{source_id}/refresh")
+    assert resp.status_code == 200
+    assert sent["name"] == "ingest_web_source"
+    assert sent["args"][0] == source_id

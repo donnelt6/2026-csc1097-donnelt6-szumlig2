@@ -1,6 +1,6 @@
 # Caddie Worker (Celery)
 
-Celery worker that handles ingestion, parsing, chunking, and embedding, and writes chunks to Supabase/pgvector.
+Celery worker that handles ingestion, parsing, chunking, and embedding, and writes chunks to Supabase/pgvector. Web URLs are crawled into a pseudo-document snapshot before chunking.
 
 ## Run locally
 ```bash
@@ -11,7 +11,7 @@ celery -A worker.tasks worker --loglevel=info
 celery -A worker.tasks beat --loglevel=info
 ```
 
-Configure `REDIS_URL`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and `OPENAI_API_KEY` in `.env.example` for local development. The worker uses the service role key so it can write chunks through RLS.
+Configure `REDIS_URL`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and `OPENAI_API_KEY` in `.env.example` for local development. Web ingestion also respects `WEB_MAX_BYTES`, `WEB_USER_AGENT`, `WEB_TIMEOUT_SECONDS`, and `WEB_RESPECT_ROBOTS`. The worker uses the service role key so it can write chunks through RLS.
 Reminder delivery uses `DEFAULT_TIMEZONE`.
 For reminder detection, install a spaCy English model (e.g. `python -m spacy download en_core_web_sm`).
 
@@ -23,4 +23,4 @@ For reminder detection, install a spaCy English model (e.g. `python -m spacy dow
 - `worker/__init__.py` - Marks the worker package.
 - `worker/config.py` - Loads worker settings from env.
 - `worker/main.py` - Worker entrypoint placeholder.
-- `worker/tasks.py` - Ingestion tasks (download, extract, chunk, embed, insert).
+- `worker/tasks.py` - Ingestion tasks (download/crawl, extract, chunk, embed, insert), robots.txt enforcement, and reminder detection.

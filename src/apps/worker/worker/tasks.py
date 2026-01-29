@@ -2,10 +2,13 @@ import hashlib
 import io
 import logging
 import re
+import ipaddress
+import socket
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Iterable, List, Optional
-from urllib.parse import quote
+from urllib.parse import quote, urlparse, urljoin
+from urllib.robotparser import RobotFileParser
 from zoneinfo import ZoneInfo
 
 import httpx
@@ -45,7 +48,7 @@ def ingest_source(self, source_id: str, hub_id: str, storage_path: str) -> dict:
     """
     logger.info("Starting ingestion for source %s", source_id)
     client = _get_supabase_client()
-    _update_source(client, source_id, status="processing")
+    _update_source(client, source_id, status="processing", clear_failure_reason=True)
 
     try:
         raw = _download_from_storage(storage_path)
@@ -59,28 +62,56 @@ def ingest_source(self, source_id: str, hub_id: str, storage_path: str) -> dict:
         if not text:
             raise ValueError("No text extracted from source")
 
-        chunks = _chunk_text(text, settings.chunk_size, settings.chunk_overlap)
-        if not chunks:
-            raise ValueError("No chunks produced from extracted text")
-
-        embeddings = _embed_chunks(chunks)
-        _insert_chunks(client, source_id, hub_id, chunks, embeddings)
-
-        metadata = {
-            "chunk_count": len(chunks),
-            "embedding_model": settings.embedding_model,
-            "chunk_size": settings.chunk_size,
-            "chunk_overlap": settings.chunk_overlap,
-        }
-        _update_source(client, source_id, status="complete", ingestion_metadata=metadata)
-        try:
-            _detect_and_store_reminders(client, source_id, hub_id, text)
-        except Exception:
-            logger.exception("Reminder detection failed for source %s", source_id)
+        chunk_count = _ingest_text_for_source(client, source_id, hub_id, text, extra_metadata=None)
         logger.info("Completed ingestion for source %s", source_id)
-        return {"source_id": source_id, "hub_id": hub_id, "chunks": len(chunks)}
+        return {"source_id": source_id, "hub_id": hub_id, "chunks": chunk_count}
     except Exception as exc:
         logger.exception("Ingestion failed for source %s", source_id)
+        _update_source(client, source_id, status="failed", failure_reason=str(exc)[:500])
+        raise
+
+
+@celery_app.task(bind=True, name="ingest_web_source", max_retries=3, default_retry_delay=15)
+def ingest_web_source(self, source_id: str, hub_id: str, url: str, storage_path: str) -> dict:
+    """
+    Web ingestion flow:
+    - Validate URL (public only)
+    - Respect robots.txt if enabled
+    - Fetch + extract readable text
+    - Store pseudo document in Supabase Storage
+    - Chunk + embed + persist to pgvector
+    """
+    logger.info("Starting web ingestion for source %s (%s)", source_id, url)
+    client = _get_supabase_client()
+    _update_source(client, source_id, status="processing", clear_failure_reason=True)
+
+    try:
+        safe_url = _validate_public_url(url)
+        if settings.web_respect_robots and not _allowed_by_robots(safe_url, settings.web_user_agent):
+            raise ValueError("Blocked by robots.txt")
+        raw, content_type, final_url = _fetch_url_content(safe_url)
+        text, title = _extract_web_text(raw, content_type)
+        text = _normalize_text(text)
+        if not text:
+            raise ValueError("No text extracted from web page")
+        crawl_at = datetime.now(timezone.utc).isoformat()
+        pseudo_doc = _build_pseudo_doc(title, final_url or safe_url, crawl_at, content_type, text)
+        _upload_pseudo_doc(client, storage_path, pseudo_doc)
+        extra_metadata = {
+            "source_type": "web",
+            "url": safe_url,
+            "final_url": final_url,
+            "title": title,
+            "crawl_at": crawl_at,
+            "content_type": content_type,
+            "byte_size": len(raw),
+            "word_count": len(text.split()),
+        }
+        chunk_count = _ingest_text_for_source(client, source_id, hub_id, text, extra_metadata=extra_metadata)
+        logger.info("Completed web ingestion for source %s", source_id)
+        return {"source_id": source_id, "hub_id": hub_id, "chunks": chunk_count}
+    except Exception as exc:
+        logger.exception("Web ingestion failed for source %s", source_id)
         _update_source(client, source_id, status="failed", failure_reason=str(exc)[:500])
         raise
 
@@ -104,7 +135,154 @@ def _download_from_storage(storage_path: str) -> bytes:
     with httpx.Client(timeout=60) as client:
         resp = client.get(storage_url, headers=headers)
         resp.raise_for_status()
-        return resp.content
+    return resp.content
+
+
+def _validate_public_url(url: str) -> str:
+    parsed = urlparse(url)
+    if parsed.scheme not in {"http", "https"}:
+        raise ValueError("URL scheme must be http or https")
+    if not parsed.netloc:
+        raise ValueError("URL must include a host")
+    hostname = parsed.hostname or ""
+    if not hostname:
+        raise ValueError("URL must include a host")
+    _ensure_public_host(hostname)
+    return parsed.geturl()
+
+
+def _ensure_public_host(hostname: str) -> None:
+    ip_list: List[ipaddress.IPv4Address | ipaddress.IPv6Address] = []
+    try:
+        ip_list.append(ipaddress.ip_address(hostname))
+    except ValueError:
+        try:
+            infos = socket.getaddrinfo(hostname, None)
+        except OSError as exc:
+            raise ValueError("Unable to resolve host") from exc
+        for info in infos:
+            addr = info[4][0]
+            try:
+                ip_list.append(ipaddress.ip_address(addr))
+            except ValueError:
+                continue
+    for addr in ip_list:
+        if addr.is_private or addr.is_loopback or addr.is_link_local or addr.is_reserved or addr.is_multicast or addr.is_unspecified:
+            raise ValueError("URL resolves to a private or non-public address")
+
+
+def _allowed_by_robots(url: str, user_agent: str) -> bool:
+    parsed = urlparse(url)
+    robots_url = f"{parsed.scheme}://{parsed.netloc}/robots.txt"
+    try:
+        with httpx.Client(timeout=settings.web_timeout_seconds) as client:
+            resp = client.get(robots_url, headers={"User-Agent": user_agent}, follow_redirects=True)
+            if resp.status_code >= 400:
+                return True
+            parser = RobotFileParser()
+            parser.parse(resp.text.splitlines())
+            return parser.can_fetch(user_agent, url)
+    except Exception:
+        return True
+
+
+def _fetch_url_content(url: str) -> tuple[bytes, str, str]:
+    headers = {"User-Agent": settings.web_user_agent}
+    max_bytes = max(1, settings.web_max_bytes)
+    current_url = url
+    max_redirects = 5
+    with httpx.Client(timeout=settings.web_timeout_seconds, follow_redirects=False) as client:
+        for _ in range(max_redirects + 1):
+            with client.stream("GET", current_url, headers=headers) as resp:
+                if 300 <= resp.status_code < 400:
+                    location = resp.headers.get("location")
+                    if not location:
+                        raise ValueError("Redirect without location header")
+                    next_url = urljoin(current_url, location)
+                    parsed = urlparse(next_url)
+                    if not parsed.scheme or not parsed.netloc:
+                        raise ValueError("Invalid redirect URL")
+                    _ensure_public_host(parsed.hostname or "")
+                    current_url = next_url
+                    continue
+                resp.raise_for_status()
+                content_type = resp.headers.get("content-type", "")
+                total = 0
+                chunks: list[bytes] = []
+                for chunk in resp.iter_bytes():
+                    total += len(chunk)
+                    if total > max_bytes:
+                        raise ValueError("Web content exceeds size limit")
+                    chunks.append(chunk)
+                return b"".join(chunks), content_type, current_url
+    raise ValueError("Too many redirects")
+
+
+def _extract_web_text(raw: bytes, content_type: str) -> tuple[str, Optional[str]]:
+    encoding = "utf-8"
+    match = re.search(r"charset=([\\w-]+)", content_type, re.IGNORECASE)
+    if match:
+        encoding = match.group(1)
+    html = raw.decode(encoding, errors="ignore")
+    lowered = content_type.lower()
+    if "text/html" not in lowered and "application/xhtml" not in lowered and "<html" not in html.lower():
+        cleaned = " ".join(html.split())
+        return cleaned, None
+
+    title = None
+    text = ""
+    try:
+        from readability import Document
+
+        doc = Document(html)
+        title = doc.short_title() or doc.title()
+        content_html = doc.summary()
+        text = _html_to_text(content_html)
+    except Exception:
+        text = ""
+    if not text:
+        text = _html_to_text(html)
+    cleaned = " ".join(text.split())
+    return cleaned, title
+
+
+def _html_to_text(html: str) -> str:
+    try:
+        from bs4 import BeautifulSoup
+    except Exception:
+        return re.sub(r"<[^>]+>", " ", html)
+    soup = BeautifulSoup(html, "html.parser")
+    for tag in soup(["script", "style", "noscript"]):
+        tag.decompose()
+    return soup.get_text(separator=" ")
+
+
+def _build_pseudo_doc(title: Optional[str], url: str, crawl_at: str, content_type: str, text: str) -> str:
+    header_title = title or url
+    lines = [
+        f"# {header_title}",
+        f"Source: {url}",
+        f"Crawled: {crawl_at}",
+        f"Content-Type: {content_type or 'unknown'}",
+        "",
+        text,
+    ]
+    return "\n".join(lines)
+
+
+def _upload_pseudo_doc(client: Client, storage_path: str, content: str) -> None:
+    if not storage_path:
+        raise ValueError("Storage path missing for pseudo document")
+    payload = content.encode("utf-8")
+    try:
+        client.storage.from_(settings.storage_bucket).remove([storage_path])
+    except Exception:
+        pass
+    client.storage.from_(settings.storage_bucket).upload(
+        storage_path,
+        payload,
+        {"content-type": "text/markdown"},
+    )
 
 
 def _extract_text(raw: bytes, storage_path: str) -> str:
@@ -138,6 +316,39 @@ def _normalize_text(text: str) -> str:
     return " ".join(text.replace("\r", "\n").split())
 
 
+def _ingest_text_for_source(
+    client: Client,
+    source_id: str,
+    hub_id: str,
+    text: str,
+    extra_metadata: Optional[dict],
+) -> int:
+    chunks = _chunk_text(text, settings.chunk_size, settings.chunk_overlap)
+    if not chunks:
+        raise ValueError("No chunks produced from extracted text")
+    ingest_started_at = datetime.now(timezone.utc)
+    ingest_timestamp = ingest_started_at.isoformat()
+    embeddings = _embed_chunks(chunks)
+    _insert_chunks(client, source_id, hub_id, chunks, embeddings, ingest_timestamp)
+    _clear_existing_chunks_before(client, source_id, ingest_timestamp)
+    existing_metadata = _get_source_metadata(client, source_id)
+    metadata = {
+        "chunk_count": len(chunks),
+        "embedding_model": settings.embedding_model,
+        "chunk_size": settings.chunk_size,
+        "chunk_overlap": settings.chunk_overlap,
+    }
+    merged = {**existing_metadata, **metadata}
+    if extra_metadata:
+        merged.update(extra_metadata)
+    _update_source(client, source_id, status="complete", ingestion_metadata=merged)
+    try:
+        _detect_and_store_reminders(client, source_id, hub_id, text)
+    except Exception:
+        logger.exception("Reminder detection failed for source %s", source_id)
+    return len(chunks)
+
+
 def _chunk_text(text: str, chunk_size: int, overlap: int) -> List[str]:
     # Sliding window with overlap for better semantic continuity.
     words = text.split()
@@ -167,7 +378,14 @@ def _embed_chunks(chunks: List[str]) -> List[List[float]]:
     return embeddings
 
 
-def _insert_chunks(client: Client, source_id: str, hub_id: str, chunks: List[str], embeddings: List[List[float]]) -> None:
+def _insert_chunks(
+    client: Client,
+    source_id: str,
+    hub_id: str,
+    chunks: List[str],
+    embeddings: List[List[float]],
+    created_at: str,
+) -> None:
     rows = []
     for idx, (text, embedding) in enumerate(zip(chunks, embeddings, strict=False)):
         rows.append(
@@ -179,10 +397,30 @@ def _insert_chunks(client: Client, source_id: str, hub_id: str, chunks: List[str
                 "embedding": embedding,
                 "token_count": len(text.split()),
                 "metadata": {"word_count": len(text.split())},
+                "created_at": created_at,
             }
         )
     for batch in _batch(rows, 100):
         client.table("source_chunks").insert(batch).execute()
+
+
+def _clear_existing_chunks_before(client: Client, source_id: str, cutoff: str) -> None:
+    # Remove only chunks created before this ingest started to avoid deleting new inserts.
+    client.table("source_chunks").delete().eq("source_id", source_id).lt("created_at", cutoff).execute()
+
+
+def _get_source_metadata(client: Client, source_id: str) -> dict:
+    response = (
+        client.table("sources")
+        .select("ingestion_metadata")
+        .eq("id", source_id)
+        .limit(1)
+        .execute()
+    )
+    if not response.data:
+        return {}
+    metadata = response.data[0].get("ingestion_metadata") or {}
+    return metadata if isinstance(metadata, dict) else {}
 
 
 def _update_source(
@@ -191,10 +429,11 @@ def _update_source(
     status: str,
     failure_reason: Optional[str] = None,
     ingestion_metadata: Optional[dict] = None,
+    clear_failure_reason: bool = False,
 ) -> None:
     # Only include optional fields when present to avoid overwriting.
     payload: dict = {"status": status}
-    if failure_reason is not None:
+    if failure_reason is not None or clear_failure_reason:
         payload["failure_reason"] = failure_reason
     if ingestion_metadata is not None:
         payload["ingestion_metadata"] = ingestion_metadata

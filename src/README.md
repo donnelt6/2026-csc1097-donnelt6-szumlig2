@@ -3,15 +3,15 @@
 This `src/` folder contains the scaffold for Caddie: a Next.js frontend, FastAPI backend, Celery ingestion worker, and shared contracts.
 
 ## Structure
-- `apps/web/` - Next.js frontend with hubs list, hub detail, upload widget, and chat flow.
+- `apps/web/` - Next.js frontend with hubs list, hub detail, file/URL upload widget, and chat flow.
 - `apps/api/` - FastAPI service exposing hubs, sources, and chat endpoints backed by Supabase + OpenAI.
-- `apps/worker/` - Celery ingestion worker that downloads from Supabase Storage, extracts text, chunks, embeds, and writes to pgvector.
+- `apps/worker/` - Celery ingestion worker that downloads from Supabase Storage or crawls web URLs, extracts text, chunks, embeds, and writes to pgvector.
 - `packages/shared/` - Shared TypeScript and Pydantic models to keep contracts aligned.
 - `Makefile` - Convenience commands for running services locally.
 
 ## Quickstart
 1) Install Node deps: `cd src && npm install && cd apps/web && npm install`
-2) Set env vars from `.env.example` in each app (Supabase/OpenAI/Redis).
+2) Set env vars from `.env.example` in each app (Supabase/OpenAI/Redis). Worker also accepts web crawl settings (`WEB_MAX_BYTES`, `WEB_USER_AGENT`, `WEB_RESPECT_ROBOTS`).
 3) Run API: `cd apps/api && uvicorn app.main:app --reload --port 8000`
 4) Run worker: `cd apps/worker && celery -A worker.tasks worker --loglevel=info`
 5) Run beat (reminders): `cd apps/worker && celery -A worker.tasks beat --loglevel=info`
@@ -20,6 +20,16 @@ This `src/` folder contains the scaffold for Caddie: a Next.js frontend, FastAPI
 Supabase/OpenAI/Redis env placeholders live in each app's `.env.example`. The API and worker require these to run.
 Note: the API expects Supabase Auth JWTs for user-scoped access and uses the service role key only for storage/admin tasks.
 Reminder detection uses spaCy; install `en_core_web_sm` in the worker env for due-date suggestions.
+Web URL ingestion respects robots.txt by default; set `WEB_RESPECT_ROBOTS=false` in the worker env to override.
+
+## How URL ingestion works
+- The user submits a URL from the hub upload panel.
+- The API creates a `sources` row with `type="web"` and stores the URL in `ingestion_metadata`.
+- The worker validates the URL (public host only), checks `robots.txt`, and fetches the page.
+- HTML is cleaned with readability (fallback to basic HTML-to-text), then normalized.
+- The worker stores a pseudo-document snapshot in Supabase Storage (Markdown with title/URL/crawl time).
+- The extracted text is chunked, embedded, and stored in `source_chunks`.
+- Reprocess uses the stored snapshot; Refresh re-crawls the URL and updates the snapshot/metadata.
 
 ## Daily run commands (PowerShell)
 Use three terminals so each process keeps running.

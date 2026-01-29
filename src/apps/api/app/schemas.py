@@ -82,13 +82,20 @@ class SourceStatus(str, Enum):
     complete = "complete"
 
 
+class SourceType(str, Enum):
+    file = "file"
+    web = "web"
+
+
 class Source(BaseModel):
     id: str
     hub_id: str
+    type: SourceType = SourceType.file
     original_name: str
     storage_path: Optional[str] = None
     status: SourceStatus
     failure_reason: Optional[str] = None
+    ingestion_metadata: Optional[dict] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 
@@ -104,6 +111,19 @@ class SourceCreate(StrictModel):
         if "/" in value or "\\" in value:
             raise ValueError("File name must not include path separators.")
         return value
+
+
+class WebSourceCreate(StrictModel):
+    hub_id: UUID
+    url: str = Field(..., min_length=1, max_length=2000)
+
+    @field_validator("url")
+    @classmethod
+    def validate_url(cls, value: str) -> str:
+        lower = value.strip()
+        if not lower.startswith(("http://", "https://")):
+            raise ValueError("URL must start with http:// or https://")
+        return lower
 
 
 class SourceEnqueueResponse(BaseModel):

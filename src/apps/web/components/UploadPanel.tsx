@@ -2,7 +2,7 @@
 
 import { useMutation } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
-import { createSource, createSourceUploadUrl, deleteSource, enqueueSource, failSource } from "../lib/api";
+import { createSource, createSourceUploadUrl, createWebSource, deleteSource, enqueueSource, failSource, refreshSource } from "../lib/api";
 import type { Source } from "../lib/types";
 
 interface Props {
@@ -14,10 +14,14 @@ interface Props {
 
 export function UploadPanel({ hubId, sources, onRefresh, canUpload = true }: Props) {
   const [file, setFile] = useState<File | null>(null);
+  const [url, setUrl] = useState("");
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [retryingSourceId, setRetryingSourceId] = useState<string | null>(null);
   const [isRetrying, setIsRetrying] = useState(false);
   const [deletingSourceId, setDeletingSourceId] = useState<string | null>(null);
+  const [refreshingSourceId, setRefreshingSourceId] = useState<string | null>(null);
+  const [reprocessingSourceId, setReprocessingSourceId] = useState<string | null>(null);
+  const [isSubmittingUrl, setIsSubmittingUrl] = useState(false);
   const [retryFiles, setRetryFiles] = useState<Record<string, File>>({});
 
   const mutation = useMutation({
@@ -114,6 +118,50 @@ export function UploadPanel({ hubId, sources, onRefresh, canUpload = true }: Pro
     }
   };
 
+  const handleSubmitUrl = async () => {
+    if (!url.trim()) {
+      setStatusMessage("Enter a URL to ingest.");
+      return;
+    }
+    setIsSubmittingUrl(true);
+    try {
+      await createWebSource({ hub_id: hubId, url: url.trim() });
+      setStatusMessage("URL enqueued. Processing will start shortly.");
+      setUrl("");
+      onRefresh();
+    } catch (err) {
+      setStatusMessage((err as Error).message);
+    } finally {
+      setIsSubmittingUrl(false);
+    }
+  };
+
+  const handleRefreshSource = async (sourceId: string) => {
+    setRefreshingSourceId(sourceId);
+    try {
+      await refreshSource(sourceId);
+      setStatusMessage("Refresh queued. Latest content will be ingested.");
+      onRefresh();
+    } catch (err) {
+      setStatusMessage((err as Error).message);
+    } finally {
+      setRefreshingSourceId(null);
+    }
+  };
+
+  const handleReprocessSource = async (sourceId: string) => {
+    setReprocessingSourceId(sourceId);
+    try {
+      await enqueueSource(sourceId);
+      setStatusMessage("Reprocessing queued.");
+      onRefresh();
+    } catch (err) {
+      setStatusMessage((err as Error).message);
+    } finally {
+      setReprocessingSourceId(null);
+    }
+  };
+
   const sortedSources = useMemo(
     () => [...sources].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()),
     [sources]
@@ -123,7 +171,7 @@ export function UploadPanel({ hubId, sources, onRefresh, canUpload = true }: Pro
     <div className="card grid">
       <div>
         <h3 style={{ margin: 0 }}>Upload a source</h3>
-        <p className="muted">PDF, DOCX, TXT, or Markdown. Progress updates appear below.</p>
+        <p className="muted">PDF, DOCX, TXT, Markdown, or a web URL. Progress updates appear below.</p>
       </div>
       <label>
         <input
@@ -136,29 +184,59 @@ export function UploadPanel({ hubId, sources, onRefresh, canUpload = true }: Pro
       <button className="button" onClick={() => mutation.mutate()} disabled={!canUpload || mutation.isPending || !file}>
         {mutation.isPending ? "Uploading..." : "Upload"}
       </button>
+      <label>
+        <input
+          type="url"
+          placeholder="https://example.com/onboarding"
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+          disabled={!canUpload}
+        />
+      </label>
+      <button className="button" onClick={handleSubmitUrl} disabled={!canUpload || isSubmittingUrl || !url.trim()}>
+        {isSubmittingUrl ? "Adding..." : "Add URL"}
+      </button>
       {!canUpload && <p className="muted">You only have view access. Ask the hub owner to grant edit permissions.</p>}
       {statusMessage && <p className="muted">{statusMessage}</p>}
       <div className="grid" style={{ gap: "10px" }}>
-        {sortedSources.map((source) => (
-          <div key={source.id} className="card" style={{ borderColor: "#1e2535" }}>
+        {sortedSources.map((source) => {
+          const webSnapshotReady =
+            source.type === "web" &&
+            source.status === "complete" &&
+            Boolean((source.ingestion_metadata as { crawl_at?: string } | null)?.crawl_at);
+          return (
+            <div key={source.id} className="card" style={{ borderColor: "#1e2535" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <div>
                 <strong>{source.original_name}</strong>
-                <p className="muted">{formatIrelandDateTime(new Date(source.created_at))}</p>
+                <p className="muted">
+                  {source.type === "web" ? "Web URL" : "File"} - {formatIrelandDateTime(new Date(source.created_at))}
+                </p>
               </div>
               <StatusPill status={source.status} />
             </div>
             {source.failure_reason && <p className="muted">Error: {source.failure_reason}</p>}
             {source.status === "failed" && (
               <div style={{ display: "flex", gap: "8px", marginTop: "8px", flexWrap: "wrap" }}>
-                <button
-                  className="button"
-                  type="button"
-                  onClick={() => handleRetryUpload(source.id)}
-                  disabled={isRetrying || deletingSourceId === source.id || !retryFiles[source.id]}
-                >
-                  {isRetrying && retryingSourceId === source.id ? "Retrying..." : "Retry upload"}
-                </button>
+                {source.type === "web" ? (
+                  <button
+                    className="button"
+                    type="button"
+                    onClick={() => handleRefreshSource(source.id)}
+                    disabled={refreshingSourceId === source.id}
+                  >
+                    {refreshingSourceId === source.id ? "Refreshing..." : "Refresh"}
+                  </button>
+                ) : (
+                  <button
+                    className="button"
+                    type="button"
+                    onClick={() => handleRetryUpload(source.id)}
+                    disabled={isRetrying || deletingSourceId === source.id || !retryFiles[source.id]}
+                  >
+                    {isRetrying && retryingSourceId === source.id ? "Retrying..." : "Retry upload"}
+                  </button>
+                )}
                 <button
                   className="button"
                   type="button"
@@ -169,11 +247,39 @@ export function UploadPanel({ hubId, sources, onRefresh, canUpload = true }: Pro
                 </button>
               </div>
             )}
-            {source.status === "failed" && !retryFiles[source.id] && (
+            {source.type === "web" && source.status !== "failed" && (
+              <div style={{ display: "flex", gap: "8px", marginTop: "8px", flexWrap: "wrap" }}>
+                <button
+                  className="button"
+                  type="button"
+                  onClick={() => handleReprocessSource(source.id)}
+                  disabled={
+                    reprocessingSourceId === source.id ||
+                    refreshingSourceId === source.id ||
+                    !webSnapshotReady
+                  }
+                >
+                  {reprocessingSourceId === source.id ? "Reprocessing..." : "Reprocess"}
+                </button>
+                <button
+                  className="button"
+                  type="button"
+                  onClick={() => handleRefreshSource(source.id)}
+                  disabled={refreshingSourceId === source.id || reprocessingSourceId === source.id}
+                >
+                  {refreshingSourceId === source.id ? "Refreshing..." : "Refresh"}
+                </button>
+              </div>
+            )}
+            {source.type === "web" && source.status !== "failed" && !webSnapshotReady && (
+              <p className="muted">Reprocess is available after the first successful crawl.</p>
+            )}
+            {source.status === "failed" && source.type !== "web" && !retryFiles[source.id] && (
               <p className="muted">Retry is available until you refresh this page.</p>
             )}
-          </div>
-        ))}
+            </div>
+          );
+        })}
         {!sortedSources.length && <p className="muted">No sources yet. Upload your first document.</p>}
       </div>
     </div>

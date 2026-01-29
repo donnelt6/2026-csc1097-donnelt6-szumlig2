@@ -19,6 +19,10 @@ class Settings:
     default_timezone: str = os.getenv("DEFAULT_TIMEZONE", "Europe/Dublin")
     reminder_lead_hours: int = int(os.getenv("REMINDER_LEAD_HOURS", "24"))
     reminder_dispatch_window_minutes: int = int(os.getenv("REMINDER_DISPATCH_WINDOW_MINUTES", "15"))
+    web_user_agent: str = os.getenv("WEB_USER_AGENT", "CaddieBot/1.0")
+    web_max_bytes: int = int(os.getenv("WEB_MAX_BYTES", "2000000"))
+    web_timeout_seconds: int = int(os.getenv("WEB_TIMEOUT_SECONDS", "20"))
+    web_respect_robots: bool = os.getenv("WEB_RESPECT_ROBOTS", "true").lower() in {"1", "true", "yes"}
 
 
 def get_settings() -> Settings:
