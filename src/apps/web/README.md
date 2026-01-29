@@ -1,6 +1,6 @@
 # Caddie Web (Next.js)
 
-Next.js 14 frontend with hubs list, hub detail page, upload widget (retry/delete on failed uploads), reminder suggestions/management, and chat flow (hub-only or hub + web search).
+Next.js 14 frontend with hubs list, hub detail page, upload widget (file + URL ingestion with retry/refresh/delete), reminder suggestions/management, and chat flow (hub-only or hub + web search).
 
 ## Run locally
 ```bash
@@ -31,7 +31,7 @@ Environment variables: see `.env.example`. Set `NEXT_PUBLIC_API_BASE_URL` to you
 - `components/Providers.tsx` - React Query + auth provider setup.
 - `components/ReminderCandidatesPanel.tsx` - Suggested reminders from detected due dates.
 - `components/RemindersPanel.tsx` - Reminder list and management actions.
-- `components/UploadPanel.tsx` - Upload widget with status list and retry/delete for failures.
+- `components/UploadPanel.tsx` - Upload widget with file + URL submission, status list, refresh/reprocess for web sources, and retry/delete for failures.
 - `components/auth/AuthProvider.tsx` - Supabase session provider.
 - `components/auth/AuthGate.tsx` - Route guard for authenticated pages.
 - `components/auth/UserMenu.tsx` - Current user menu and sign out.

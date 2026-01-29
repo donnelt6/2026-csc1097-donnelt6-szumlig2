@@ -32,7 +32,7 @@ Environment variables live in `.env.example`. Provide `SUPABASE_URL`, `SUPABASE_
 - `app/routers/__init__.py` - Router module export.
 - `app/routers/chat.py` - Chat endpoint (hub-only or hub + web search).
 - `app/routers/hubs.py` - Hubs CRUD endpoints.
-- `app/routers/sources.py` - Source upload/status endpoints (signed upload URL, fail, enqueue).
+- `app/routers/sources.py` - Source upload/status endpoints (signed upload URL, fail, enqueue), plus web URL ingestion and refresh.
 - `app/routers/reminders.py` - Reminder CRUD, candidate review, and notifications endpoints.
 - `app/routers/memberships.py` - Invites and member management endpoints.
 - `app/routers/users.py` - Current user endpoint.
