@@ -326,9 +326,11 @@ def _ingest_text_for_source(
     chunks = _chunk_text(text, settings.chunk_size, settings.chunk_overlap)
     if not chunks:
         raise ValueError("No chunks produced from extracted text")
+    ingest_started_at = datetime.now(timezone.utc)
+    ingest_timestamp = ingest_started_at.isoformat()
     embeddings = _embed_chunks(chunks)
-    _clear_existing_chunks(client, source_id)
-    _insert_chunks(client, source_id, hub_id, chunks, embeddings)
+    _insert_chunks(client, source_id, hub_id, chunks, embeddings, ingest_timestamp)
+    _clear_existing_chunks_before(client, source_id, ingest_timestamp)
     existing_metadata = _get_source_metadata(client, source_id)
     metadata = {
         "chunk_count": len(chunks),
@@ -376,7 +378,14 @@ def _embed_chunks(chunks: List[str]) -> List[List[float]]:
     return embeddings
 
 
-def _insert_chunks(client: Client, source_id: str, hub_id: str, chunks: List[str], embeddings: List[List[float]]) -> None:
+def _insert_chunks(
+    client: Client,
+    source_id: str,
+    hub_id: str,
+    chunks: List[str],
+    embeddings: List[List[float]],
+    created_at: str,
+) -> None:
     rows = []
     for idx, (text, embedding) in enumerate(zip(chunks, embeddings, strict=False)):
         rows.append(
@@ -388,14 +397,16 @@ def _insert_chunks(client: Client, source_id: str, hub_id: str, chunks: List[str
                 "embedding": embedding,
                 "token_count": len(text.split()),
                 "metadata": {"word_count": len(text.split())},
+                "created_at": created_at,
             }
         )
     for batch in _batch(rows, 100):
         client.table("source_chunks").insert(batch).execute()
 
 
-def _clear_existing_chunks(client: Client, source_id: str) -> None:
-    client.table("source_chunks").delete().eq("source_id", source_id).execute()
+def _clear_existing_chunks_before(client: Client, source_id: str, cutoff: str) -> None:
+    # Remove only chunks created before this ingest started to avoid deleting new inserts.
+    client.table("source_chunks").delete().eq("source_id", source_id).lt("created_at", cutoff).execute()
 
 
 def _get_source_metadata(client: Client, source_id: str) -> dict:
