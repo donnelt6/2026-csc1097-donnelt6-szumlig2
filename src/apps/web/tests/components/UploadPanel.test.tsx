@@ -4,16 +4,18 @@ import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { UploadPanel } from "../../components/UploadPanel";
-import { createSource, createSourceUploadUrl, enqueueSource, failSource } from "../../lib/api";
+import { createSource, createSourceUploadUrl, createWebSource, enqueueSource, failSource } from "../../lib/api";
 import type { Source } from "../../lib/types";
 import { renderWithQueryClient } from "../test-utils";
 
 vi.mock("../../lib/api", () => ({
   createSource: vi.fn(),
   createSourceUploadUrl: vi.fn(),
+  createWebSource: vi.fn(),
   deleteSource: vi.fn(),
   enqueueSource: vi.fn(),
   failSource: vi.fn(),
+  refreshSource: vi.fn(),
 }));
 
 describe("UploadPanel", () => {
@@ -29,6 +31,7 @@ describe("UploadPanel", () => {
       source: {
         id: "src-1",
         hub_id: "hub-1",
+        type: "file",
         original_name: "test.txt",
         status: "queued",
         created_at: "2025-01-01T00:00:00Z",
@@ -78,6 +81,7 @@ describe("UploadPanel", () => {
       source: {
         id: "src-2",
         hub_id: "hub-1",
+        type: "file",
         original_name: "bad.md",
         status: "queued",
         created_at: "2025-01-01T00:00:00Z",
@@ -119,6 +123,7 @@ describe("UploadPanel", () => {
       source: {
         id: "src-3",
         hub_id: "hub-1",
+        type: "file",
         original_name: "retry.txt",
         status: "queued",
         created_at: "2025-01-01T00:00:00Z",
@@ -143,6 +148,7 @@ describe("UploadPanel", () => {
     const failedSource: Source = {
       id: "src-3",
       hub_id: "hub-1",
+      type: "file",
       original_name: "retry.txt",
       status: "failed",
       created_at: "2025-01-01T00:00:00Z",
@@ -184,5 +190,47 @@ describe("UploadPanel", () => {
     expect(input.disabled).toBe(true);
     expect(screen.getByRole("button", { name: "Upload" })).toBeDisabled();
     expect(screen.getByText(/view access/i)).toBeInTheDocument();
+  });
+
+  it("submits a URL for ingestion", async () => {
+    const onRefresh = vi.fn();
+    vi.mocked(createWebSource).mockResolvedValue({
+      id: "src-web-1",
+      hub_id: "hub-1",
+      type: "web",
+      original_name: "example.com",
+      status: "queued",
+      created_at: "2025-01-01T00:00:00Z",
+    });
+
+    renderWithQueryClient(<UploadPanel hubId="hub-1" sources={[]} onRefresh={onRefresh} />);
+
+    const user = userEvent.setup();
+    await user.type(screen.getByPlaceholderText("https://example.com/onboarding"), "https://example.com");
+    await user.click(screen.getByRole("button", { name: "Add URL" }));
+
+    await waitFor(() =>
+      expect(createWebSource).toHaveBeenCalledWith({ hub_id: "hub-1", url: "https://example.com" })
+    );
+    expect(onRefresh).toHaveBeenCalled();
+    expect(await screen.findByText(/URL enqueued/i)).toBeInTheDocument();
+  });
+
+  it("disables reprocess until a web crawl succeeds", () => {
+    const webSource: Source = {
+      id: "src-web-2",
+      hub_id: "hub-1",
+      type: "web",
+      original_name: "example.com",
+      status: "complete",
+      created_at: "2025-01-01T00:00:00Z",
+      ingestion_metadata: {},
+    };
+
+    renderWithQueryClient(<UploadPanel hubId="hub-1" sources={[webSource]} onRefresh={() => undefined} />);
+
+    const reprocess = screen.getByRole("button", { name: "Reprocess" });
+    expect(reprocess).toBeDisabled();
+    expect(screen.getByText(/first successful crawl/i)).toBeInTheDocument();
   });
 });
