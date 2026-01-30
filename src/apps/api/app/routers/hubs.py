@@ -58,3 +58,21 @@ def track_hub_access(
         store.update_hub_access(client, hub_id, current_user.id)
     except APIError as exc:
         raise_postgrest_error(exc)
+
+
+@router.patch(
+    "/{hub_id}/favourite",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(rate_limit_user_ip("hubs:write", "rate_limit_write_per_minute"))],
+)
+def toggle_hub_favourite(
+    hub_id: str,
+    payload: dict,
+    current_user: CurrentUser = Depends(get_current_user),
+    client: Client = Depends(get_supabase_user_client),
+) -> None:
+    try:
+        is_favourite = payload.get("is_favourite", False)
+        store.toggle_hub_favourite(client, hub_id, current_user.id, is_favourite)
+    except APIError as exc:
+        raise_postgrest_error(exc)

@@ -3,8 +3,9 @@
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, useRef, useEffect } from "react";
-import { UserIcon, UsersIcon, UserGroupIcon, DocumentIcon, MagnifyingGlassIcon } from "@heroicons/react/24/outline";
-import { createHub, listHubs } from "../lib/api";
+import { UserIcon, UsersIcon, UserGroupIcon, DocumentIcon, MagnifyingGlassIcon, StarIcon as StarOutline } from "@heroicons/react/24/outline";
+import { StarIcon as StarSolid } from "@heroicons/react/24/solid";
+import { createHub, listHubs, toggleHubFavourite } from "../lib/api";
 import type { Hub } from "../lib/types";
 
 function formatRelativeTime(dateString: string | null | undefined): string {
@@ -47,9 +48,11 @@ export function HubsList() {
   const [maxMembers, setMaxMembers] = useState("");
   const [minSources, setMinSources] = useState("");
   const [maxSources, setMaxSources] = useState("");
+  const [showOnlyFavourites, setShowOnlyFavourites] = useState(false);
   const detailsRef = useRef<HTMLDetailsElement>(null);
   const filterDetailsRef = useRef<HTMLDetailsElement>(null);
   const sortDetailsRef = useRef<HTMLDetailsElement>(null);
+  const favouriteTimeouts = useRef<Map<string, NodeJS.Timeout>>(new Map());
 
   const onSubmit = (evt: React.FormEvent) => {
     evt.preventDefault();
@@ -70,6 +73,37 @@ export function HubsList() {
       newRoles.add(role);
     }
     setSelectedRoles(newRoles);
+  };
+
+  const toggleFavourite = (hubId: string, currentState: boolean, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const newState = !currentState;
+
+    queryClient.setQueryData(["hubs"], (oldHubs: typeof data) => {
+      if (!oldHubs) return oldHubs;
+      return oldHubs.map((h) =>
+        h.id === hubId ? { ...h, is_favourite: newState } : h
+      );
+    });
+
+    if (favouriteTimeouts.current.has(hubId)) {
+      clearTimeout(favouriteTimeouts.current.get(hubId)!);
+    }
+
+    const timeoutId = setTimeout(async () => {
+      try {
+        await toggleHubFavourite(hubId, newState);
+      } catch (error) {
+        console.error("Failed to toggle favourite:", error);
+        queryClient.invalidateQueries({ queryKey: ["hubs"] });
+      } finally {
+        favouriteTimeouts.current.delete(hubId);
+      }
+    }, 200);
+
+    favouriteTimeouts.current.set(hubId, timeoutId);
   };
 
   const handleNumberInput = (value: string, setter: (val: string) => void) => {
@@ -140,6 +174,10 @@ export function HubsList() {
     const sourceCount = hub.sources_count ?? 0;
     if (minSourcesNum !== null && sourceCount < minSourcesNum) return false;
     if (maxSourcesNum !== null && sourceCount > maxSourcesNum) return false;
+
+    if (showOnlyFavourites && !hub.is_favourite) {
+      return false;
+    }
 
     return true;
   });
@@ -338,6 +376,16 @@ export function HubsList() {
                 {sourcesError && <div className="filter-error-message">Min cannot be greater than max</div>}
               </div>
               <div className="filter-group">
+                <label className="checkbox-label">
+                  <input
+                    type="checkbox"
+                    checked={showOnlyFavourites}
+                    onChange={(e) => setShowOnlyFavourites(e.target.checked)}
+                  />
+                  <span>Favourites only</span>
+                </label>
+              </div>
+              <div className="filter-group">
                 <label className="filter-label">Role</label>
                 <div className="checkbox-group">
                   <label className="checkbox-label">
@@ -376,8 +424,23 @@ export function HubsList() {
         {filteredHubs?.map((hub: Hub) => (
           <Link key={hub.id} href={`/hubs/${hub.id}`} className="hub-card">
             <div className="hub-card-header">
-              <h3 className="hub-card-title">{hub.name}</h3>
-              <p className="hub-card-description">{hub.description || "No description yet"}</p>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "12px" }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <h3 className="hub-card-title">{hub.name}</h3>
+                  <p className="hub-card-description">{hub.description || "No description yet"}</p>
+                </div>
+                <button
+                  onClick={(e) => toggleFavourite(hub.id, hub.is_favourite ?? false, e)}
+                  className="hub-favourite-button"
+                  aria-label={hub.is_favourite ? "Remove from favourites" : "Add to favourites"}
+                >
+                  {hub.is_favourite ? (
+                    <StarSolid className="hub-favourite-icon filled" />
+                  ) : (
+                    <StarOutline className="hub-favourite-icon" />
+                  )}
+                </button>
+              </div>
             </div>
             <div className="hub-card-footer">
               {hub.role && <span className="hub-card-role">{hub.role}</span>}

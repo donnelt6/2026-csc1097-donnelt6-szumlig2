@@ -63,6 +63,17 @@ export async function trackHubAccess(hubId: string): Promise<void> {
   }
 }
 
+export async function toggleHubFavourite(hubId: string, isFavourite: boolean): Promise<void> {
+  const res = await authedFetch(`${API_BASE}/hubs/${hubId}/favourite`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ is_favourite: isFavourite }),
+  });
+  if (!res.ok) {
+    await handle(res);
+  }
+}
+
 export async function listSources(hubId: string): Promise<Source[]> {
   const res = await authedFetch(`${API_BASE}/sources/${hubId}`, { cache: "no-store" });
   return handle<Source[]>(res);

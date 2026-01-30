@@ -1,7 +1,7 @@
 'use client';
 
 import Link from "next/link";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { ChatPanel } from "../../../components/ChatPanel";
 import { MembersPanel } from "../../../components/MembersPanel";
@@ -11,6 +11,7 @@ import { UploadPanel } from "../../../components/UploadPanel";
 import { listHubs, listSources, trackHubAccess } from "../../../lib/api";
 
 export default function HubDetail({ params }: { params: { hubId: string } }) {
+  const queryClient = useQueryClient();
   const { data: hubs, isLoading: hubsLoading } = useQuery({ queryKey: ["hubs"], queryFn: listHubs });
   const {
     data: sources,
@@ -28,11 +29,31 @@ export default function HubDetail({ params }: { params: { hubId: string } }) {
 
   useEffect(() => {
     if (hub) {
-      trackHubAccess(params.hubId).catch((error) => {
-        console.error("Failed to track hub access:", error);
-      });
+      const timestamp = new Date().toISOString();
+
+      const updateCache = () => {
+        queryClient.setQueryData(["hubs"], (oldHubs: typeof hubs) => {
+          if (!oldHubs) return oldHubs;
+          return oldHubs.map((h) =>
+            h.id === params.hubId
+              ? { ...h, last_accessed_at: timestamp }
+              : h
+          );
+        });
+      };
+
+      updateCache();
+
+      trackHubAccess(params.hubId)
+        .then(() => {
+          updateCache();
+        })
+        .catch((error) => {
+          console.error("Failed to track hub access:", error);
+          queryClient.invalidateQueries({ queryKey: ["hubs"] });
+        });
     }
-  }, [hub, params.hubId]);
+  }, [hub, params.hubId, queryClient]);
 
   return (
     <main className="page grid" style={{ gap: "20px" }}>

@@ -11,6 +11,7 @@ export interface Hub {
   members_count?: number | null;
   sources_count?: number | null;
   last_accessed_at?: string | null;
+  is_favourite?: boolean | null;
 }
 
 export interface Source {

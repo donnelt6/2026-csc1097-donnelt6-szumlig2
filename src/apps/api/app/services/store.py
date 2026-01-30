@@ -60,7 +60,7 @@ class SupabaseStore:
     def list_hubs(self, client: Client, user_id: str) -> List[Hub]:
         response = (
             client.table("hub_members")
-            .select("role, last_accessed_at, hubs (id, owner_id, name, description, created_at, members_count, sources_count)")
+            .select("role, last_accessed_at, is_favourite, hubs (id, owner_id, name, description, created_at, members_count, sources_count)")
             .eq("user_id", user_id)
             .not_.is_("accepted_at", "null")
             .order("last_accessed_at", desc=True)
@@ -71,6 +71,7 @@ class SupabaseStore:
             hub_row = row.get("hubs") or {}
             hub_row["role"] = row.get("role")
             hub_row["last_accessed_at"] = row.get("last_accessed_at")
+            hub_row["is_favourite"] = row.get("is_favourite")
             hubs.append(Hub(**hub_row))
         return hubs
 
@@ -89,6 +90,7 @@ class SupabaseStore:
                 "role": MembershipRole.owner.value,
                 "accepted_at": now,
                 "last_accessed_at": now,
+                "is_favourite": True,
             }
         ).execute()
         row["role"] = MembershipRole.owner.value
@@ -339,6 +341,11 @@ class SupabaseStore:
     def update_hub_access(self, client: Client, hub_id: str, user_id: str) -> None:
         client.table("hub_members").update(
             {"last_accessed_at": datetime.utcnow().isoformat()}
+        ).eq("hub_id", str(hub_id)).eq("user_id", str(user_id)).execute()
+
+    def toggle_hub_favourite(self, client: Client, hub_id: str, user_id: str, is_favourite: bool) -> None:
+        client.table("hub_members").update(
+            {"is_favourite": is_favourite}
         ).eq("hub_id", str(hub_id)).eq("user_id", str(user_id)).execute()
 
     def chat(self, client: Client, user_id: str, payload: ChatRequest) -> ChatResponse:
