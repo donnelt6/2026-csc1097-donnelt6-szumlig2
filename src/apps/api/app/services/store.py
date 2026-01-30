@@ -94,6 +94,8 @@ class SupabaseStore:
             }
         ).execute()
         row["role"] = MembershipRole.owner.value
+        row["last_accessed_at"] = now
+        row["is_favourite"] = True
         return Hub(**row)
 
     def create_source(self, client: Client, payload: SourceCreate) -> Tuple[Source, str]:
@@ -339,14 +341,26 @@ class SupabaseStore:
             raise KeyError("Member not found")
 
     def update_hub_access(self, client: Client, hub_id: str, user_id: str) -> None:
-        client.table("hub_members").update(
-            {"last_accessed_at": datetime.utcnow().isoformat()}
-        ).eq("hub_id", str(hub_id)).eq("user_id", str(user_id)).execute()
+        response = (
+            client.table("hub_members")
+            .update({"last_accessed_at": datetime.utcnow().isoformat()})
+            .eq("hub_id", str(hub_id))
+            .eq("user_id", str(user_id))
+            .execute()
+        )
+        if not response.data:
+            raise KeyError("Hub membership not found")
 
     def toggle_hub_favourite(self, client: Client, hub_id: str, user_id: str, is_favourite: bool) -> None:
-        client.table("hub_members").update(
-            {"is_favourite": is_favourite}
-        ).eq("hub_id", str(hub_id)).eq("user_id", str(user_id)).execute()
+        response = (
+            client.table("hub_members")
+            .update({"is_favourite": is_favourite})
+            .eq("hub_id", str(hub_id))
+            .eq("user_id", str(user_id))
+            .execute()
+        )
+        if not response.data:
+            raise KeyError("Hub membership not found")
 
     def chat(self, client: Client, user_id: str, payload: ChatRequest) -> ChatResponse:
         hub_id = str(payload.hub_id)

@@ -3,7 +3,7 @@ from postgrest.exceptions import APIError
 from supabase import Client
 
 from ..dependencies import CurrentUser, get_current_user, get_supabase_user_client, rate_limit_user_ip
-from ..schemas import Hub, HubCreate
+from ..schemas import Hub, HubCreate, HubFavouriteToggle
 from ..services.store import store
 from .errors import raise_postgrest_error
 
@@ -56,6 +56,8 @@ def track_hub_access(
 ) -> None:
     try:
         store.update_hub_access(client, hub_id, current_user.id)
+    except KeyError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except APIError as exc:
         raise_postgrest_error(exc)
 
@@ -67,12 +69,13 @@ def track_hub_access(
 )
 def toggle_hub_favourite(
     hub_id: str,
-    payload: dict,
+    payload: HubFavouriteToggle,
     current_user: CurrentUser = Depends(get_current_user),
     client: Client = Depends(get_supabase_user_client),
 ) -> None:
     try:
-        is_favourite = payload.get("is_favourite", False)
-        store.toggle_hub_favourite(client, hub_id, current_user.id, is_favourite)
+        store.toggle_hub_favourite(client, hub_id, current_user.id, payload.is_favourite)
+    except KeyError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except APIError as exc:
         raise_postgrest_error(exc)

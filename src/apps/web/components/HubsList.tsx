@@ -147,6 +147,13 @@ export function HubsList() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  useEffect(() => {
+    return () => {
+      favouriteTimeouts.current.forEach(timeout => clearTimeout(timeout));
+      favouriteTimeouts.current.clear();
+    };
+  }, []);
+
   const normalizedQuery = searchQuery.trim().toLowerCase();
   const minMembersNum = minMembers ? parseInt(minMembers, 10) : null;
   const maxMembersNum = maxMembers ? parseInt(maxMembers, 10) : null;

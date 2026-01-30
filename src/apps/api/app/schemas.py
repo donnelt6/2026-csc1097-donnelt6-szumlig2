@@ -71,6 +71,10 @@ class HubMemberUpdate(StrictModel):
     role: MembershipRole
 
 
+class HubFavouriteToggle(StrictModel):
+    is_favourite: bool
+
+
 class PendingInvite(BaseModel):
     hub: Hub
     role: MembershipRole

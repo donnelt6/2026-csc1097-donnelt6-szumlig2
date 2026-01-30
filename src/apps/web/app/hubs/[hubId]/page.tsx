@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { ChatPanel } from "../../../components/ChatPanel";
 import { MembersPanel } from "../../../components/MembersPanel";
 import { ReminderCandidatesPanel } from "../../../components/ReminderCandidatesPanel";
@@ -12,6 +12,7 @@ import { listHubs, listSources, trackHubAccess } from "../../../lib/api";
 
 export default function HubDetail({ params }: { params: { hubId: string } }) {
   const queryClient = useQueryClient();
+  const hasTrackedAccess = useRef(false);
   const { data: hubs, isLoading: hubsLoading } = useQuery({ queryKey: ["hubs"], queryFn: listHubs });
   const {
     data: sources,
@@ -28,7 +29,12 @@ export default function HubDetail({ params }: { params: { hubId: string } }) {
   const roleResolved = !hubsLoading;
 
   useEffect(() => {
-    if (hub) {
+    hasTrackedAccess.current = false;
+  }, [params.hubId]);
+
+  useEffect(() => {
+    if (hub && !hasTrackedAccess.current) {
+      hasTrackedAccess.current = true;
       const timestamp = new Date().toISOString();
 
       const updateCache = () => {
@@ -53,7 +59,7 @@ export default function HubDetail({ params }: { params: { hubId: string } }) {
           queryClient.invalidateQueries({ queryKey: ["hubs"] });
         });
     }
-  }, [hub, params.hubId, queryClient]);
+  }, [hub, params.hubId, queryClient, hubs]);
 
   return (
     <main className="page grid" style={{ gap: "20px" }}>
