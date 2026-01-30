@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, useRef, useEffect } from "react";
-import { UserIcon, UsersIcon, UserGroupIcon, DocumentIcon, MagnifyingGlassIcon, StarIcon as StarOutline } from "@heroicons/react/24/outline";
+import { UserIcon, UsersIcon, UserGroupIcon, DocumentIcon, MagnifyingGlassIcon, StarIcon as StarOutline, FunnelIcon, Bars3BottomLeftIcon, RectangleStackIcon } from "@heroicons/react/24/outline";
 import { StarIcon as StarSolid } from "@heroicons/react/24/solid";
 import { createHub, listHubs, toggleHubFavourite } from "../lib/api";
 import type { Hub } from "../lib/types";
@@ -251,6 +251,7 @@ export function HubsList() {
         </div>
         <details className="filter-menu" ref={sortDetailsRef}>
           <summary className="filter-trigger">
+            <Bars3BottomLeftIcon style={{ width: "16px", height: "16px" }} />
             Sort
           </summary>
           <div className="filter-dropdown">
@@ -313,6 +314,7 @@ export function HubsList() {
         </details>
         <details className="filter-menu" ref={filterDetailsRef}>
           <summary className="filter-trigger">
+            <FunnelIcon style={{ width: "16px", height: "16px" }} />
             Filter
           </summary>
           <div className="filter-dropdown">
@@ -424,11 +426,8 @@ export function HubsList() {
         {filteredHubs?.map((hub: Hub) => (
           <Link key={hub.id} href={`/hubs/${hub.id}`} className="hub-card">
             <div className="hub-card-header">
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "12px" }}>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <h3 className="hub-card-title">{hub.name}</h3>
-                  <p className="hub-card-description">{hub.description || "No description yet"}</p>
-                </div>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "12px" }}>
+                <RectangleStackIcon className="hub-type-icon" />
                 <button
                   onClick={(e) => toggleFavourite(hub.id, hub.is_favourite ?? false, e)}
                   className="hub-favourite-button"
@@ -440,6 +439,10 @@ export function HubsList() {
                     <StarOutline className="hub-favourite-icon" />
                   )}
                 </button>
+              </div>
+              <div>
+                <h3 className="hub-card-title">{hub.name}</h3>
+                <p className="hub-card-description">{hub.description || "No description yet"}</p>
               </div>
             </div>
             <div className="hub-card-footer">

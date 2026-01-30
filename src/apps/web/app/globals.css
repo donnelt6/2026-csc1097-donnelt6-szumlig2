@@ -1250,6 +1250,14 @@ textarea {
   flex-shrink: 0;
 }
 
+.hub-type-icon {
+  width: 36px;
+  height: 36px;
+  color: var(--accent);
+  opacity: 0.8;
+  flex-shrink: 0;
+}
+
 @media (max-width: 720px) {
   .nav-content {
     padding: 16px;
