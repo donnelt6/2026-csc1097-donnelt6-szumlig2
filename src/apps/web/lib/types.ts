@@ -10,6 +10,7 @@ export interface Hub {
   role?: MembershipRole | null;
   members_count?: number | null;
   sources_count?: number | null;
+  last_accessed_at?: string | null;
 }
 
 export interface Source {

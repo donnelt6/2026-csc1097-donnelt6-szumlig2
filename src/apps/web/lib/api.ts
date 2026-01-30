@@ -54,6 +54,15 @@ export async function createHub(data: { name: string; description?: string }): P
   return handle<Hub>(res);
 }
 
+export async function trackHubAccess(hubId: string): Promise<void> {
+  const res = await authedFetch(`${API_BASE}/hubs/${hubId}/access`, {
+    method: "POST",
+  });
+  if (!res.ok) {
+    await handle(res);
+  }
+}
+
 export async function listSources(hubId: string): Promise<Source[]> {
   const res = await authedFetch(`${API_BASE}/sources/${hubId}`, { cache: "no-store" });
   return handle<Source[]>(res);

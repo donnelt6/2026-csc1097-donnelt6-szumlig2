@@ -42,3 +42,19 @@ def create_hub(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     except APIError as exc:
         raise_postgrest_error(exc)
+
+
+@router.post(
+    "/{hub_id}/access",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(rate_limit_user_ip("hubs:read", "rate_limit_read_per_minute"))],
+)
+def track_hub_access(
+    hub_id: str,
+    current_user: CurrentUser = Depends(get_current_user),
+    client: Client = Depends(get_supabase_user_client),
+) -> None:
+    try:
+        store.update_hub_access(client, hub_id, current_user.id)
+    except APIError as exc:
+        raise_postgrest_error(exc)

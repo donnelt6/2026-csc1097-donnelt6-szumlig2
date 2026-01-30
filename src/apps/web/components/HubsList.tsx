@@ -7,6 +7,25 @@ import { UserIcon, UsersIcon, UserGroupIcon, DocumentIcon, MagnifyingGlassIcon }
 import { createHub, listHubs } from "../lib/api";
 import type { Hub } from "../lib/types";
 
+function formatRelativeTime(dateString: string | null | undefined): string {
+  if (!dateString) return "Never";
+
+  const now = new Date().getTime();
+  const then = new Date(dateString).getTime();
+  const diffMs = now - then;
+
+  const minutes = Math.floor(diffMs / 60000);
+  const hours = Math.floor(diffMs / 3600000);
+  const days = Math.floor(diffMs / 86400000);
+  const weeks = Math.floor(diffMs / 604800000);
+
+  if (minutes < 1) return "Just now";
+  if (minutes < 60) return `${minutes}m`;
+  if (hours < 24) return `${hours}h`;
+  if (days < 7) return `${days}d`;
+  return `${weeks}w`;
+}
+
 export function HubsList() {
   const queryClient = useQueryClient();
   const { data, isLoading, error } = useQuery({
@@ -21,7 +40,8 @@ export function HubsList() {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
-  const [sortBy, setSortBy] = useState("");
+  const [sortField, setSortField] = useState("accessed");
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
   const [selectedRoles, setSelectedRoles] = useState<Set<string>>(new Set());
   const [minMembers, setMinMembers] = useState("");
   const [maxMembers, setMaxMembers] = useState("");
@@ -29,6 +49,7 @@ export function HubsList() {
   const [maxSources, setMaxSources] = useState("");
   const detailsRef = useRef<HTMLDetailsElement>(null);
   const filterDetailsRef = useRef<HTMLDetailsElement>(null);
+  const sortDetailsRef = useRef<HTMLDetailsElement>(null);
 
   const onSubmit = (evt: React.FormEvent) => {
     evt.preventDefault();
@@ -83,6 +104,9 @@ export function HubsList() {
       if (filterDetailsRef.current && !filterDetailsRef.current.contains(event.target as Node)) {
         filterDetailsRef.current.open = false;
       }
+      if (sortDetailsRef.current && !sortDetailsRef.current.contains(event.target as Node)) {
+        sortDetailsRef.current.open = false;
+      }
     };
 
     document.addEventListener('mousedown', handleClickOutside);
@@ -120,25 +144,31 @@ export function HubsList() {
     return true;
   });
 
-  if (filteredHubs && sortBy) {
+  if (filteredHubs) {
     filteredHubs = [...filteredHubs].sort((a, b) => {
       const aMembers = a.members_count ?? 0;
       const bMembers = b.members_count ?? 0;
       const aSources = a.sources_count ?? 0;
       const bSources = b.sources_count ?? 0;
 
-      switch (sortBy) {
-        case "most-members":
-          return bMembers - aMembers;
-        case "least-members":
-          return aMembers - bMembers;
-        case "most-sources":
-          return bSources - aSources;
-        case "least-sources":
-          return aSources - bSources;
-        default:
-          return 0;
+      let comparison = 0;
+
+      switch (sortField) {
+        case "accessed": {
+          const aTime = a.last_accessed_at ? new Date(a.last_accessed_at).getTime() : 0;
+          const bTime = b.last_accessed_at ? new Date(b.last_accessed_at).getTime() : 0;
+          comparison = bTime - aTime;
+          break;
+        }
+        case "members":
+          comparison = bMembers - aMembers;
+          break;
+        case "sources":
+          comparison = bSources - aSources;
+          break;
       }
+
+      return sortDirection === "desc" ? comparison : -comparison;
     });
   }
 
@@ -181,6 +211,68 @@ export function HubsList() {
             className="search-input"
           />
         </div>
+        <details className="filter-menu" ref={sortDetailsRef}>
+          <summary className="filter-trigger">
+            Sort
+          </summary>
+          <div className="filter-dropdown">
+            <div className="filters-container" style={{ gridTemplateColumns: "1fr", padding: "16px" }}>
+              <div className="filter-group">
+                <label className="filter-label">Sort by</label>
+                <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (sortField === "accessed") {
+                        setSortDirection(sortDirection === "desc" ? "asc" : "desc");
+                      } else {
+                        setSortField("accessed");
+                        setSortDirection("desc");
+                      }
+                    }}
+                    className={sortField === "accessed" ? "button" : "button-secondary"}
+                    style={{ fontSize: "0.875rem", padding: "10px 12px", display: "flex", justifyContent: "space-between", alignItems: "center" }}
+                  >
+                    <span>Last accessed</span>
+                    <span>{sortField === "accessed" ? (sortDirection === "desc" ? "↓" : "↑") : ""}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (sortField === "members") {
+                        setSortDirection(sortDirection === "desc" ? "asc" : "desc");
+                      } else {
+                        setSortField("members");
+                        setSortDirection("desc");
+                      }
+                    }}
+                    className={sortField === "members" ? "button" : "button-secondary"}
+                    style={{ fontSize: "0.875rem", padding: "10px 12px", display: "flex", justifyContent: "space-between", alignItems: "center" }}
+                  >
+                    <span>Members</span>
+                    <span>{sortField === "members" ? (sortDirection === "desc" ? "↓" : "↑") : ""}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (sortField === "sources") {
+                        setSortDirection(sortDirection === "desc" ? "asc" : "desc");
+                      } else {
+                        setSortField("sources");
+                        setSortDirection("desc");
+                      }
+                    }}
+                    className={sortField === "sources" ? "button" : "button-secondary"}
+                    style={{ fontSize: "0.875rem", padding: "10px 12px", display: "flex", justifyContent: "space-between", alignItems: "center" }}
+                  >
+                    <span>Documents</span>
+                    <span>{sortField === "sources" ? (sortDirection === "desc" ? "↓" : "↑") : ""}</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </details>
         <details className="filter-menu" ref={filterDetailsRef}>
           <summary className="filter-trigger">
             Filter
@@ -246,16 +338,6 @@ export function HubsList() {
                 {sourcesError && <div className="filter-error-message">Min cannot be greater than max</div>}
               </div>
               <div className="filter-group">
-                <label className="filter-label">Sort by</label>
-                <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="filter-select">
-                  <option value="">Default</option>
-                  <option value="most-members">Most members</option>
-                  <option value="least-members">Least members</option>
-                  <option value="most-sources">Most sources</option>
-                  <option value="least-sources">Least sources</option>
-                </select>
-              </div>
-              <div className="filter-group">
                 <label className="filter-label">Role</label>
                 <div className="checkbox-group">
                   <label className="checkbox-label">
@@ -315,6 +397,9 @@ export function HubsList() {
                   <span className="hub-stat-value">{hub.sources_count ?? 0}</span>
                 </span>
               </div>
+              <span className="muted" style={{ fontSize: "0.75rem", marginLeft: "auto" }}>
+                Accessed {formatRelativeTime(hub.last_accessed_at)}
+              </span>
             </div>
           </Link>
         ))}

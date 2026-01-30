@@ -27,6 +27,7 @@ class Hub(BaseModel):
     name: str
     description: Optional[str] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
+    last_accessed_at: Optional[datetime] = None
     role: Optional[MembershipRole] = None
     members_count: Optional[int] = None
     sources_count: Optional[int] = None

@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
+import { useEffect } from "react";
 import { ChatPanel } from "../../../components/ChatPanel";
 import { MembersPanel } from "../../../components/MembersPanel";
 import { ReminderCandidatesPanel } from "../../../components/ReminderCandidatesPanel";
 import { RemindersPanel } from "../../../components/RemindersPanel";
 import { UploadPanel } from "../../../components/UploadPanel";
-import { listHubs, listSources } from "../../../lib/api";
+import { listHubs, listSources, trackHubAccess } from "../../../lib/api";
 
 export default function HubDetail({ params }: { params: { hubId: string } }) {
   const { data: hubs, isLoading: hubsLoading } = useQuery({ queryKey: ["hubs"], queryFn: listHubs });
@@ -24,6 +25,14 @@ export default function HubDetail({ params }: { params: { hubId: string } }) {
   const hub = hubs?.find((h) => h.id === params.hubId);
   const canUpload = hub?.role === "owner" || hub?.role === "editor";
   const roleResolved = !hubsLoading;
+
+  useEffect(() => {
+    if (hub) {
+      trackHubAccess(params.hubId).catch((error) => {
+        console.error("Failed to track hub access:", error);
+      });
+    }
+  }, [hub, params.hubId]);
 
   return (
     <main className="page grid" style={{ gap: "20px" }}>
