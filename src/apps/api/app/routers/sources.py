@@ -12,6 +12,7 @@ from ..schemas import (
     SourceStatusResponse,
     SourceUploadUrlResponse,
     WebSourceCreate,
+    YouTubeSourceCreate,
 )
 from ..dependencies import CurrentUser, get_current_user, get_supabase_user_client, rate_limit_user_ip
 from ..services.queue import celery_app
@@ -63,6 +64,34 @@ def create_web_source(
     if not source.storage_path:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Source storage path missing")
     celery_app.send_task("ingest_web_source", args=[source.id, source.hub_id, payload.url, source.storage_path])
+    return source
+
+
+@router.post(
+    "/youtube",
+    response_model=Source,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(rate_limit_user_ip("sources:write", "rate_limit_sources_per_minute"))],
+)
+def create_youtube_source(
+    payload: YouTubeSourceCreate,
+    client: Client = Depends(get_supabase_user_client),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> Source:
+    _ = current_user
+    try:
+        source = store.create_youtube_source(client, payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except APIError as exc:
+        raise_postgrest_error(exc)
+
+    if not source.storage_path:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Source storage path missing")
+    celery_app.send_task(
+        "ingest_youtube_source",
+        args=[source.id, source.hub_id, payload.url, source.storage_path, payload.language, payload.allow_auto_captions],
+    )
     return source
 
 
@@ -171,7 +200,7 @@ def refresh_web_source(
 ) -> dict[str, str]:
     _ = current_user
     try:
-        source, url = store.refresh_web_source(client, source_id)
+        source, refresh_info = store.refresh_source(client, source_id)
     except KeyError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Source not found") from exc
     except ValueError as exc:
@@ -182,7 +211,26 @@ def refresh_web_source(
     if not source.storage_path:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Source storage path missing")
 
-    celery_app.send_task("ingest_web_source", args=[source.id, source.hub_id, url, source.storage_path])
+    refresh_type = refresh_info.get("type")
+    if refresh_type == "web":
+        celery_app.send_task(
+            "ingest_web_source",
+            args=[source.id, source.hub_id, refresh_info.get("url"), source.storage_path],
+        )
+    elif refresh_type == "youtube":
+        celery_app.send_task(
+            "ingest_youtube_source",
+            args=[
+                source.id,
+                source.hub_id,
+                refresh_info.get("url"),
+                source.storage_path,
+                refresh_info.get("language"),
+                refresh_info.get("allow_auto_captions"),
+            ],
+        )
+    else:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Refresh not supported for source type")
     return {"status": "queued"}
 
 

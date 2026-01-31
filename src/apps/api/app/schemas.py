@@ -91,6 +91,7 @@ class SourceStatus(str, Enum):
 class SourceType(str, Enum):
     file = "file"
     web = "web"
+    youtube = "youtube"
 
 
 class Source(BaseModel):
@@ -130,6 +131,31 @@ class WebSourceCreate(StrictModel):
         if not lower.startswith(("http://", "https://")):
             raise ValueError("URL must start with http:// or https://")
         return lower
+
+
+class YouTubeSourceCreate(StrictModel):
+    hub_id: UUID
+    url: str = Field(..., min_length=1, max_length=2000)
+    language: Optional[str] = Field(default=None, min_length=2, max_length=16)
+    allow_auto_captions: bool = False
+
+    @field_validator("url")
+    @classmethod
+    def validate_url(cls, value: str) -> str:
+        lower = value.strip()
+        if not lower.startswith(("http://", "https://")):
+            raise ValueError("URL must start with http:// or https://")
+        return lower
+
+    @field_validator("language")
+    @classmethod
+    def normalize_language(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        cleaned = value.strip()
+        if not cleaned:
+            return None
+        return cleaned
 
 
 class SourceEnqueueResponse(BaseModel):
