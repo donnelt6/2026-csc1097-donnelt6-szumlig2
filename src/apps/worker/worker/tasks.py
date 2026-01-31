@@ -1,5 +1,6 @@
 import hashlib
 import io
+import json
 import logging
 import re
 import ipaddress
@@ -112,6 +113,61 @@ def ingest_web_source(self, source_id: str, hub_id: str, url: str, storage_path:
         return {"source_id": source_id, "hub_id": hub_id, "chunks": chunk_count}
     except Exception as exc:
         logger.exception("Web ingestion failed for source %s", source_id)
+        _update_source(client, source_id, status="failed", failure_reason=str(exc)[:500])
+        raise
+
+
+@celery_app.task(bind=True, name="ingest_youtube_source", max_retries=3, default_retry_delay=15)
+def ingest_youtube_source(
+    self,
+    source_id: str,
+    hub_id: str,
+    url: str,
+    storage_path: str,
+    language: Optional[str] = None,
+    allow_auto_captions: Optional[bool] = None,
+) -> dict:
+    """
+    YouTube ingestion flow:
+    - Fetch video info + captions via yt-dlp
+    - Store pseudo document in Supabase Storage
+    - Chunk + embed + persist to pgvector
+    """
+    logger.info("Starting YouTube ingestion for source %s (%s)", source_id, url)
+    client = _get_supabase_client()
+    _update_source(client, source_id, status="processing", clear_failure_reason=True)
+
+    try:
+        transcript, info, captions_meta = _fetch_youtube_transcript(
+            url,
+            language=language,
+            allow_auto_captions=allow_auto_captions,
+        )
+        text = _normalize_text(transcript)
+        if not text:
+            raise ValueError("No transcript text extracted from YouTube captions")
+        fetched_at = datetime.now(timezone.utc).isoformat()
+        pseudo_doc = _build_youtube_pseudo_doc(info, url, fetched_at, captions_meta, text)
+        _upload_pseudo_doc(client, storage_path, pseudo_doc)
+        extra_metadata = {
+            "source_type": "youtube",
+            "url": url,
+            "video_id": info.get("video_id"),
+            "title": info.get("title"),
+            "channel": info.get("channel"),
+            "channel_id": info.get("channel_id"),
+            "published_at": info.get("published_at"),
+            "duration_seconds": info.get("duration_seconds"),
+            "language": captions_meta.get("language"),
+            "captions_source": captions_meta.get("captions_source"),
+            "transcript_fetched_at": fetched_at,
+            "word_count": len(text.split()),
+        }
+        chunk_count = _ingest_text_for_source(client, source_id, hub_id, text, extra_metadata=extra_metadata)
+        logger.info("Completed YouTube ingestion for source %s", source_id)
+        return {"source_id": source_id, "hub_id": hub_id, "chunks": chunk_count}
+    except Exception as exc:
+        logger.exception("YouTube ingestion failed for source %s", source_id)
         _update_source(client, source_id, status="failed", failure_reason=str(exc)[:500])
         raise
 
@@ -267,6 +323,237 @@ def _build_pseudo_doc(title: Optional[str], url: str, crawl_at: str, content_typ
         "",
         text,
     ]
+    return "\n".join(lines)
+
+
+_CAPTION_TIMECODE_RE = re.compile(
+    r"^\d{1,2}:\d{2}(?::\d{2})?[.,]\d{3}\s-->\s\d{1,2}:\d{2}(?::\d{2})?[.,]\d{3}"
+)
+
+
+def _fetch_youtube_transcript(
+    url: str,
+    language: Optional[str],
+    allow_auto_captions: Optional[bool],
+) -> tuple[str, dict, dict]:
+    try:
+        from yt_dlp import YoutubeDL
+    except Exception as exc:
+        raise RuntimeError("yt-dlp is required for YouTube ingestion") from exc
+
+    preferred_language = (language or settings.youtube_default_language or "").strip() or None
+    allow_auto = settings.youtube_allow_auto_captions if allow_auto_captions is None else bool(allow_auto_captions)
+
+    ydl_opts = {
+        "quiet": True,
+        "no_warnings": True,
+        "skip_download": True,
+        "noplaylist": True,
+    }
+    with YoutubeDL(ydl_opts) as ydl:
+        info = ydl.extract_info(url, download=False)
+    if not info:
+        raise ValueError("Unable to fetch YouTube metadata")
+
+    captions_source, lang, caption_url, caption_ext = _select_caption_track(
+        info, preferred_language, allow_auto
+    )
+    raw = _download_caption_text(caption_url)
+    transcript = _parse_caption_text(raw, caption_ext)
+    if not transcript:
+        raise ValueError("Caption track was empty")
+
+    info_payload = {
+        "video_id": info.get("id"),
+        "title": info.get("title") or info.get("fulltitle"),
+        "channel": info.get("channel") or info.get("uploader"),
+        "channel_id": info.get("channel_id") or info.get("uploader_id"),
+        "duration_seconds": info.get("duration"),
+        "published_at": _format_upload_date(info.get("upload_date")),
+    }
+    captions_meta = {
+        "language": lang,
+        "captions_source": captions_source,
+        "ext": caption_ext,
+    }
+    return transcript, info_payload, captions_meta
+
+
+def _select_caption_track(
+    info: dict,
+    preferred_language: Optional[str],
+    allow_auto: bool,
+) -> tuple[str, str, str, str]:
+    subtitles = info.get("subtitles") or {}
+    selected = _pick_caption_from_map(subtitles, preferred_language)
+    if selected:
+        lang, url, ext = selected
+        return "manual", lang, url, ext
+    if allow_auto:
+        auto = info.get("automatic_captions") or {}
+        selected = _pick_caption_from_map(auto, preferred_language)
+        if selected:
+            lang, url, ext = selected
+            return "auto", lang, url, ext
+    raise ValueError("No captions available for the requested language")
+
+
+def _pick_caption_from_map(
+    captions: dict,
+    preferred_language: Optional[str],
+) -> Optional[tuple[str, str, str]]:
+    if not captions:
+        return None
+    preferred_norm = _normalize_language(preferred_language) if preferred_language else None
+    candidates: list[str] = []
+    if preferred_norm:
+        candidates.append(preferred_norm)
+        if "-" in preferred_norm:
+            candidates.append(preferred_norm.split("-", 1)[0])
+    else:
+        candidates.extend(["en", "en-us", "en-gb"])
+
+    for candidate in candidates:
+        for lang_key, formats in captions.items():
+            key_norm = _normalize_language(lang_key)
+            if key_norm == candidate or key_norm.startswith(candidate):
+                selected = _select_caption_format(lang_key, formats)
+                if selected:
+                    return selected
+
+    for lang_key, formats in captions.items():
+        selected = _select_caption_format(lang_key, formats)
+        if selected:
+            return selected
+    return None
+
+
+def _select_caption_format(lang: str, formats: list[dict]) -> Optional[tuple[str, str, str]]:
+    if not formats or not isinstance(formats, list):
+        return None
+    preferred_exts = ["vtt", "srt", "srv3", "srv2", "srv1", "ttml", "json3"]
+    for ext in preferred_exts:
+        for item in formats:
+            if item.get("ext") == ext and item.get("url"):
+                return lang, item["url"], ext
+    for item in formats:
+        if item.get("url"):
+            return lang, item["url"], item.get("ext") or "vtt"
+    return None
+
+
+def _download_caption_text(url: str) -> bytes:
+    max_bytes = max(1, settings.youtube_max_bytes)
+    with httpx.Client(timeout=settings.web_timeout_seconds, follow_redirects=True) as client:
+        with client.stream("GET", url) as resp:
+            resp.raise_for_status()
+            total = 0
+            chunks: list[bytes] = []
+            for chunk in resp.iter_bytes():
+                total += len(chunk)
+                if total > max_bytes:
+                    raise ValueError("Caption file exceeds size limit")
+                chunks.append(chunk)
+            return b"".join(chunks)
+
+
+def _parse_caption_text(raw: bytes, ext: str) -> str:
+    text = raw.decode("utf-8", errors="ignore")
+    ext_lower = (ext or "").lower()
+    if ext_lower in {"vtt", "srt"}:
+        return _strip_vtt_srt(text)
+    if ext_lower in {"srv1", "srv2", "srv3", "ttml", "xml"}:
+        return _strip_xml(text)
+    if ext_lower == "json3":
+        return _parse_json3(text)
+    cleaned = _strip_vtt_srt(text)
+    return cleaned or _strip_xml(text)
+
+
+def _strip_vtt_srt(text: str) -> str:
+    lines: list[str] = []
+    for line in text.splitlines():
+        cleaned = line.strip()
+        if not cleaned:
+            continue
+        if cleaned.startswith("WEBVTT") or cleaned.startswith("NOTE"):
+            continue
+        if cleaned.isdigit():
+            continue
+        if _CAPTION_TIMECODE_RE.match(cleaned):
+            continue
+        cleaned = re.sub(r"<[^>]+>", "", cleaned)
+        lines.append(cleaned)
+    return " ".join(lines).strip()
+
+
+def _strip_xml(text: str) -> str:
+    cleaned = re.sub(r"<[^>]+>", " ", text)
+    return " ".join(cleaned.split()).strip()
+
+
+def _parse_json3(text: str) -> str:
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError:
+        return ""
+    parts: list[str] = []
+    for event in payload.get("events", []) or []:
+        for seg in event.get("segs", []) or []:
+            seg_text = seg.get("utf8")
+            if seg_text:
+                parts.append(seg_text)
+    return " ".join(parts).strip()
+
+
+def _normalize_language(value: Optional[str]) -> str:
+    if not value:
+        return ""
+    return value.strip().lower().replace("_", "-")
+
+
+def _format_upload_date(value: Optional[str]) -> Optional[str]:
+    if not value or len(value) != 8:
+        return None
+    return f"{value[:4]}-{value[4:6]}-{value[6:]}"
+
+
+def _format_duration(seconds: Optional[int]) -> Optional[str]:
+    if seconds is None:
+        return None
+    try:
+        total = int(seconds)
+    except (TypeError, ValueError):
+        return None
+    hours = total // 3600
+    minutes = (total % 3600) // 60
+    secs = total % 60
+    if hours:
+        return f"{hours:02d}:{minutes:02d}:{secs:02d}"
+    return f"{minutes:02d}:{secs:02d}"
+
+
+def _build_youtube_pseudo_doc(info: dict, url: str, fetched_at: str, captions_meta: dict, text: str) -> str:
+    title = info.get("title") or "YouTube Video"
+    lines: list[str] = [f"# {title}"]
+    if url:
+        lines.append(f"Source: {url}")
+    if info.get("video_id"):
+        lines.append(f"Video ID: {info['video_id']}")
+    if info.get("channel"):
+        lines.append(f"Channel: {info['channel']}")
+    if info.get("published_at"):
+        lines.append(f"Published: {info['published_at']}")
+    duration = _format_duration(info.get("duration_seconds"))
+    if duration:
+        lines.append(f"Duration: {duration}")
+    if captions_meta.get("language"):
+        lines.append(f"Language: {captions_meta['language']}")
+    if captions_meta.get("captions_source"):
+        lines.append(f"Captions: {captions_meta['captions_source']}")
+    lines.append(f"Fetched: {fetched_at}")
+    lines.append("")
+    lines.append(text)
     return "\n".join(lines)
 
 

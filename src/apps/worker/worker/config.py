@@ -23,6 +23,9 @@ class Settings:
     web_max_bytes: int = int(os.getenv("WEB_MAX_BYTES", "2000000"))
     web_timeout_seconds: int = int(os.getenv("WEB_TIMEOUT_SECONDS", "20"))
     web_respect_robots: bool = os.getenv("WEB_RESPECT_ROBOTS", "true").lower() in {"1", "true", "yes"}
+    youtube_default_language: str = os.getenv("YOUTUBE_DEFAULT_LANGUAGE", "en")
+    youtube_allow_auto_captions: bool = os.getenv("YOUTUBE_ALLOW_AUTO_CAPTIONS", "false").lower() in {"1", "true", "yes"}
+    youtube_max_bytes: int = int(os.getenv("YOUTUBE_MAX_BYTES", "1000000"))
 
 
 def get_settings() -> Settings:
