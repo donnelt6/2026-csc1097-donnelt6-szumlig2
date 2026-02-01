@@ -127,7 +127,12 @@ def test_ingest_youtube_source_success(monkeypatch) -> None:
 
     monkeypatch.setattr(tasks, "_get_supabase_client", lambda: object())
     monkeypatch.setattr(tasks, "_upload_pseudo_doc", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(tasks, "_ingest_text_for_source", lambda *_args, **_kwargs: 3)
+    def fake_ingest(_client, source_id, hub_id, text, extra_metadata=None):
+        _ = (hub_id, text, extra_metadata)
+        tasks._update_source(_client, source_id, status="complete")
+        return 3
+
+    monkeypatch.setattr(tasks, "_ingest_text_for_source", fake_ingest)
 
     def fake_update(_client, _source_id, status, **kwargs):
         updates.append({"status": status, **kwargs})
@@ -150,8 +155,7 @@ def test_ingest_youtube_source_success(monkeypatch) -> None:
         ),
     )
 
-    result = tasks.ingest_youtube_source(
-        None,
+    result = tasks.ingest_youtube_source.run(
         source_id="src-yt-1",
         hub_id="hub-1",
         url="https://www.youtube.com/watch?v=abc123def45",
