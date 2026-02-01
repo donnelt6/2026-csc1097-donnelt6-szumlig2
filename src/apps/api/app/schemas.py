@@ -131,15 +131,7 @@ class WebSourceCreate(StrictModel):
         lower = value.strip()
         if not lower.startswith(("http://", "https://")):
             raise ValueError("URL must start with http:// or https://")
-        parsed = urlparse(lower)
-        host = (parsed.hostname or "").lower()
-        if host.startswith("www."):
-            host = host[4:]
-        if not host:
-            raise ValueError("URL must include a host")
-        if host == "youtu.be" or host.endswith("youtube.com") or host.endswith("youtube-nocookie.com"):
-            return lower
-        raise ValueError("URL must be a YouTube domain")
+        return lower
 
 
 class YouTubeSourceCreate(StrictModel):
@@ -154,7 +146,15 @@ class YouTubeSourceCreate(StrictModel):
         lower = value.strip()
         if not lower.startswith(("http://", "https://")):
             raise ValueError("URL must start with http:// or https://")
-        return lower
+        parsed = urlparse(lower)
+        host = (parsed.hostname or "").lower()
+        if host.startswith("www."):
+            host = host[4:]
+        if not host:
+            raise ValueError("URL must include a host")
+        if host == "youtu.be" or host.endswith("youtube.com") or host.endswith("youtube-nocookie.com"):
+            return lower
+        raise ValueError("URL must be a YouTube domain")
 
     @field_validator("language")
     @classmethod
