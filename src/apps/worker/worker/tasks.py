@@ -2,6 +2,7 @@ import hashlib
 import io
 import json
 import logging
+import time
 import re
 import ipaddress
 import socket
@@ -444,17 +445,45 @@ def _select_caption_format(lang: str, formats: list[dict]) -> Optional[tuple[str
 
 def _download_caption_text(url: str) -> bytes:
     max_bytes = max(1, settings.youtube_max_bytes)
+    retry_statuses = {429, 500, 502, 503, 504}
+    max_attempts = 3
+    base_delay = 1.5
+    last_exc: Optional[Exception] = None
     with httpx.Client(timeout=settings.web_timeout_seconds, follow_redirects=True) as client:
-        with client.stream("GET", url) as resp:
-            resp.raise_for_status()
-            total = 0
-            chunks: list[bytes] = []
-            for chunk in resp.iter_bytes():
-                total += len(chunk)
-                if total > max_bytes:
-                    raise ValueError("Caption file exceeds size limit")
-                chunks.append(chunk)
-            return b"".join(chunks)
+        for attempt in range(1, max_attempts + 1):
+            try:
+                with client.stream("GET", url) as resp:
+                    resp.raise_for_status()
+                    total = 0
+                    chunks: list[bytes] = []
+                    for chunk in resp.iter_bytes():
+                        total += len(chunk)
+                        if total > max_bytes:
+                            raise ValueError("Caption file exceeds size limit")
+                        chunks.append(chunk)
+                    return b"".join(chunks)
+            except httpx.HTTPStatusError as exc:
+                last_exc = exc
+                status = exc.response.status_code
+                if status in retry_statuses and attempt < max_attempts:
+                    delay = base_delay * (2 ** (attempt - 1))
+                    logger.warning("Caption fetch got %s, retrying in %.1fs", status, delay)
+                    time.sleep(delay)
+                    continue
+                if status == 429:
+                    raise ValueError("YouTube rate limit hit; try again later") from exc
+                raise
+            except httpx.RequestError as exc:
+                last_exc = exc
+                if attempt < max_attempts:
+                    delay = base_delay * (2 ** (attempt - 1))
+                    logger.warning("Caption fetch failed, retrying in %.1fs: %s", delay, exc)
+                    time.sleep(delay)
+                    continue
+                raise
+    if last_exc:
+        raise last_exc
+    raise RuntimeError("Failed to download captions")
 
 
 def _parse_caption_text(raw: bytes, ext: str) -> str:
