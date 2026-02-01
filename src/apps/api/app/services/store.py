@@ -2,7 +2,7 @@ import re
 import uuid
 from datetime import datetime
 from pathlib import PurePath
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 from typing import Any, Dict, List, Optional, Tuple
 
 from openai import OpenAI
@@ -32,6 +32,7 @@ from ..schemas import (
     SourceStatusResponse,
     SourceType,
     WebSourceCreate,
+    YouTubeSourceCreate,
 )
 
 
@@ -154,6 +155,39 @@ class SupabaseStore:
         row = response.data[0]
         return Source(**row)
 
+    def create_youtube_source(self, client: Client, payload: YouTubeSourceCreate) -> Source:
+        source_id = str(uuid.uuid4())
+        hub_id = str(payload.hub_id)
+        video_id = _extract_youtube_video_id(payload.url)
+        if not video_id:
+            raise ValueError("Unable to extract YouTube video ID")
+        storage_path = _youtube_storage_path(hub_id, source_id)
+        display_name = _build_youtube_source_name(payload.url, video_id)
+        metadata = {
+            "url": payload.url,
+            "video_id": video_id,
+            "allow_auto_captions": payload.allow_auto_captions,
+        }
+        if payload.language:
+            metadata["language"] = payload.language
+        response = (
+            client.table("sources")
+            .insert(
+                {
+                    "id": source_id,
+                    "hub_id": hub_id,
+                    "type": SourceType.youtube.value,
+                    "original_name": display_name,
+                    "storage_path": storage_path,
+                    "status": SourceStatus.queued.value,
+                    "ingestion_metadata": metadata,
+                }
+            )
+            .execute()
+        )
+        row = response.data[0]
+        return Source(**row)
+
     def list_sources(self, client: Client, hub_id: str) -> List[Source]:
         response = (
             client.table("sources")
@@ -194,8 +228,20 @@ class SupabaseStore:
         row = response.data[0]
         return Source(**row)
 
-    def refresh_web_source(self, client: Client, source_id: str) -> tuple[Source, str]:
+    def refresh_source(self, client: Client, source_id: str) -> tuple[Source, dict]:
         source = self.get_source(client, source_id)
+        if source.type == SourceType.web:
+            refreshed, url = self.refresh_web_source(client, source_id, source)
+            return refreshed, {"type": SourceType.web.value, "url": url}
+        if source.type == SourceType.youtube:
+            refreshed, info = self.refresh_youtube_source(client, source_id, source)
+            info["type"] = SourceType.youtube.value
+            return refreshed, info
+        raise ValueError("Source type does not support refresh")
+
+    def refresh_web_source(self, client: Client, source_id: str, source: Optional[Source] = None) -> tuple[Source, str]:
+        if source is None:
+            source = self.get_source(client, source_id)
         if source.type != SourceType.web:
             raise ValueError("Source is not a web URL")
         url = None
@@ -223,6 +269,53 @@ class SupabaseStore:
         if not response.data:
             raise KeyError("Source not found")
         return Source(**response.data[0]), url
+
+    def refresh_youtube_source(self, client: Client, source_id: str, source: Optional[Source] = None) -> tuple[Source, dict]:
+        if source is None:
+            source = self.get_source(client, source_id)
+        if source.type != SourceType.youtube:
+            raise ValueError("Source is not a YouTube URL")
+        metadata = source.ingestion_metadata if isinstance(source.ingestion_metadata, dict) else {}
+        url = metadata.get("url")
+        if not url:
+            raise ValueError("Source URL missing")
+        video_id = metadata.get("video_id") or _extract_youtube_video_id(url)
+        if not video_id:
+            raise ValueError("Source video ID missing")
+        language = metadata.get("language")
+        allow_auto_captions = bool(metadata.get("allow_auto_captions", False))
+        new_path = _youtube_storage_path(source.hub_id, source.id)
+        refreshed_metadata = dict(metadata)
+        refreshed_metadata.update(
+            {
+                "url": url,
+                "video_id": video_id,
+                "language": language,
+                "allow_auto_captions": allow_auto_captions,
+                "refresh_requested_at": datetime.utcnow().isoformat(),
+            }
+        )
+        response = (
+            client.table("sources")
+            .update(
+                {
+                    "storage_path": new_path,
+                    "status": SourceStatus.queued.value,
+                    "failure_reason": None,
+                    "ingestion_metadata": refreshed_metadata,
+                }
+            )
+            .eq("id", str(source_id))
+            .execute()
+        )
+        if not response.data:
+            raise KeyError("Source not found")
+        return Source(**response.data[0]), {
+            "url": url,
+            "video_id": video_id,
+            "language": language,
+            "allow_auto_captions": allow_auto_captions,
+        }
 
     def get_source_status(self, client: Client, source_id: str) -> SourceStatusResponse:
         response = client.table("sources").select("id,status,failure_reason").eq("id", str(source_id)).execute()
@@ -658,6 +751,11 @@ def _web_storage_path(hub_id: str, source_id: str) -> str:
     return f"{hub_id}/{source_id}/web-{stamp}.md"
 
 
+def _youtube_storage_path(hub_id: str, source_id: str) -> str:
+    stamp = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+    return f"{hub_id}/{source_id}/youtube-{stamp}.md"
+
+
 def _build_web_source_name(url: str) -> str:
     parsed = urlparse(url)
     host = parsed.netloc or parsed.path or url
@@ -668,6 +766,44 @@ def _build_web_source_name(url: str) -> str:
         display = f"{display}?{parsed.query}"
     return display[:255]
 
+
+def _build_youtube_source_name(url: str, video_id: str) -> str:
+    parsed = urlparse(url)
+    host = (parsed.netloc or "youtube.com").lower()
+    if host.startswith("www."):
+        host = host[4:]
+    display = f"{host}/{video_id}"
+    return display[:255]
+
+
+_YOUTUBE_ID_RE = re.compile(r"^[A-Za-z0-9_-]{11}$")
+
+
+def _extract_youtube_video_id(url: str) -> Optional[str]:
+    parsed = urlparse(url)
+    host = (parsed.netloc or "").lower()
+    if host.startswith("www."):
+        host = host[4:]
+    if host == "youtu.be":
+        video_id = parsed.path.strip("/").split("/", 1)[0]
+        return _normalize_youtube_id(video_id)
+    if host.endswith("youtube.com") or host.endswith("youtube-nocookie.com"):
+        query = parse_qs(parsed.query)
+        if "v" in query and query["v"]:
+            return _normalize_youtube_id(query["v"][0])
+        parts = [part for part in parsed.path.split("/") if part]
+        if len(parts) >= 2 and parts[0] in {"shorts", "embed", "live", "v"}:
+            return _normalize_youtube_id(parts[1])
+    return None
+
+
+def _normalize_youtube_id(value: str) -> Optional[str]:
+    if not value:
+        return None
+    candidate = value.strip()
+    if not _YOUTUBE_ID_RE.fullmatch(candidate):
+        return None
+    return candidate
 
 def _get_attr(obj: Any, name: str, default: Any = None) -> Any:
     if isinstance(obj, dict):

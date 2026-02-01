@@ -1,6 +1,7 @@
 from datetime import datetime
 from enum import Enum
 from typing import List, Optional
+from urllib.parse import urlparse
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
@@ -91,6 +92,7 @@ class SourceStatus(str, Enum):
 class SourceType(str, Enum):
     file = "file"
     web = "web"
+    youtube = "youtube"
 
 
 class Source(BaseModel):
@@ -130,6 +132,39 @@ class WebSourceCreate(StrictModel):
         if not lower.startswith(("http://", "https://")):
             raise ValueError("URL must start with http:// or https://")
         return lower
+
+
+class YouTubeSourceCreate(StrictModel):
+    hub_id: UUID
+    url: str = Field(..., min_length=1, max_length=2000)
+    language: Optional[str] = Field(default=None, min_length=2, max_length=16)
+    allow_auto_captions: bool = False
+
+    @field_validator("url")
+    @classmethod
+    def validate_url(cls, value: str) -> str:
+        lower = value.strip()
+        if not lower.startswith(("http://", "https://")):
+            raise ValueError("URL must start with http:// or https://")
+        parsed = urlparse(lower)
+        host = (parsed.hostname or "").lower()
+        if host.startswith("www."):
+            host = host[4:]
+        if not host:
+            raise ValueError("URL must include a host")
+        if host == "youtu.be" or host.endswith("youtube.com") or host.endswith("youtube-nocookie.com"):
+            return lower
+        raise ValueError("URL must be a YouTube domain")
+
+    @field_validator("language")
+    @classmethod
+    def normalize_language(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        cleaned = value.strip()
+        if not cleaned:
+            return None
+        return cleaned
 
 
 class SourceEnqueueResponse(BaseModel):

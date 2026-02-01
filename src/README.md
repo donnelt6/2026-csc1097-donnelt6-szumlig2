@@ -5,13 +5,13 @@ This `src/` folder contains the scaffold for Caddie: a Next.js frontend, FastAPI
 ## Structure
 - `apps/web/` - Next.js frontend with hubs list, hub detail, file/URL upload widget, and chat flow.
 - `apps/api/` - FastAPI service exposing hubs, sources, and chat endpoints backed by Supabase + OpenAI.
-- `apps/worker/` - Celery ingestion worker that downloads from Supabase Storage or crawls web URLs, extracts text, chunks, embeds, and writes to pgvector.
+- `apps/worker/` - Celery ingestion worker that downloads from Supabase Storage, crawls web URLs, or fetches YouTube transcripts; extracts text, chunks, embeds, and writes to pgvector.
 - `packages/shared/` - Shared TypeScript and Pydantic models to keep contracts aligned.
 - `Makefile` - Convenience commands for running services locally.
 
 ## Quickstart
 1) Install Node deps: `cd src && npm install && cd apps/web && npm install`
-2) Set env vars from `.env.example` in each app (Supabase/OpenAI/Redis). Worker also accepts web crawl settings (`WEB_MAX_BYTES`, `WEB_USER_AGENT`, `WEB_RESPECT_ROBOTS`).
+2) Set env vars from `.env.example` in each app (Supabase/OpenAI/Redis). Worker also accepts web crawl settings (`WEB_MAX_BYTES`, `WEB_USER_AGENT`, `WEB_RESPECT_ROBOTS`) and YouTube caption settings (`YOUTUBE_DEFAULT_LANGUAGE`, `YOUTUBE_ALLOW_AUTO_CAPTIONS`).
 3) Run API: `cd apps/api && uvicorn app.main:app --reload --port 8000`
 4) Run worker: `cd apps/worker && celery -A worker.tasks worker --loglevel=info`
 5) Run beat (reminders): `cd apps/worker && celery -A worker.tasks beat --loglevel=info`
@@ -30,6 +30,14 @@ Web URL ingestion respects robots.txt by default; set `WEB_RESPECT_ROBOTS=false`
 - The worker stores a pseudo-document snapshot in Supabase Storage (Markdown with title/URL/crawl time).
 - The extracted text is chunked, embedded, and stored in `source_chunks`.
 - Reprocess uses the stored snapshot; Refresh re-crawls the URL and updates the snapshot/metadata.
+
+## How YouTube ingestion works
+- The user submits a YouTube URL from the hub upload panel.
+- The API creates a `sources` row with `type="youtube"` and stores the URL + caption preferences in `ingestion_metadata`.
+- The worker uses `yt-dlp` to fetch video metadata and captions (manual first, auto if allowed).
+- Captions are cleaned to plain text, normalized, and stored as a pseudo-document snapshot in Supabase Storage.
+- The transcript text is chunked, embedded, and stored in `source_chunks`.
+- Reprocess uses the stored snapshot; Refresh re-fetches captions and updates the snapshot/metadata.
 
 ## Daily run commands (PowerShell)
 Use three terminals so each process keeps running.

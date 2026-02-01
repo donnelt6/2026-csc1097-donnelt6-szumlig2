@@ -22,6 +22,7 @@ dependencies = [
     "spacy>=3.7.4",
     "readability-lxml>=0.8.1",
     "beautifulsoup4>=4.12.3",
+    "yt-dlp>=2024.10.07",
 ]
 
 [tool.setuptools.packages.find]

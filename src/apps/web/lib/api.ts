@@ -97,6 +97,20 @@ export async function createWebSource(data: { hub_id: string; url: string }): Pr
   return handle(res);
 }
 
+export async function createYouTubeSource(data: {
+  hub_id: string;
+  url: string;
+  language?: string | null;
+  allow_auto_captions?: boolean;
+}): Promise<Source> {
+  const res = await authedFetch(`${API_BASE}/sources/youtube`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  return handle(res);
+}
+
 export async function createSourceUploadUrl(sourceId: string): Promise<{ upload_url: string }> {
   const res = await authedFetch(`${API_BASE}/sources/${sourceId}/upload-url`, {
     method: "POST",
