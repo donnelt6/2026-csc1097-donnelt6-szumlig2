@@ -52,7 +52,6 @@ export function HubsList() {
   const detailsRef = useRef<HTMLDetailsElement>(null);
   const filterDetailsRef = useRef<HTMLDetailsElement>(null);
   const sortDetailsRef = useRef<HTMLDetailsElement>(null);
-  const favouriteTimeouts = useRef<Map<string, NodeJS.Timeout>>(new Map());
 
   const onSubmit = (evt: React.FormEvent) => {
     evt.preventDefault();
@@ -75,7 +74,7 @@ export function HubsList() {
     setSelectedRoles(newRoles);
   };
 
-  const toggleFavourite = (hubId: string, currentState: boolean, e: React.MouseEvent) => {
+  const toggleFavourite = async (hubId: string, currentState: boolean, e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
 
@@ -88,22 +87,12 @@ export function HubsList() {
       );
     });
 
-    if (favouriteTimeouts.current.has(hubId)) {
-      clearTimeout(favouriteTimeouts.current.get(hubId)!);
+    try {
+      await toggleHubFavourite(hubId, newState);
+    } catch (error) {
+      console.error("Failed to toggle favourite:", error);
+      queryClient.invalidateQueries({ queryKey: ["hubs"] });
     }
-
-    const timeoutId = setTimeout(async () => {
-      try {
-        await toggleHubFavourite(hubId, newState);
-      } catch (error) {
-        console.error("Failed to toggle favourite:", error);
-        queryClient.invalidateQueries({ queryKey: ["hubs"] });
-      } finally {
-        favouriteTimeouts.current.delete(hubId);
-      }
-    }, 200);
-
-    favouriteTimeouts.current.set(hubId, timeoutId);
   };
 
   const handleNumberInput = (value: string, setter: (val: string) => void) => {
@@ -145,13 +134,6 @@ export function HubsList() {
 
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      favouriteTimeouts.current.forEach(timeout => clearTimeout(timeout));
-      favouriteTimeouts.current.clear();
-    };
   }, []);
 
   const normalizedQuery = searchQuery.trim().toLowerCase();
