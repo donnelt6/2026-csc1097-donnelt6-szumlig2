@@ -1,15 +1,18 @@
 'use client';
 
 import Link from "next/link";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useRef } from "react";
 import { ChatPanel } from "../../../components/ChatPanel";
 import { MembersPanel } from "../../../components/MembersPanel";
 import { ReminderCandidatesPanel } from "../../../components/ReminderCandidatesPanel";
 import { RemindersPanel } from "../../../components/RemindersPanel";
 import { UploadPanel } from "../../../components/UploadPanel";
-import { listHubs, listSources } from "../../../lib/api";
+import { listHubs, listSources, trackHubAccess } from "../../../lib/api";
 
 export default function HubDetail({ params }: { params: { hubId: string } }) {
+  const queryClient = useQueryClient();
+  const hasTrackedAccess = useRef(false);
   const { data: hubs, isLoading: hubsLoading } = useQuery({ queryKey: ["hubs"], queryFn: listHubs });
   const {
     data: sources,
@@ -24,6 +27,39 @@ export default function HubDetail({ params }: { params: { hubId: string } }) {
   const hub = hubs?.find((h) => h.id === params.hubId);
   const canUpload = hub?.role === "owner" || hub?.role === "editor";
   const roleResolved = !hubsLoading;
+
+  useEffect(() => {
+    hasTrackedAccess.current = false;
+  }, [params.hubId]);
+
+  useEffect(() => {
+    if (hub && !hasTrackedAccess.current) {
+      hasTrackedAccess.current = true;
+      const timestamp = new Date().toISOString();
+
+      const updateCache = () => {
+        queryClient.setQueryData(["hubs"], (oldHubs: typeof hubs) => {
+          if (!oldHubs) return oldHubs;
+          return oldHubs.map((h) =>
+            h.id === params.hubId
+              ? { ...h, last_accessed_at: timestamp }
+              : h
+          );
+        });
+      };
+
+      updateCache();
+
+      trackHubAccess(params.hubId)
+        .then(() => {
+          updateCache();
+        })
+        .catch((error) => {
+          console.error("Failed to track hub access:", error);
+          queryClient.invalidateQueries({ queryKey: ["hubs"] });
+        });
+    }
+  }, [hub, params.hubId, queryClient, hubs]);
 
   return (
     <main className="page grid" style={{ gap: "20px" }}>

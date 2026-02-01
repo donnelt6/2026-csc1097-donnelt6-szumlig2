@@ -39,6 +39,8 @@ class Hub(BaseModel):
     name: str
     description: Optional[str] = None
     created_at: str
+    last_accessed_at: Optional[str] = None
+    is_favourite: Optional[bool] = None
 
 
 class Source(BaseModel):

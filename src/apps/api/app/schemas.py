@@ -27,9 +27,11 @@ class Hub(BaseModel):
     name: str
     description: Optional[str] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
+    last_accessed_at: Optional[datetime] = None
     role: Optional[MembershipRole] = None
     members_count: Optional[int] = None
     sources_count: Optional[int] = None
+    is_favourite: Optional[bool] = None
 
 
 class HubCreate(StrictModel):
@@ -67,6 +69,10 @@ class HubInviteResponse(BaseModel):
 
 class HubMemberUpdate(StrictModel):
     role: MembershipRole
+
+
+class HubFavouriteToggle(StrictModel):
+    is_favourite: bool
 
 
 class PendingInvite(BaseModel):

@@ -60,16 +60,18 @@ class SupabaseStore:
     def list_hubs(self, client: Client, user_id: str) -> List[Hub]:
         response = (
             client.table("hub_members")
-            .select("role, hubs (id, owner_id, name, description, created_at, members_count, sources_count)")
+            .select("role, last_accessed_at, is_favourite, hubs (id, owner_id, name, description, created_at, members_count, sources_count)")
             .eq("user_id", user_id)
             .not_.is_("accepted_at", "null")
-            .order("created_at", desc=True, foreign_table="hubs")
+            .order("last_accessed_at", desc=True)
             .execute()
         )
         hubs: List[Hub] = []
         for row in response.data:
             hub_row = row.get("hubs") or {}
             hub_row["role"] = row.get("role")
+            hub_row["last_accessed_at"] = row.get("last_accessed_at")
+            hub_row["is_favourite"] = row.get("is_favourite")
             hubs.append(Hub(**hub_row))
         return hubs
 
@@ -80,15 +82,20 @@ class SupabaseStore:
             .execute()
         )
         row = response.data[0]
+        now = datetime.utcnow().isoformat()
         client.table("hub_members").insert(
             {
                 "hub_id": row["id"],
                 "user_id": user_id,
                 "role": MembershipRole.owner.value,
-                "accepted_at": datetime.utcnow().isoformat(),
+                "accepted_at": now,
+                "last_accessed_at": now,
+                "is_favourite": True,
             }
         ).execute()
         row["role"] = MembershipRole.owner.value
+        row["last_accessed_at"] = now
+        row["is_favourite"] = True
         return Hub(**row)
 
     def create_source(self, client: Client, payload: SourceCreate) -> Tuple[Source, str]:
@@ -297,9 +304,10 @@ class SupabaseStore:
         return HubMember(**row)
 
     def accept_invite(self, client: Client, hub_id: str, user_id: str) -> HubMember:
+        now = datetime.utcnow().isoformat()
         response = (
             client.table("hub_members")
-            .update({"accepted_at": datetime.utcnow().isoformat()})
+            .update({"accepted_at": now, "last_accessed_at": now})
             .eq("hub_id", str(hub_id))
             .eq("user_id", str(user_id))
             .is_("accepted_at", "null")
@@ -331,6 +339,28 @@ class SupabaseStore:
         )
         if not response.data:
             raise KeyError("Member not found")
+
+    def update_hub_access(self, client: Client, hub_id: str, user_id: str) -> None:
+        response = (
+            client.table("hub_members")
+            .update({"last_accessed_at": datetime.utcnow().isoformat()})
+            .eq("hub_id", str(hub_id))
+            .eq("user_id", str(user_id))
+            .execute()
+        )
+        if not response.data:
+            raise KeyError("Hub membership not found")
+
+    def toggle_hub_favourite(self, client: Client, hub_id: str, user_id: str, is_favourite: bool) -> None:
+        response = (
+            client.table("hub_members")
+            .update({"is_favourite": is_favourite})
+            .eq("hub_id", str(hub_id))
+            .eq("user_id", str(user_id))
+            .execute()
+        )
+        if not response.data:
+            raise KeyError("Hub membership not found")
 
     def chat(self, client: Client, user_id: str, payload: ChatRequest) -> ChatResponse:
         hub_id = str(payload.hub_id)
