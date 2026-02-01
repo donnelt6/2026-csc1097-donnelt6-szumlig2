@@ -2,7 +2,16 @@
 
 import { useMutation } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
-import { createSource, createSourceUploadUrl, createWebSource, deleteSource, enqueueSource, failSource, refreshSource } from "../lib/api";
+import {
+  createSource,
+  createSourceUploadUrl,
+  createWebSource,
+  createYouTubeSource,
+  deleteSource,
+  enqueueSource,
+  failSource,
+  refreshSource,
+} from "../lib/api";
 import type { Source } from "../lib/types";
 
 interface Props {
@@ -15,6 +24,9 @@ interface Props {
 export function UploadPanel({ hubId, sources, onRefresh, canUpload = true }: Props) {
   const [file, setFile] = useState<File | null>(null);
   const [url, setUrl] = useState("");
+  const [youtubeUrl, setYouTubeUrl] = useState("");
+  const [youtubeLanguage, setYouTubeLanguage] = useState("");
+  const [youtubeAutoCaptions, setYouTubeAutoCaptions] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [retryingSourceId, setRetryingSourceId] = useState<string | null>(null);
   const [isRetrying, setIsRetrying] = useState(false);
@@ -22,6 +34,7 @@ export function UploadPanel({ hubId, sources, onRefresh, canUpload = true }: Pro
   const [refreshingSourceId, setRefreshingSourceId] = useState<string | null>(null);
   const [reprocessingSourceId, setReprocessingSourceId] = useState<string | null>(null);
   const [isSubmittingUrl, setIsSubmittingUrl] = useState(false);
+  const [isSubmittingYouTube, setIsSubmittingYouTube] = useState(false);
   const [retryFiles, setRetryFiles] = useState<Record<string, File>>({});
 
   const mutation = useMutation({
@@ -136,6 +149,31 @@ export function UploadPanel({ hubId, sources, onRefresh, canUpload = true }: Pro
     }
   };
 
+  const handleSubmitYouTube = async () => {
+    if (!youtubeUrl.trim()) {
+      setStatusMessage("Enter a YouTube URL to ingest.");
+      return;
+    }
+    setIsSubmittingYouTube(true);
+    try {
+      await createYouTubeSource({
+        hub_id: hubId,
+        url: youtubeUrl.trim(),
+        language: youtubeLanguage.trim() ? youtubeLanguage.trim() : null,
+        allow_auto_captions: youtubeAutoCaptions,
+      });
+      setStatusMessage("YouTube video enqueued. Processing will start shortly.");
+      setYouTubeUrl("");
+      setYouTubeLanguage("");
+      setYouTubeAutoCaptions(false);
+      onRefresh();
+    } catch (err) {
+      setStatusMessage((err as Error).message);
+    } finally {
+      setIsSubmittingYouTube(false);
+    }
+  };
+
   const handleRefreshSource = async (sourceId: string) => {
     setRefreshingSourceId(sourceId);
     try {
@@ -171,7 +209,7 @@ export function UploadPanel({ hubId, sources, onRefresh, canUpload = true }: Pro
     <div className="card grid">
       <div>
         <h3 style={{ margin: 0 }}>Upload a source</h3>
-        <p className="muted">PDF, DOCX, TXT, Markdown, or a web URL. Progress updates appear below.</p>
+        <p className="muted">PDF, DOCX, TXT, Markdown, web URLs, or YouTube videos. Progress updates appear below.</p>
       </div>
       <label>
         <input
@@ -196,6 +234,42 @@ export function UploadPanel({ hubId, sources, onRefresh, canUpload = true }: Pro
       <button className="button" onClick={handleSubmitUrl} disabled={!canUpload || isSubmittingUrl || !url.trim()}>
         {isSubmittingUrl ? "Adding..." : "Add URL"}
       </button>
+      <label>
+        <input
+          type="url"
+          placeholder="https://www.youtube.com/watch?v=..."
+          value={youtubeUrl}
+          onChange={(e) => setYouTubeUrl(e.target.value)}
+          disabled={!canUpload}
+        />
+      </label>
+      <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+        <label style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+          <input
+            type="text"
+            placeholder="Language (optional, e.g. en)"
+            value={youtubeLanguage}
+            onChange={(e) => setYouTubeLanguage(e.target.value)}
+            disabled={!canUpload}
+          />
+        </label>
+        <label style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+          <input
+            type="checkbox"
+            checked={youtubeAutoCaptions}
+            onChange={(e) => setYouTubeAutoCaptions(e.target.checked)}
+            disabled={!canUpload}
+          />
+          Allow auto-captions
+        </label>
+      </div>
+      <button
+        className="button"
+        onClick={handleSubmitYouTube}
+        disabled={!canUpload || isSubmittingYouTube || !youtubeUrl.trim()}
+      >
+        {isSubmittingYouTube ? "Adding..." : "Add YouTube"}
+      </button>
       {!canUpload && <p className="muted">You only have view access. Ask the hub owner to grant edit permissions.</p>}
       {statusMessage && <p className="muted">{statusMessage}</p>}
       <div className="grid" style={{ gap: "10px" }}>
@@ -204,13 +278,24 @@ export function UploadPanel({ hubId, sources, onRefresh, canUpload = true }: Pro
             source.type === "web" &&
             source.status === "complete" &&
             Boolean((source.ingestion_metadata as { crawl_at?: string } | null)?.crawl_at);
+          const youtubeSnapshotReady =
+            source.type === "youtube" &&
+            source.status === "complete" &&
+            Boolean((source.ingestion_metadata as { transcript_fetched_at?: string } | null)?.transcript_fetched_at);
+          const isRemoteSource = source.type === "web" || source.type === "youtube";
+          const snapshotReady = webSnapshotReady || youtubeSnapshotReady;
           return (
             <div key={source.id} className="card" style={{ borderColor: "#1e2535" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <div>
                 <strong>{source.original_name}</strong>
                 <p className="muted">
-                  {source.type === "web" ? "Web URL" : "File"} - {formatIrelandDateTime(new Date(source.created_at))}
+                  {source.type === "web"
+                    ? "Web URL"
+                    : source.type === "youtube"
+                      ? "YouTube"
+                      : "File"}{" "}
+                  - {formatIrelandDateTime(new Date(source.created_at))}
                 </p>
               </div>
               <StatusPill status={source.status} />
@@ -218,7 +303,7 @@ export function UploadPanel({ hubId, sources, onRefresh, canUpload = true }: Pro
             {source.failure_reason && <p className="muted">Error: {source.failure_reason}</p>}
             {source.status === "failed" && (
               <div style={{ display: "flex", gap: "8px", marginTop: "8px", flexWrap: "wrap" }}>
-                {source.type === "web" ? (
+                {isRemoteSource ? (
                   <button
                     className="button"
                     type="button"
@@ -247,7 +332,7 @@ export function UploadPanel({ hubId, sources, onRefresh, canUpload = true }: Pro
                 </button>
               </div>
             )}
-            {source.type === "web" && source.status !== "failed" && (
+            {isRemoteSource && source.status !== "failed" && (
               <div style={{ display: "flex", gap: "8px", marginTop: "8px", flexWrap: "wrap" }}>
                 <button
                   className="button"
@@ -256,7 +341,7 @@ export function UploadPanel({ hubId, sources, onRefresh, canUpload = true }: Pro
                   disabled={
                     reprocessingSourceId === source.id ||
                     refreshingSourceId === source.id ||
-                    !webSnapshotReady
+                    !snapshotReady
                   }
                 >
                   {reprocessingSourceId === source.id ? "Reprocessing..." : "Reprocess"}
@@ -271,10 +356,10 @@ export function UploadPanel({ hubId, sources, onRefresh, canUpload = true }: Pro
                 </button>
               </div>
             )}
-            {source.type === "web" && source.status !== "failed" && !webSnapshotReady && (
-              <p className="muted">Reprocess is available after the first successful crawl.</p>
+            {isRemoteSource && source.status !== "failed" && !snapshotReady && (
+              <p className="muted">Reprocess is available after the first successful ingest.</p>
             )}
-            {source.status === "failed" && source.type !== "web" && !retryFiles[source.id] && (
+            {source.status === "failed" && !isRemoteSource && !retryFiles[source.id] && (
               <p className="muted">Retry is available until you refresh this page.</p>
             )}
             </div>

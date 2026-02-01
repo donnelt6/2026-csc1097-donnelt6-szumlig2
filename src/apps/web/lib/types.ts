@@ -17,7 +17,7 @@ export interface Hub {
 export interface Source {
   id: string;
   hub_id: string;
-  type: "file" | "web";
+  type: "file" | "web" | "youtube";
   original_name: string;
   storage_path?: string | null;
   status: "queued" | "processing" | "failed" | "complete";
