@@ -225,6 +225,7 @@ def test_create_youtube_source_success(client, monkeypatch) -> None:
         status=SourceStatus.queued,
         storage_path="11111111-1111-1111-1111-111111111111/src-yt-1/youtube.md",
         type=SourceType.youtube,
+        ingestion_metadata={"video_id": "abc123def45"},
     )
     monkeypatch.setattr(store_module.store, "create_youtube_source", lambda _client, payload: source)
 
@@ -248,6 +249,7 @@ def test_create_youtube_source_success(client, monkeypatch) -> None:
     assert resp.status_code == 201
     assert sent["name"] == "ingest_youtube_source"
     assert sent["args"][0] == "src-yt-1"
+    assert sent["args"][-1] == "abc123def45"
 
 
 def test_create_youtube_source_invalid_video_id(client, monkeypatch) -> None:
@@ -262,7 +264,7 @@ def test_create_youtube_source_invalid_video_id(client, monkeypatch) -> None:
 
     resp = client.post(
         "/sources/youtube",
-        json={"hub_id": "11111111-1111-1111-1111-111111111111", "url": "https://example.com"},
+        json={"hub_id": "11111111-1111-1111-1111-111111111111", "url": "https://www.youtube.com/watch?v=bad"},
     )
     assert resp.status_code == 400
 
@@ -272,6 +274,15 @@ def test_create_youtube_source_requires_http_url(client) -> None:
     resp = client.post(
         "/sources/youtube",
         json={"hub_id": "11111111-1111-1111-1111-111111111111", "url": "youtube.com/watch?v=abc"},
+    )
+    assert resp.status_code == 422
+
+
+def test_create_youtube_source_requires_youtube_domain(client) -> None:
+    # Non-YouTube domains should fail validation.
+    resp = client.post(
+        "/sources/youtube",
+        json={"hub_id": "11111111-1111-1111-1111-111111111111", "url": "https://example.com/watch?v=abc"},
     )
     assert resp.status_code == 422
 
@@ -334,6 +345,7 @@ def test_refresh_youtube_source_success(client, monkeypatch) -> None:
                 "url": "https://www.youtube.com/watch?v=abc123def45",
                 "language": "en",
                 "allow_auto_captions": True,
+                "video_id": "abc123def45",
             },
         ),
     )
@@ -350,3 +362,4 @@ def test_refresh_youtube_source_success(client, monkeypatch) -> None:
     assert resp.status_code == 200
     assert sent["name"] == "ingest_youtube_source"
     assert sent["args"][0] == source_id
+    assert sent["args"][-1] == "abc123def45"

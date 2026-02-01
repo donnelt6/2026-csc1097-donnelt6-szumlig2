@@ -88,9 +88,20 @@ def create_youtube_source(
 
     if not source.storage_path:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Source storage path missing")
+    video_id = None
+    if isinstance(source.ingestion_metadata, dict):
+        video_id = source.ingestion_metadata.get("video_id")
     celery_app.send_task(
         "ingest_youtube_source",
-        args=[source.id, source.hub_id, payload.url, source.storage_path, payload.language, payload.allow_auto_captions],
+        args=[
+            source.id,
+            source.hub_id,
+            payload.url,
+            source.storage_path,
+            payload.language,
+            payload.allow_auto_captions,
+            video_id,
+        ],
     )
     return source
 
@@ -227,6 +238,7 @@ def refresh_web_source(
                 source.storage_path,
                 refresh_info.get("language"),
                 refresh_info.get("allow_auto_captions"),
+                refresh_info.get("video_id"),
             ],
         )
     else:

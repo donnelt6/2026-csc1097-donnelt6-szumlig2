@@ -231,16 +231,17 @@ class SupabaseStore:
     def refresh_source(self, client: Client, source_id: str) -> tuple[Source, dict]:
         source = self.get_source(client, source_id)
         if source.type == SourceType.web:
-            refreshed, url = self.refresh_web_source(client, source_id)
+            refreshed, url = self.refresh_web_source(client, source_id, source)
             return refreshed, {"type": SourceType.web.value, "url": url}
         if source.type == SourceType.youtube:
-            refreshed, info = self.refresh_youtube_source(client, source_id)
+            refreshed, info = self.refresh_youtube_source(client, source_id, source)
             info["type"] = SourceType.youtube.value
             return refreshed, info
         raise ValueError("Source type does not support refresh")
 
-    def refresh_web_source(self, client: Client, source_id: str) -> tuple[Source, str]:
-        source = self.get_source(client, source_id)
+    def refresh_web_source(self, client: Client, source_id: str, source: Optional[Source] = None) -> tuple[Source, str]:
+        if source is None:
+            source = self.get_source(client, source_id)
         if source.type != SourceType.web:
             raise ValueError("Source is not a web URL")
         url = None
@@ -269,8 +270,9 @@ class SupabaseStore:
             raise KeyError("Source not found")
         return Source(**response.data[0]), url
 
-    def refresh_youtube_source(self, client: Client, source_id: str) -> tuple[Source, dict]:
-        source = self.get_source(client, source_id)
+    def refresh_youtube_source(self, client: Client, source_id: str, source: Optional[Source] = None) -> tuple[Source, dict]:
+        if source is None:
+            source = self.get_source(client, source_id)
         if source.type != SourceType.youtube:
             raise ValueError("Source is not a YouTube URL")
         metadata = source.ingestion_metadata if isinstance(source.ingestion_metadata, dict) else {}

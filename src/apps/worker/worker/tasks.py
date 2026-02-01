@@ -127,6 +127,7 @@ def ingest_youtube_source(
     storage_path: str,
     language: Optional[str] = None,
     allow_auto_captions: Optional[bool] = None,
+    video_id: Optional[str] = None,
 ) -> dict:
     """
     YouTube ingestion flow:
@@ -144,6 +145,8 @@ def ingest_youtube_source(
             language=language,
             allow_auto_captions=allow_auto_captions,
         )
+        if video_id:
+            info["video_id"] = video_id
         text = _normalize_text(transcript)
         if not text:
             raise ValueError("No transcript text extracted from YouTube captions")

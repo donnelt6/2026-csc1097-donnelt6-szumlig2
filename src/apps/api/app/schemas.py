@@ -1,6 +1,7 @@
 from datetime import datetime
 from enum import Enum
 from typing import List, Optional
+from urllib.parse import urlparse
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
@@ -130,7 +131,15 @@ class WebSourceCreate(StrictModel):
         lower = value.strip()
         if not lower.startswith(("http://", "https://")):
             raise ValueError("URL must start with http:// or https://")
-        return lower
+        parsed = urlparse(lower)
+        host = (parsed.hostname or "").lower()
+        if host.startswith("www."):
+            host = host[4:]
+        if not host:
+            raise ValueError("URL must include a host")
+        if host == "youtu.be" or host.endswith("youtube.com") or host.endswith("youtube-nocookie.com"):
+            return lower
+        raise ValueError("URL must be a YouTube domain")
 
 
 class YouTubeSourceCreate(StrictModel):
