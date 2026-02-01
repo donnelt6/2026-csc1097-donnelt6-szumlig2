@@ -213,6 +213,69 @@ def test_create_web_source_success(client, monkeypatch) -> None:
     assert sent["args"][0] == "src-web-1"
 
 
+def test_create_youtube_source_success(client, monkeypatch) -> None:
+    # Mocks YouTube source creation; expect ingest_youtube_source task enqueued.
+    rl = rate_limit_module.RateLimitResult(allowed=True, remaining=1, reset_in_seconds=60)
+    monkeypatch.setitem(app.dependency_overrides, get_rate_limiter, lambda: FixedRateLimiter(rl))
+
+    source = Source(
+        id="src-yt-1",
+        hub_id="11111111-1111-1111-1111-111111111111",
+        original_name="youtube.com/abc123def45",
+        status=SourceStatus.queued,
+        storage_path="11111111-1111-1111-1111-111111111111/src-yt-1/youtube.md",
+        type=SourceType.youtube,
+    )
+    monkeypatch.setattr(store_module.store, "create_youtube_source", lambda _client, payload: source)
+
+    sent = {}
+
+    def fake_send_task(name, args):
+        sent["name"] = name
+        sent["args"] = args
+
+    monkeypatch.setattr(sources_router.celery_app, "send_task", fake_send_task)
+
+    resp = client.post(
+        "/sources/youtube",
+        json={
+            "hub_id": "11111111-1111-1111-1111-111111111111",
+            "url": "https://www.youtube.com/watch?v=abc123def45",
+            "language": "en",
+            "allow_auto_captions": False,
+        },
+    )
+    assert resp.status_code == 201
+    assert sent["name"] == "ingest_youtube_source"
+    assert sent["args"][0] == "src-yt-1"
+
+
+def test_create_youtube_source_invalid_video_id(client, monkeypatch) -> None:
+    # Mocks failure to extract video ID; expect 400 response.
+    rl = rate_limit_module.RateLimitResult(allowed=True, remaining=1, reset_in_seconds=60)
+    monkeypatch.setitem(app.dependency_overrides, get_rate_limiter, lambda: FixedRateLimiter(rl))
+
+    def raise_invalid(_client, _payload):
+        raise ValueError("Unable to extract YouTube video ID")
+
+    monkeypatch.setattr(store_module.store, "create_youtube_source", raise_invalid)
+
+    resp = client.post(
+        "/sources/youtube",
+        json={"hub_id": "11111111-1111-1111-1111-111111111111", "url": "https://example.com"},
+    )
+    assert resp.status_code == 400
+
+
+def test_create_youtube_source_requires_http_url(client) -> None:
+    # Missing scheme should fail validation.
+    resp = client.post(
+        "/sources/youtube",
+        json={"hub_id": "11111111-1111-1111-1111-111111111111", "url": "youtube.com/watch?v=abc"},
+    )
+    assert resp.status_code == 422
+
+
 def test_refresh_web_source_success(client, monkeypatch) -> None:
     # Mocks refresh; expect ingest_web_source task enqueued.
     rl = rate_limit_module.RateLimitResult(allowed=True, remaining=1, reset_in_seconds=60)
@@ -229,8 +292,8 @@ def test_refresh_web_source_success(client, monkeypatch) -> None:
     )
     monkeypatch.setattr(
         store_module.store,
-        "refresh_web_source",
-        lambda _client, source_id: (source, "https://example.com/docs"),
+        "refresh_source",
+        lambda _client, source_id: (source, {"type": "web", "url": "https://example.com/docs"}),
     )
 
     sent = {}
@@ -244,4 +307,46 @@ def test_refresh_web_source_success(client, monkeypatch) -> None:
     resp = client.post(f"/sources/{source_id}/refresh")
     assert resp.status_code == 200
     assert sent["name"] == "ingest_web_source"
+    assert sent["args"][0] == source_id
+
+
+def test_refresh_youtube_source_success(client, monkeypatch) -> None:
+    # Mocks refresh; expect ingest_youtube_source task enqueued.
+    rl = rate_limit_module.RateLimitResult(allowed=True, remaining=1, reset_in_seconds=60)
+    monkeypatch.setitem(app.dependency_overrides, get_rate_limiter, lambda: FixedRateLimiter(rl))
+
+    source_id = "33333333-3333-3333-3333-333333333333"
+    source = Source(
+        id=source_id,
+        hub_id="11111111-1111-1111-1111-111111111111",
+        original_name="youtube.com/abc123def45",
+        status=SourceStatus.queued,
+        storage_path=f"11111111-1111-1111-1111-111111111111/{source_id}/youtube.md",
+        type=SourceType.youtube,
+    )
+    monkeypatch.setattr(
+        store_module.store,
+        "refresh_source",
+        lambda _client, source_id: (
+            source,
+            {
+                "type": "youtube",
+                "url": "https://www.youtube.com/watch?v=abc123def45",
+                "language": "en",
+                "allow_auto_captions": True,
+            },
+        ),
+    )
+
+    sent = {}
+
+    def fake_send_task(name, args):
+        sent["name"] = name
+        sent["args"] = args
+
+    monkeypatch.setattr(sources_router.celery_app, "send_task", fake_send_task)
+
+    resp = client.post(f"/sources/{source_id}/refresh")
+    assert resp.status_code == 200
+    assert sent["name"] == "ingest_youtube_source"
     assert sent["args"][0] == source_id

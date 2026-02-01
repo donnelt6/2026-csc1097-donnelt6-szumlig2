@@ -4,7 +4,7 @@ import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { UploadPanel } from "../../components/UploadPanel";
-import { createSource, createSourceUploadUrl, createWebSource, enqueueSource, failSource } from "../../lib/api";
+import { createSource, createSourceUploadUrl, createWebSource, createYouTubeSource, enqueueSource, failSource } from "../../lib/api";
 import type { Source } from "../../lib/types";
 import { renderWithQueryClient } from "../test-utils";
 
@@ -12,6 +12,7 @@ vi.mock("../../lib/api", () => ({
   createSource: vi.fn(),
   createSourceUploadUrl: vi.fn(),
   createWebSource: vi.fn(),
+  createYouTubeSource: vi.fn(),
   deleteSource: vi.fn(),
   enqueueSource: vi.fn(),
   failSource: vi.fn(),
@@ -216,6 +217,38 @@ describe("UploadPanel", () => {
     expect(await screen.findByText(/URL enqueued/i)).toBeInTheDocument();
   });
 
+  it("submits a YouTube URL for ingestion", async () => {
+    const onRefresh = vi.fn();
+    vi.mocked(createYouTubeSource).mockResolvedValue({
+      id: "src-yt-1",
+      hub_id: "hub-1",
+      type: "youtube",
+      original_name: "youtube.com/abc123def45",
+      status: "queued",
+      created_at: "2025-01-01T00:00:00Z",
+    });
+
+    renderWithQueryClient(<UploadPanel hubId="hub-1" sources={[]} onRefresh={onRefresh} />);
+
+    const user = userEvent.setup();
+    await user.type(
+      screen.getByPlaceholderText("https://www.youtube.com/watch?v=..."),
+      "https://www.youtube.com/watch?v=abc123def45"
+    );
+    await user.click(screen.getByRole("button", { name: "Add YouTube" }));
+
+    await waitFor(() =>
+      expect(createYouTubeSource).toHaveBeenCalledWith({
+        hub_id: "hub-1",
+        url: "https://www.youtube.com/watch?v=abc123def45",
+        language: null,
+        allow_auto_captions: false,
+      })
+    );
+    expect(onRefresh).toHaveBeenCalled();
+    expect(await screen.findByText(/YouTube video enqueued/i)).toBeInTheDocument();
+  });
+
   it("disables reprocess until a web crawl succeeds", () => {
     const webSource: Source = {
       id: "src-web-2",
@@ -231,6 +264,6 @@ describe("UploadPanel", () => {
 
     const reprocess = screen.getByRole("button", { name: "Reprocess" });
     expect(reprocess).toBeDisabled();
-    expect(screen.getByText(/first successful crawl/i)).toBeInTheDocument();
+    expect(screen.getByText(/first successful ingest/i)).toBeInTheDocument();
   });
 });
