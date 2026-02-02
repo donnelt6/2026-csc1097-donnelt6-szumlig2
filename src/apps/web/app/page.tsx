@@ -1,11 +1,15 @@
 'use client';
 
-import { useEffect, useRef, useState } from "react";
-import { useIsFetching, useQueryClient } from "@tanstack/react-query";
+import { useState, useRef, useEffect } from "react";
+import { useIsFetching, useQueryClient, useMutation } from "@tanstack/react-query";
+import { PlusIcon } from "@heroicons/react/24/outline";
+import { PageHero } from "../components/PageHero";
 import { HubsList } from "../components/HubsList";
+import { HubsToolbar, type HubsFilterState } from "../components/HubsToolbar";
+import { createHub } from "../lib/api";
 
 const MIN_HUBS_LOADING_MS = 1500;
-const LOADING_FADE_MS = 0; // adjust as necessary - for now , no fade. gives appearance of quickerloading.
+const LOADING_FADE_MS = 0;
 
 export default function HomePage() {
   const queryClient = useQueryClient();
@@ -13,11 +17,44 @@ export default function HomePage() {
   const [minDelayElapsed, setMinDelayElapsed] = useState(true);
   const delayTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const exitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [navHeight, setNavHeight] = useState(0);
   const hubsLoaded = queryClient.getQueryData(["hubs"]) !== undefined;
   const isInitialHubsLoading = hubsFetching > 0 && !hubsLoaded;
   const [overlayRendered, setOverlayRendered] = useState(false);
   const [overlayVisible, setOverlayVisible] = useState(false);
+
+  const [searchQuery, setSearchQuery] = useState("");
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const createMenuRef = useRef<HTMLDetailsElement>(null);
+  const [hubCount, setHubCount] = useState(0);
+  const [filters, setFilters] = useState<HubsFilterState>({
+    sortField: "accessed",
+    sortDirection: "desc",
+    selectedRoles: new Set(),
+    minMembers: "",
+    maxMembers: "",
+    minSources: "",
+    maxSources: "",
+    showOnlyFavourites: false,
+  });
+
+  const createMutation = useMutation({
+    mutationFn: (payload: { name: string; description?: string }) => createHub(payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["hubs"] });
+      setName("");
+      setDescription("");
+      if (createMenuRef.current) {
+        createMenuRef.current.open = false;
+      }
+    },
+  });
+
+  const onSubmit = (evt: React.FormEvent) => {
+    evt.preventDefault();
+    if (!name.trim()) return;
+    createMutation.mutate({ name, description });
+  };
 
   useEffect(() => {
     if (isInitialHubsLoading) {
@@ -46,20 +83,6 @@ export default function HomePage() {
         exitTimerRef.current = null;
       }
     };
-  }, []);
-
-  useEffect(() => {
-    const nav = document.querySelector<HTMLElement>(".site-nav");
-    if (!nav) return;
-    const update = () => setNavHeight(nav.getBoundingClientRect().height);
-    update();
-    if (typeof ResizeObserver !== "undefined") {
-      const observer = new ResizeObserver(update);
-      observer.observe(nav);
-      return () => observer.disconnect();
-    }
-    window.addEventListener("resize", update);
-    return () => window.removeEventListener("resize", update);
   }, []);
 
   useEffect(() => {
@@ -97,15 +120,24 @@ export default function HomePage() {
     }, LOADING_FADE_MS);
   }, [showLoadingScreen, overlayRendered]);
 
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (createMenuRef.current && !createMenuRef.current.contains(event.target as Node)) {
+        createMenuRef.current.open = false;
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
   return (
-    <main className="page grid" style={{ gap: "24px", position: "relative" }}>
+    <>
       {overlayRendered && (
         <div
           className={`loading-overlay${overlayVisible ? " is-visible" : ""}`}
           role="status"
           aria-live="polite"
           aria-busy="true"
-          style={{ top: navHeight }}
         >
           <div className="loading-card">
             <span className="loading-spinner" aria-hidden="true" />
@@ -113,14 +145,62 @@ export default function HomePage() {
           </div>
         </div>
       )}
-      <header className="grid card">
-        <h1 style={{ margin: 0 }}>Caddie</h1>
-        <p className="muted">
-          Upload your onboarding docs, process them into embeddings, and chat with cited answers. Start by creating a hub,
-          then upload a file and ask a question.
-        </p>
-      </header>
-      <HubsList />
-    </main>
+
+      <PageHero
+        title="Your Hubs"
+        subtitle="Upload your onboarding docs, process them into embeddings, and chat with cited answers."
+        searchValue={searchQuery}
+        onSearchChange={setSearchQuery}
+        searchPlaceholder="Search hubs..."
+        toolbar={
+          <HubsToolbar
+            filters={filters}
+            onFiltersChange={setFilters}
+            hubCount={hubCount}
+          />
+        }
+        action={
+          <details className="create-hub-menu" ref={createMenuRef}>
+            <summary className="create-hub-trigger">
+              <PlusIcon style={{ width: 18, height: 18 }} />
+              Create hub
+            </summary>
+            <div className="create-hub-dropdown">
+              <form onSubmit={onSubmit} className="grid">
+                <label>
+                  <span className="muted">Hub name</span>
+                  <input
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="e.g. Onboarding hub"
+                  />
+                </label>
+                <label>
+                  <span className="muted">Description (optional)</span>
+                  <input
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    placeholder="What is this hub for?"
+                  />
+                </label>
+                <button className="button button--primary" type="submit" disabled={createMutation.isPending}>
+                  {createMutation.isPending ? "Creating..." : "Create hub"}
+                </button>
+              </form>
+            </div>
+          </details>
+        }
+      />
+
+      <main className="page-content">
+        <div className="content-inner">
+          <HubsList
+            searchQuery={searchQuery}
+            filters={filters}
+            onHubCountChange={setHubCount}
+          />
+        </div>
+      </main>
+    </>
   );
 }
