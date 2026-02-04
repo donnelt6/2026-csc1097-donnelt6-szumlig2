@@ -2171,7 +2171,34 @@ textarea {
 .slide-panel-body {
   flex: 1;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 16px;
+}
+
+.slide-panel-body * {
+  min-width: 0;
+}
+
+.slide-panel-body .grid {
+  max-width: 100%;
+}
+
+.slide-panel-body strong {
+  overflow-wrap: anywhere;
+}
+
+.slide-panel-body > .card {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  border-radius: 0;
+  padding: 0;
+}
+
+.slide-panel-body > .card:hover {
+  transform: none;
+  border-color: transparent;
+  box-shadow: none;
 }
 
 .slide-panel-body::-webkit-scrollbar {
