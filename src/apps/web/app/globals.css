@@ -25,10 +25,10 @@
 [data-theme="dark"] {
   color-scheme: dark;
 
-  --bg: #0f0f1a;
-  --bg-secondary: #1a1a2e;
-  --card: #1e1e32;
-  --card-hover: #252540;
+  --bg: #0a0a0a;
+  --bg-secondary: #141414;
+  --card: #1a1a1a;
+  --card-hover: #222222;
 
   --gradient-start: #6366f1;
   --gradient-mid: #8b5cf6;
@@ -42,12 +42,12 @@
   --text-secondary: #cbd5e1;
   --muted: #64748b;
 
-  --border: rgba(139, 92, 246, 0.15);
-  --border-hover: rgba(139, 92, 246, 0.3);
+  --border: rgba(255, 255, 255, 0.1);
+  --border-hover: rgba(255, 255, 255, 0.18);
   --border-focus: rgba(139, 92, 246, 0.5);
 
-  --input-bg: #0d0d1a;
-  --input-border: rgba(139, 92, 246, 0.2);
+  --input-bg: #0d0d0d;
+  --input-border: rgba(255, 255, 255, 0.12);
 
   --hero-search-bg: rgba(255, 255, 255, 0.95);
   --hero-search-text: #1e1e32;
@@ -146,17 +146,14 @@ body {
   overflow-x: hidden;
 }
 
-/* Purple glow effect in background */
+/* Subtle glow effect in background */
 body::before {
   content: '';
   position: fixed;
   inset: 0;
   pointer-events: none;
   z-index: 0;
-  background:
-    radial-gradient(circle at 20% 30%, rgba(139, 92, 246, 0.15), transparent 40%),
-    radial-gradient(circle at 80% 20%, rgba(99, 102, 241, 0.1), transparent 35%),
-    radial-gradient(circle at 70% 70%, rgba(168, 85, 247, 0.12), transparent 40%);
+  background: none;
 }
 
 [data-theme="light"] body::before {
@@ -518,7 +515,7 @@ a {
   left: var(--sidebar-width);
   right: 0;
   height: var(--nav-height);
-  background: rgba(15, 15, 26, 0.85);
+  background: var(--bg-secondary);
   backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--border);
   z-index: 15;
