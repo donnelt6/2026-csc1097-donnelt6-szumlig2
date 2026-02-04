@@ -81,7 +81,7 @@ export function MembersPanel({ hubId, role }: Props) {
                     }
                     disabled={roleMutation.isPending}
                     style={{
-                      background: "#0f1726",
+                      background: "var(--input-bg)",
                       color: "var(--text)",
                       border: "1px solid var(--border)",
                       borderRadius: "8px",
@@ -129,7 +129,7 @@ export function MembersPanel({ hubId, role }: Props) {
               value={inviteRole}
               onChange={(event) => setInviteRole(event.target.value as MembershipRole)}
               style={{
-                background: "#0f1726",
+                background: "var(--input-bg)",
                 color: "var(--text)",
                 border: "1px solid var(--border)",
                 borderRadius: "8px",

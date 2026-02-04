@@ -54,7 +54,7 @@ export function ChatPanel({ hubId, selectedSourceIds, hasSelectableSources }: Pr
               value={scope}
               onChange={(e) => setScope(e.target.value as "hub" | "global")}
               style={{
-                background: "#0f1726",
+                background: "var(--input-bg)",
                 color: "var(--text)",
                 border: "1px solid var(--border)",
                 borderRadius: "8px",
@@ -70,7 +70,7 @@ export function ChatPanel({ hubId, selectedSourceIds, hasSelectableSources }: Pr
             onChange={(e) => setQuestion(e.target.value)}
             placeholder="What are the onboarding steps for engineering?"
           />
-          <button className="button" type="submit" disabled={mutation.isPending || !canAsk}>
+          <button className="button button--primary" type="submit" disabled={mutation.isPending || !canAsk}>
             {mutation.isPending ? "Thinking..." : "Ask"}
           </button>
           {!canAsk && (
@@ -79,7 +79,7 @@ export function ChatPanel({ hubId, selectedSourceIds, hasSelectableSources }: Pr
         </form>
         {mutation.error && <p className="muted">Error: {(mutation.error as Error).message}</p>}
         {response && (
-          <div className="card" style={{ borderColor: "#1e2535" }}>
+          <div className="card" style={{ borderColor: "var(--border)" }}>
             <p>{response.answer}</p>
             {response.citations.length === 0 && (
               <p className="muted">No sources matched this question. Try rephrasing or upload more documents.</p>
@@ -94,11 +94,11 @@ export function ChatPanel({ hubId, selectedSourceIds, hasSelectableSources }: Pr
                       key={`${citation.source_id}-${citation.chunk_index}`}
                       onClick={() => setActiveCitation(citation)}
                       style={{
-                        border: "1px solid #243145",
+                        border: "1px solid var(--input-border)",
                         borderRadius: "10px",
                         padding: "6px 10px",
                         fontSize: "0.9rem",
-                        background: "#0f1726",
+                        background: "var(--input-bg)",
                         color: "var(--text)",
                         cursor: "pointer",
                       }}

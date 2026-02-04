@@ -1527,9 +1527,15 @@ a {
 }
 
 .button:disabled {
-  opacity: 0.6;
+  opacity: 0.5;
   cursor: not-allowed;
   transform: none !important;
+}
+
+.button--primary:disabled {
+  background: var(--muted);
+  box-shadow: none;
+  opacity: 1;
 }
 
 .button--primary {
@@ -1548,14 +1554,15 @@ a {
 }
 
 .button--secondary {
-  background: var(--card);
-  border: 1px solid var(--border);
-  color: var(--text);
+  background: var(--input-bg);
+  border: 1px solid var(--input-border);
+  color: var(--text-secondary);
 }
 
 .button--secondary:hover:not(:disabled) {
   background: var(--card-hover);
   border-color: var(--border-hover);
+  color: var(--text);
   transform: translateY(-1px);
 }
 

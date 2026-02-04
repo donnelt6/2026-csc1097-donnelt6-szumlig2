@@ -1,7 +1,7 @@
 'use client';
 
 import { useMutation } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   createSource,
   createSourceUploadUrl,
@@ -35,6 +35,7 @@ export function UploadPanel({
   onSelectAllSources = () => undefined,
   onClearSourceSelection = () => undefined,
 }: Props) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
   const [url, setUrl] = useState("");
   const [youtubeUrl, setYouTubeUrl] = useState("");
@@ -243,15 +244,26 @@ export function UploadPanel({
         <h3 style={{ margin: 0 }}>Upload a source</h3>
         <p className="muted">PDF, DOCX, TXT, Markdown, web URLs, or YouTube videos. Progress updates appear below.</p>
       </div>
-      <label>
-        <input
-          type="file"
-          onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-          accept=".pdf,.docx,.txt,.md"
+      <input
+        ref={fileInputRef}
+        type="file"
+        onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+        accept=".pdf,.docx,.txt,.md"
+        disabled={!canUpload}
+        style={{ display: "none" }}
+      />
+      <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+        <button
+          className="button--secondary button"
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
           disabled={!canUpload}
-        />
-      </label>
-      <button className="button" onClick={() => mutation.mutate()} disabled={!canUpload || mutation.isPending || !file}>
+        >
+          Choose file
+        </button>
+        <span className="muted">{file ? file.name : "No file chosen"}</span>
+      </div>
+      <button className="button button--primary" onClick={() => mutation.mutate()} disabled={!canUpload || mutation.isPending || !file}>
         {mutation.isPending ? "Uploading..." : "Upload"}
       </button>
       <label>
@@ -263,7 +275,7 @@ export function UploadPanel({
           disabled={!canUpload}
         />
       </label>
-      <button className="button" onClick={handleSubmitUrl} disabled={!canUpload || isSubmittingUrl || !url.trim()}>
+      <button className="button button--primary" onClick={handleSubmitUrl} disabled={!canUpload || isSubmittingUrl || !url.trim()}>
         {isSubmittingUrl ? "Adding..." : "Add URL"}
       </button>
       <label>
@@ -285,18 +297,18 @@ export function UploadPanel({
             disabled={!canUpload}
           />
         </label>
-        <label style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+        <label className="checkbox-label">
           <input
             type="checkbox"
             checked={youtubeAutoCaptions}
             onChange={(e) => setYouTubeAutoCaptions(e.target.checked)}
             disabled={!canUpload}
           />
-          Allow auto-captions
+          <span>Allow auto-captions</span>
         </label>
       </div>
       <button
-        className="button"
+        className="button button--primary"
         onClick={handleSubmitYouTube}
         disabled={!canUpload || isSubmittingYouTube || !youtubeUrl.trim()}
       >
@@ -352,7 +364,7 @@ export function UploadPanel({
           return (
             <div key={source.id} className="card" style={{ borderColor: "#1e2535" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px" }}>
-                <div>
+                <div style={{ minWidth: 0 }}>
                   <label style={{ display: "flex", gap: "10px", alignItems: "center" }}>
                     <input
                       type="checkbox"
@@ -362,7 +374,7 @@ export function UploadPanel({
                       aria-label={`Use ${source.original_name} for answers`}
                       title={isSelectable ? "Use this source for answers." : "Available after processing."}
                     />
-                    <strong>{source.original_name}</strong>
+                    <strong style={{ wordBreak: "break-word" }}>{source.original_name}</strong>
                   </label>
                   <p className="muted">
                     {source.type === "web"
@@ -489,6 +501,8 @@ function StatusPill({ status }: { status: Source["status"] }) {
         fontSize: "0.8rem",
         background: colors[status],
         color: "#0b1221",
+        flexShrink: 0,
+        whiteSpace: "nowrap",
       }}
     >
       {status.toUpperCase()}
