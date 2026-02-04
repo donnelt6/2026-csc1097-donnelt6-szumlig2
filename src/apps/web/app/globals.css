@@ -2055,6 +2055,17 @@ textarea {
   letter-spacing: 0.08em;
 }
 
+/* Hub Nav */
+
+.hub-nav-button {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-family: var(--font-sans);
+  width: 100%;
+  text-align: left;
+}
+
 /* Slide Panel */
 
 .slide-panel-backdrop {

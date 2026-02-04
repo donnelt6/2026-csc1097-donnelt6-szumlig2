@@ -10,6 +10,7 @@ import {
   XMarkIcon,
 } from '@heroicons/react/24/outline';
 import { ThemeToggle } from './ThemeToggle';
+import { HubPanels } from './HubPanels';
 
 type SidebarState = 'open' | 'collapsed' | 'hidden';
 
@@ -110,6 +111,7 @@ export function Sidebar({ state, onStateChange, mobileOpen, onMobileClose }: Sid
             </Link>
           </li>
         </ul>
+        <HubPanels />
       </nav>
 
       <div className="sidebar-footer">
