@@ -1,7 +1,7 @@
 'use client';
 
 import { useMutation } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   createSource,
   createSourceUploadUrl,
@@ -36,6 +36,12 @@ export function UploadPanel({ hubId, sources, onRefresh, canUpload = true }: Pro
   const [isSubmittingUrl, setIsSubmittingUrl] = useState(false);
   const [isSubmittingYouTube, setIsSubmittingYouTube] = useState(false);
   const [retryFiles, setRetryFiles] = useState<Record<string, File>>({});
+
+  useEffect(() => {
+    if (!statusMessage) return;
+    const timeout = window.setTimeout(() => setStatusMessage(null), 5000);
+    return () => window.clearTimeout(timeout);
+  }, [statusMessage]);
 
   const mutation = useMutation({
     mutationFn: async () => {
@@ -114,6 +120,12 @@ export function UploadPanel({ hubId, sources, onRefresh, canUpload = true }: Pro
   };
 
   const handleDeleteSource = async (sourceId: string) => {
+    if (typeof window !== "undefined") {
+      const confirmed = window.confirm(
+        "Delete this source permanently? This removes the source and its processed chunks. This cannot be undone."
+      );
+      if (!confirmed) return;
+    }
     setDeletingSourceId(sourceId);
     try {
       await deleteSource(sourceId);
@@ -284,6 +296,10 @@ export function UploadPanel({ hubId, sources, onRefresh, canUpload = true }: Pro
             Boolean((source.ingestion_metadata as { transcript_fetched_at?: string } | null)?.transcript_fetched_at);
           const isRemoteSource = source.type === "web" || source.type === "youtube";
           const snapshotReady = webSnapshotReady || youtubeSnapshotReady;
+          const isDeleting = deletingSourceId === source.id;
+          const isRetryingThis = isRetrying && retryingSourceId === source.id;
+          const isRefreshingThis = refreshingSourceId === source.id;
+          const isReprocessingThis = reprocessingSourceId === source.id;
           return (
             <div key={source.id} className="card" style={{ borderColor: "#1e2535" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -308,28 +324,30 @@ export function UploadPanel({ hubId, sources, onRefresh, canUpload = true }: Pro
                     className="button"
                     type="button"
                     onClick={() => handleRefreshSource(source.id)}
-                    disabled={refreshingSourceId === source.id}
+                    disabled={isRefreshingThis}
                   >
-                    {refreshingSourceId === source.id ? "Refreshing..." : "Refresh"}
+                    {isRefreshingThis ? "Refreshing..." : "Refresh"}
                   </button>
                 ) : (
                   <button
                     className="button"
                     type="button"
                     onClick={() => handleRetryUpload(source.id)}
-                    disabled={isRetrying || deletingSourceId === source.id || !retryFiles[source.id]}
+                    disabled={isRetryingThis || isDeleting || !retryFiles[source.id]}
                   >
-                    {isRetrying && retryingSourceId === source.id ? "Retrying..." : "Retry upload"}
+                    {isRetryingThis ? "Retrying..." : "Retry upload"}
                   </button>
                 )}
-                <button
-                  className="button"
-                  type="button"
-                  onClick={() => handleDeleteSource(source.id)}
-                  disabled={isRetrying || deletingSourceId === source.id}
-                >
-                  {deletingSourceId === source.id ? "Deleting..." : "Delete"}
-                </button>
+                {canUpload && (
+                  <button
+                    className="button"
+                    type="button"
+                    onClick={() => handleDeleteSource(source.id)}
+                    disabled={isRetryingThis || isDeleting || isRefreshingThis}
+                  >
+                    {isDeleting ? "Deleting..." : "Delete"}
+                  </button>
+                )}
               </div>
             )}
             {isRemoteSource && source.status !== "failed" && (
@@ -339,20 +357,42 @@ export function UploadPanel({ hubId, sources, onRefresh, canUpload = true }: Pro
                   type="button"
                   onClick={() => handleReprocessSource(source.id)}
                   disabled={
-                    reprocessingSourceId === source.id ||
-                    refreshingSourceId === source.id ||
+                    isReprocessingThis ||
+                    isRefreshingThis ||
                     !snapshotReady
                   }
                 >
-                  {reprocessingSourceId === source.id ? "Reprocessing..." : "Reprocess"}
+                  {isReprocessingThis ? "Reprocessing..." : "Reprocess"}
                 </button>
                 <button
                   className="button"
                   type="button"
                   onClick={() => handleRefreshSource(source.id)}
-                  disabled={refreshingSourceId === source.id || reprocessingSourceId === source.id}
+                  disabled={isRefreshingThis || isReprocessingThis}
                 >
-                  {refreshingSourceId === source.id ? "Refreshing..." : "Refresh"}
+                  {isRefreshingThis ? "Refreshing..." : "Refresh"}
+                </button>
+                {canUpload && (
+                  <button
+                    className="button"
+                    type="button"
+                    onClick={() => handleDeleteSource(source.id)}
+                    disabled={isDeleting || isRefreshingThis || isReprocessingThis}
+                  >
+                    {isDeleting ? "Deleting..." : "Delete"}
+                  </button>
+                )}
+              </div>
+            )}
+            {!isRemoteSource && source.status !== "failed" && canUpload && (
+              <div style={{ display: "flex", gap: "8px", marginTop: "8px", flexWrap: "wrap" }}>
+                <button
+                  className="button"
+                  type="button"
+                  onClick={() => handleDeleteSource(source.id)}
+                  disabled={isDeleting}
+                >
+                  {isDeleting ? "Deleting..." : "Delete"}
                 </button>
               </div>
             )}

@@ -645,9 +645,15 @@ def _ingest_text_for_source(
     chunks = _chunk_text(text, settings.chunk_size, settings.chunk_overlap)
     if not chunks:
         raise ValueError("No chunks produced from extracted text")
+    if not _source_exists(client, source_id):
+        logger.info("Source %s deleted before ingest; skipping.", source_id)
+        return 0
     ingest_started_at = datetime.now(timezone.utc)
     ingest_timestamp = ingest_started_at.isoformat()
     embeddings = _embed_chunks(chunks)
+    if not _source_exists(client, source_id):
+        logger.info("Source %s deleted during embed; skipping insert.", source_id)
+        return 0
     _insert_chunks(client, source_id, hub_id, chunks, embeddings, ingest_timestamp)
     _clear_existing_chunks_before(client, source_id, ingest_timestamp)
     existing_metadata = _get_source_metadata(client, source_id)
@@ -726,6 +732,11 @@ def _insert_chunks(
 def _clear_existing_chunks_before(client: Client, source_id: str, cutoff: str) -> None:
     # Remove only chunks created before this ingest started to avoid deleting new inserts.
     client.table("source_chunks").delete().eq("source_id", source_id).lt("created_at", cutoff).execute()
+
+
+def _source_exists(client: Client, source_id: str) -> bool:
+    response = client.table("sources").select("id").eq("id", source_id).limit(1).execute()
+    return bool(response.data)
 
 
 def _get_source_metadata(client: Client, source_id: str) -> dict:
