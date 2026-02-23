@@ -26,6 +26,25 @@ def test_chunk_text_applies_overlap() -> None:
     ]
 
 
+def test_ingest_text_skips_when_source_deleted(monkeypatch) -> None:
+    # If the source is gone, ingestion should skip without embedding or inserts.
+    monkeypatch.setattr(tasks, "_source_exists", lambda *_args, **_kwargs: False)
+    monkeypatch.setattr(
+        tasks,
+        "_embed_chunks",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("Embeddings should not run")),
+    )
+
+    result = tasks._ingest_text_for_source(
+        client=object(),
+        source_id="src-missing",
+        hub_id="hub-1",
+        text="hello world",
+        extra_metadata=None,
+    )
+    assert result == 0
+
+
 def test_batch_splits_items() -> None:
     # Batches a list by size; expect final smaller batch.
     items = [1, 2, 3, 4, 5]

@@ -4,7 +4,15 @@ import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { UploadPanel } from "../../components/UploadPanel";
-import { createSource, createSourceUploadUrl, createWebSource, createYouTubeSource, enqueueSource, failSource } from "../../lib/api";
+import {
+  createSource,
+  createSourceUploadUrl,
+  createWebSource,
+  createYouTubeSource,
+  deleteSource,
+  enqueueSource,
+  failSource,
+} from "../../lib/api";
 import type { Source } from "../../lib/types";
 import { renderWithQueryClient } from "../test-utils";
 
@@ -247,6 +255,86 @@ describe("UploadPanel", () => {
     );
     expect(onRefresh).toHaveBeenCalled();
     expect(await screen.findByText(/YouTube video enqueued/i)).toBeInTheDocument();
+  });
+
+  it("shows delete for a non-failed source when uploads are allowed", () => {
+    const source: Source = {
+      id: "src-keep-1",
+      hub_id: "hub-1",
+      type: "file",
+      original_name: "done.pdf",
+      status: "complete",
+      created_at: "2025-01-01T00:00:00Z",
+    };
+
+    renderWithQueryClient(<UploadPanel hubId="hub-1" sources={[source]} onRefresh={() => undefined} />);
+
+    expect(screen.getByRole("button", { name: "Delete" })).toBeInTheDocument();
+  });
+
+  it("confirms before deleting a source", async () => {
+    const onRefresh = vi.fn();
+    vi.mocked(deleteSource).mockResolvedValue(undefined);
+    const confirmSpy = vi.fn(() => false);
+    vi.stubGlobal("confirm", confirmSpy);
+
+    const source: Source = {
+      id: "src-delete-1",
+      hub_id: "hub-1",
+      type: "file",
+      original_name: "keep.txt",
+      status: "complete",
+      created_at: "2025-01-01T00:00:00Z",
+    };
+
+    renderWithQueryClient(<UploadPanel hubId="hub-1" sources={[source]} onRefresh={onRefresh} />);
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Delete" }));
+
+    expect(confirmSpy).toHaveBeenCalled();
+    expect(deleteSource).not.toHaveBeenCalled();
+  });
+
+  it("deletes after confirmation", async () => {
+    const onRefresh = vi.fn();
+    vi.mocked(deleteSource).mockResolvedValue(undefined);
+    const confirmSpy = vi.fn(() => true);
+    vi.stubGlobal("confirm", confirmSpy);
+
+    const source: Source = {
+      id: "src-delete-2",
+      hub_id: "hub-1",
+      type: "file",
+      original_name: "drop.txt",
+      status: "complete",
+      created_at: "2025-01-01T00:00:00Z",
+    };
+
+    renderWithQueryClient(<UploadPanel hubId="hub-1" sources={[source]} onRefresh={onRefresh} />);
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Delete" }));
+
+    await waitFor(() => expect(deleteSource).toHaveBeenCalledWith("src-delete-2"));
+    expect(onRefresh).toHaveBeenCalled();
+  });
+
+  it("hides delete for viewers", () => {
+    const source: Source = {
+      id: "src-view-1",
+      hub_id: "hub-1",
+      type: "file",
+      original_name: "view.txt",
+      status: "complete",
+      created_at: "2025-01-01T00:00:00Z",
+    };
+
+    renderWithQueryClient(
+      <UploadPanel hubId="hub-1" sources={[source]} onRefresh={() => undefined} canUpload={false} />
+    );
+
+    expect(screen.queryByRole("button", { name: "Delete" })).not.toBeInTheDocument();
   });
 
   it("disables reprocess until a web crawl succeeds", () => {
