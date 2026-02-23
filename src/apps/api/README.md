@@ -24,6 +24,7 @@ Environment variables live in `.env.example`. Provide `SUPABASE_URL`, `SUPABASE_
 - `migrations/005_fix_hub_members_rls_functions.sql` - Helper functions + final RLS fix.
 - `migrations/006_reminders.sql` - Reminders, candidates, notifications tables + policies.
 - `migrations/007_reminders_in_app_only.sql` - Enforce in-app notification policy defaults.
+- `migrations/011_match_source_chunks_sources.sql` - Vector search RPC with optional source filtering.
 - `app/__init__.py` - Marks the package for imports.
 - `app/main.py` - FastAPI app entrypoint and router wiring.
 - `app/dependencies.py` - Auth helpers (JWT, Supabase clients).
