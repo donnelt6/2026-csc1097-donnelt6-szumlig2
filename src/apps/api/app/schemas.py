@@ -196,6 +196,7 @@ class ChatRequest(StrictModel):
     hub_id: UUID
     scope: HubScope = HubScope.hub
     question: str = Field(..., min_length=1, max_length=4000)
+    source_ids: Optional[List[UUID]] = None
 
 
 class ChatResponse(BaseModel):

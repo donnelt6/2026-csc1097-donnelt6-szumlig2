@@ -469,7 +469,8 @@ class SupabaseStore:
         ).execute()
 
         query_embedding = self._embed_query(payload.question)
-        raw_matches = self._match_chunks(client, hub_id, query_embedding, self.top_k)
+        source_ids = None if payload.source_ids is None else [str(source_id) for source_id in payload.source_ids]
+        raw_matches = self._match_chunks(client, hub_id, query_embedding, self.top_k, source_ids)
         matches = [m for m in raw_matches if (m.get("similarity") or 0) >= self.min_similarity]
         matches = matches[: self.max_citations]
         if not matches and raw_matches:
@@ -721,10 +722,22 @@ class SupabaseStore:
         response = self.llm_client.embeddings.create(model=self.embedding_model, input=text)
         return response.data[0].embedding
 
-    def _match_chunks(self, client: Client, hub_id: str, embedding: List[float], top_k: int) -> List[Dict[str, Any]]:
+    def _match_chunks(
+        self,
+        client: Client,
+        hub_id: str,
+        embedding: List[float],
+        top_k: int,
+        source_ids: Optional[List[str]] = None,
+    ) -> List[Dict[str, Any]]:
         response = client.rpc(
             "match_source_chunks",
-            {"query_embedding": embedding, "match_count": top_k, "match_hub": str(hub_id)},
+            {
+                "query_embedding": embedding,
+                "match_count": top_k,
+                "match_hub": str(hub_id),
+                "match_sources": source_ids,
+            },
         ).execute()
         return response.data or []
 
