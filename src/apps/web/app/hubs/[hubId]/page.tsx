@@ -9,6 +9,7 @@ import { ReminderCandidatesPanel } from "../../../components/ReminderCandidatesP
 import { RemindersPanel } from "../../../components/RemindersPanel";
 import { UploadPanel } from "../../../components/UploadPanel";
 import { listHubs, listSources, trackHubAccess } from "../../../lib/api";
+import { useSourceSelection } from "../../../lib/useSourceSelection";
 
 export default function HubDetail({ params }: { params: { hubId: string } }) {
   const queryClient = useQueryClient();
@@ -27,6 +28,7 @@ export default function HubDetail({ params }: { params: { hubId: string } }) {
   const hub = hubs?.find((h) => h.id === params.hubId);
   const canUpload = hub?.role === "owner" || hub?.role === "editor";
   const roleResolved = !hubsLoading;
+  const sourceSelection = useSourceSelection(params.hubId, sources ?? []);
 
   useEffect(() => {
     hasTrackedAccess.current = false;
@@ -77,6 +79,10 @@ export default function HubDetail({ params }: { params: { hubId: string } }) {
             sources={sources ?? []}
             onRefresh={() => refetch()}
             canUpload={canUpload}
+            selectedSourceIds={sourceSelection.selectedIds}
+            onToggleSource={sourceSelection.toggleSource}
+            onSelectAllSources={sourceSelection.selectAll}
+            onClearSourceSelection={sourceSelection.clearAll}
           />
         ) : (
           <div className="card">
@@ -87,7 +93,11 @@ export default function HubDetail({ params }: { params: { hubId: string } }) {
         {hub && <RemindersPanel hubId={params.hubId} />}
         {hub && <MembersPanel hubId={params.hubId} role={hub.role ?? undefined} />}
         {sourcesLoading && <p className="muted">Loading sources...</p>}
-        <ChatPanel hubId={params.hubId} />
+        <ChatPanel
+          hubId={params.hubId}
+          selectedSourceIds={sourceSelection.selectedIds}
+          hasSelectableSources={sourceSelection.completeCount > 0}
+        />
       </div>
     </main>
   );

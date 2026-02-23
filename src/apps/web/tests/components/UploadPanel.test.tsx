@@ -3,6 +3,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { ComponentProps } from "react";
 import { UploadPanel } from "../../components/UploadPanel";
 import {
   createSource,
@@ -26,6 +27,14 @@ vi.mock("../../lib/api", () => ({
   failSource: vi.fn(),
   refreshSource: vi.fn(),
 }));
+
+const buildSelectionProps = (overrides: Partial<ComponentProps<typeof UploadPanel>> = {}) => ({
+  selectedSourceIds: [],
+  onToggleSource: vi.fn(),
+  onSelectAllSources: vi.fn(),
+  onClearSourceSelection: vi.fn(),
+  ...overrides,
+});
 
 describe("UploadPanel", () => {
   afterEach(() => {
@@ -353,5 +362,65 @@ describe("UploadPanel", () => {
     const reprocess = screen.getByRole("button", { name: "Reprocess" });
     expect(reprocess).toBeDisabled();
     expect(screen.getByText(/first successful ingest/i)).toBeInTheDocument();
+  });
+
+  it("renders source selection checkboxes and disables incomplete sources", () => {
+    const completeSource: Source = {
+      id: "src-complete-1",
+      hub_id: "hub-1",
+      type: "file",
+      original_name: "done.pdf",
+      status: "complete",
+      created_at: "2025-01-01T00:00:00Z",
+    };
+    const processingSource: Source = {
+      id: "src-processing-1",
+      hub_id: "hub-1",
+      type: "file",
+      original_name: "processing.pdf",
+      status: "processing",
+      created_at: "2025-01-01T00:00:00Z",
+    };
+
+    renderWithQueryClient(
+      <UploadPanel
+        hubId="hub-1"
+        sources={[completeSource, processingSource]}
+        onRefresh={() => undefined}
+        {...buildSelectionProps({ selectedSourceIds: ["src-complete-1"] })}
+      />
+    );
+
+    const completeCheckbox = screen.getByRole("checkbox", { name: "Use done.pdf for answers" });
+    const processingCheckbox = screen.getByRole("checkbox", { name: "Use processing.pdf for answers" });
+
+    expect(completeCheckbox).toBeChecked();
+    expect(completeCheckbox).toBeEnabled();
+    expect(processingCheckbox).not.toBeChecked();
+    expect(processingCheckbox).toBeDisabled();
+  });
+
+  it("calls selection callbacks from controls", async () => {
+    const source: Source = {
+      id: "src-select-1",
+      hub_id: "hub-1",
+      type: "file",
+      original_name: "select.txt",
+      status: "complete",
+      created_at: "2025-01-01T00:00:00Z",
+    };
+
+    const selectionProps = buildSelectionProps({ selectedSourceIds: ["src-select-1"] });
+
+    renderWithQueryClient(
+      <UploadPanel hubId="hub-1" sources={[source]} onRefresh={() => undefined} {...selectionProps} />
+    );
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("checkbox", { name: "Use select.txt for answers" }));
+    await user.click(screen.getByRole("button", { name: "Clear" }));
+
+    expect(selectionProps.onToggleSource).toHaveBeenCalledWith("src-select-1");
+    expect(selectionProps.onClearSourceSelection).toHaveBeenCalled();
   });
 });
