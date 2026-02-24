@@ -34,7 +34,6 @@ export default function HubDetail({ params }: { params: { hubId: string } }) {
   const { data: sources, refetch: refetchSources } = useQuery({
     queryKey: ['sources', params.hubId],
     queryFn: () => listSources(params.hubId),
-    enabled: activeTab === 'sources',
     refetchInterval: activeTab === 'sources' ? 4000 : false,
   });
 
