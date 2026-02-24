@@ -25,7 +25,7 @@ Environment variables: see `.env.example`. Set `NEXT_PUBLIC_API_BASE_URL` to you
 - `app/globals.css` - Global styles and theme variables.
 - `app/hubs/[hubId]/page.tsx` - Hub detail page with upload, reminders, and chat.
 - `components/ChatPanel.tsx` - Chat UI with citations, hub/global scope, and selected sources.
-- `components/HubsList.tsx` - Hub list and create form.
+- `components/HubsList.tsx` - Hub list with filtering and sorting.
 - `components/InvitesPanel.tsx` - Pending invite list and accept actions.
 - `components/MembersPanel.tsx` - Member list and role management.
 - `components/Providers.tsx` - React Query + auth provider setup.

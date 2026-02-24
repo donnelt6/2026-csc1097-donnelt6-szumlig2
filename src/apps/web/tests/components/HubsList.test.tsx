@@ -1,10 +1,9 @@
-// Tests HubsList rendering and create flow with mocked API responses.
-import { screen, waitFor } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+import { screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { HubsList } from "../../components/HubsList";
-import { createHub, listHubs } from "../../lib/api";
+import type { HubsFilterState } from "../../components/HubsToolbar";
+import { listHubs } from "../../lib/api";
 import { renderWithQueryClient } from "../test-utils";
 
 vi.mock("next/link", () => ({
@@ -17,8 +16,19 @@ vi.mock("next/link", () => ({
 
 vi.mock("../../lib/api", () => ({
   listHubs: vi.fn(),
-  createHub: vi.fn(),
+  toggleHubFavourite: vi.fn(),
 }));
+
+const defaultFilters: HubsFilterState = {
+  sortField: "accessed",
+  sortDirection: "desc",
+  selectedRoles: new Set(),
+  minMembers: "",
+  maxMembers: "",
+  minSources: "",
+  maxSources: "",
+  showOnlyFavourites: false,
+};
 
 describe("HubsList", () => {
   afterEach(() => {
@@ -26,7 +36,6 @@ describe("HubsList", () => {
   });
 
   it("renders hubs returned from the API", async () => {
-    // Expect hub cards to appear after the list query resolves.
     vi.mocked(listHubs).mockResolvedValue([
       {
         id: "hub-1",
@@ -38,33 +47,39 @@ describe("HubsList", () => {
       },
     ]);
 
-    renderWithQueryClient(<HubsList />);
+    renderWithQueryClient(
+      <HubsList searchQuery="" filters={defaultFilters} />
+    );
 
     expect(screen.getByText("Loading hubs...")).toBeInTheDocument();
     expect(await screen.findByText("Onboarding Hub")).toBeInTheDocument();
   });
 
-  it("submits a new hub through the create form", async () => {
-    // Expect createHub to be called with typed form values.
-    vi.mocked(listHubs).mockResolvedValue([]);
-    vi.mocked(createHub).mockResolvedValue({
-      id: "hub-2",
-      owner_id: "user-1",
-      name: "New Hub",
-      description: "Team docs",
-      created_at: "2025-01-02T00:00:00Z",
-      role: "owner",
-    });
+  it("filters hubs by search query", async () => {
+    vi.mocked(listHubs).mockResolvedValue([
+      {
+        id: "hub-1",
+        owner_id: "user-1",
+        name: "Onboarding Hub",
+        description: "Docs",
+        created_at: "2025-01-01T00:00:00Z",
+        role: "owner",
+      },
+      {
+        id: "hub-2",
+        owner_id: "user-1",
+        name: "Marketing Hub",
+        description: "Marketing materials",
+        created_at: "2025-01-02T00:00:00Z",
+        role: "editor",
+      },
+    ]);
 
-    const user = userEvent.setup();
-    renderWithQueryClient(<HubsList />);
+    renderWithQueryClient(
+      <HubsList searchQuery="marketing" filters={defaultFilters} />
+    );
 
-    await user.type(screen.getByPlaceholderText("e.g. Onboarding hub"), "New Hub");
-    await user.type(screen.getByPlaceholderText("What is this hub for?"), "Team docs");
-    await user.click(screen.getByRole("button", { name: "Create hub" }));
-
-    await waitFor(() => {
-      expect(createHub).toHaveBeenCalledWith({ name: "New Hub", description: "Team docs" });
-    });
+    await screen.findByText("Marketing Hub");
+    expect(screen.queryByText("Onboarding Hub")).not.toBeInTheDocument();
   });
 });
