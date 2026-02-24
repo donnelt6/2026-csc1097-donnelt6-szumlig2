@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { ChatPanel } from "../../../components/ChatPanel";
+import { FaqPanel } from "../../../components/FaqPanel";
 import { TabSwitcher } from "../../../components/TabSwitcher";
 import { UploadPanel } from "../../../components/UploadPanel";
 import { MembersPanel } from "../../../components/MembersPanel";
@@ -76,7 +77,7 @@ export default function HubDetail({ params }: { params: { hubId: string } }) {
     <main className="page-content page-content--no-hero">
       <div className="content-inner">
         <Link href="/" className="muted" style={{ display: "block", marginBottom: "20px" }}>
-          ← Back to hubs
+          â† Back to hubs
         </Link>
         <header className="card" style={{ marginBottom: "20px" }}>
           <h2 style={{ margin: "0 0 4px" }}>{hub?.name ?? "Hub"}</h2>
@@ -85,11 +86,19 @@ export default function HubDetail({ params }: { params: { hubId: string } }) {
 
         <div className="hub-tab-content">
           {activeTab === 'chat' && (
-            <ChatPanel
-              hubId={params.hubId}
-              selectedSourceIds={sourceSelection.selectedIds}
-              hasSelectableSources={sourceSelection.completeCount > 0}
-            />
+            <div className="grid" style={{ gap: "16px" }}>
+              <ChatPanel
+                hubId={params.hubId}
+                selectedSourceIds={sourceSelection.selectedIds}
+                hasSelectableSources={sourceSelection.completeCount > 0}
+              />
+              <FaqPanel
+                hubId={params.hubId}
+                selectedSourceIds={sourceSelection.selectedIds}
+                hasSelectableSources={sourceSelection.completeCount > 0}
+                canEdit={canUpload}
+              />
+            </div>
           )}
           {activeTab === 'sources' && (
             <UploadPanel
