@@ -25,6 +25,7 @@ Environment variables live in `.env.example`. Provide `SUPABASE_URL`, `SUPABASE_
 - `migrations/006_reminders.sql` - Reminders, candidates, notifications tables + policies.
 - `migrations/007_reminders_in_app_only.sql` - Enforce in-app notification policy defaults.
 - `migrations/011_match_source_chunks_sources.sql` - Vector search RPC with optional source filtering.
+- `migrations/012_faq_entries.sql` - FAQ entries with citations and pin/edit support.
 - `app/__init__.py` - Marks the package for imports.
 - `app/main.py` - FastAPI app entrypoint and router wiring.
 - `app/dependencies.py` - Auth helpers (JWT, Supabase clients).
@@ -32,6 +33,7 @@ Environment variables live in `.env.example`. Provide `SUPABASE_URL`, `SUPABASE_
 - `app/core/config.py` - Settings loader and defaults.
 - `app/routers/__init__.py` - Router module export.
 - `app/routers/chat.py` - Chat endpoint (hub-only or hub + web search).
+- `app/routers/faqs.py` - FAQ generation/list/edit endpoints.
 - `app/routers/hubs.py` - Hubs CRUD endpoints.
 - `app/routers/sources.py` - Source upload/status endpoints (signed upload URL, fail, enqueue), plus web URL ingestion and refresh.
 - `app/routers/reminders.py` - Reminder CRUD, candidate review, and notifications endpoints.
@@ -42,3 +44,4 @@ Environment variables live in `.env.example`. Provide `SUPABASE_URL`, `SUPABASE_
 - `app/services/queue.py` - Celery task enqueue helper.
 - `app/services/rate_limit.py` - Simple rate limiting utility.
 - `app/services/store.py` - Supabase-backed data store + chat logic.
+- FAQ generation runs synchronously in the API (no worker task). It reuses stored embeddings and citations and is triggered manually from the web UI.
