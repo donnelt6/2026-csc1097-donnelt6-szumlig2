@@ -2,16 +2,41 @@
 
 import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { ChatPanel } from "../../../components/ChatPanel";
-import { listHubs, trackHubAccess } from "../../../lib/api";
+import { TabSwitcher } from "../../../components/TabSwitcher";
+import { UploadPanel } from "../../../components/UploadPanel";
+import { MembersPanel } from "../../../components/MembersPanel";
+import { RemindersPanel } from "../../../components/RemindersPanel";
+import { ReminderCandidatesPanel } from "../../../components/ReminderCandidatesPanel";
+import { listHubs, listSources, trackHubAccess } from "../../../lib/api";
+
+type HubTab = 'chat' | 'sources' | 'members' | 'reminders';
+
+const REMINDER_TABS = [
+  { key: 'suggested', label: 'Suggested' },
+  { key: 'manual', label: 'Manual' },
+];
 
 export default function HubDetail({ params }: { params: { hubId: string } }) {
   const queryClient = useQueryClient();
   const hasTrackedAccess = useRef(false);
-  const { data: hubs } = useQuery({ queryKey: ["hubs"], queryFn: listHubs });
+  const searchParams = useSearchParams();
+  const [reminderSubTab, setReminderSubTab] = useState('suggested');
 
+  const activeTab = (searchParams.get('tab') as HubTab) || 'chat';
+
+  const { data: hubs } = useQuery({ queryKey: ["hubs"], queryFn: listHubs });
   const hub = hubs?.find((h) => h.id === params.hubId);
+  const canUpload = hub?.role === 'owner' || hub?.role === 'editor';
+
+  const { data: sources, refetch: refetchSources } = useQuery({
+    queryKey: ['sources', params.hubId],
+    queryFn: () => listSources(params.hubId),
+    enabled: activeTab === 'sources',
+    refetchInterval: activeTab === 'sources' ? 4000 : false,
+  });
 
   useEffect(() => {
     hasTrackedAccess.current = false;
@@ -56,7 +81,37 @@ export default function HubDetail({ params }: { params: { hubId: string } }) {
           <h2 style={{ margin: "0 0 4px" }}>{hub?.name ?? "Hub"}</h2>
           <p className="muted">{hub?.description ?? params.hubId}</p>
         </header>
-        <ChatPanel hubId={params.hubId} />
+
+        <div className="hub-tab-content">
+          {activeTab === 'chat' && (
+            <ChatPanel hubId={params.hubId} />
+          )}
+          {activeTab === 'sources' && (
+            <UploadPanel
+              hubId={params.hubId}
+              sources={sources ?? []}
+              onRefresh={() => refetchSources()}
+              canUpload={canUpload}
+            />
+          )}
+          {activeTab === 'members' && (
+            <MembersPanel hubId={params.hubId} role={hub?.role ?? undefined} />
+          )}
+          {activeTab === 'reminders' && (
+            <div className="grid" style={{ gap: '16px' }}>
+              <TabSwitcher
+                tabs={REMINDER_TABS}
+                activeKey={reminderSubTab}
+                onTabChange={setReminderSubTab}
+              />
+              {reminderSubTab === 'suggested' ? (
+                <ReminderCandidatesPanel hubId={params.hubId} />
+              ) : (
+                <RemindersPanel hubId={params.hubId} />
+              )}
+            </div>
+          )}
+        </div>
       </div>
     </main>
   );

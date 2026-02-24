@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useQuery } from '@tanstack/react-query';
 import {
   RectangleStackIcon,
   Cog6ToothIcon,
@@ -9,6 +10,7 @@ import {
   ChevronRightIcon,
   XMarkIcon,
 } from '@heroicons/react/24/outline';
+import { listHubs } from '../../lib/api';
 import { ThemeToggle } from './ThemeToggle';
 import { HubPanels } from './HubPanels';
 
@@ -23,6 +25,20 @@ interface SidebarProps {
 
 export function Sidebar({ state, onStateChange, mobileOpen, onMobileClose }: SidebarProps) {
   const pathname = usePathname();
+  const isHome = pathname === '/';
+
+  const { data: hubs } = useQuery({
+    queryKey: ['hubs'],
+    queryFn: listHubs,
+    enabled: isHome,
+  });
+
+  const recentHubs = isHome
+    ? (hubs ?? [])
+        .filter((h) => h.last_accessed_at)
+        .sort((a, b) => new Date(b.last_accessed_at!).getTime() - new Date(a.last_accessed_at!).getTime())
+        .slice(0, 5)
+    : [];
 
   const expandSidebar = () => {
     localStorage.setItem('sidebar-state', 'open');
@@ -111,6 +127,26 @@ export function Sidebar({ state, onStateChange, mobileOpen, onMobileClose }: Sid
             </Link>
           </li>
         </ul>
+        {isHome && recentHubs.length > 0 && (
+          <div className="sidebar-section" style={{ marginTop: '16px' }}>
+            <p className="sidebar-section-title">Recent</p>
+            <ul className="sidebar-nav-list">
+              {recentHubs.map((h) => (
+                <li key={h.id}>
+                  <Link
+                    href={`/hubs/${h.id}`}
+                    className="sidebar-item"
+                    title={isCollapsed ? h.name : undefined}
+                    onClick={handleLinkClick}
+                  >
+                    <RectangleStackIcon className="sidebar-item-icon" />
+                    <span className="sidebar-item-text">{h.name}</span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
         <HubPanels />
       </nav>
 
