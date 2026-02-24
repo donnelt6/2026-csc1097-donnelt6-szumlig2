@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
-import { useSearchParams } from "next/navigation";
 import { ChatPanel } from "../../../components/ChatPanel";
 import { TabSwitcher } from "../../../components/TabSwitcher";
 import { UploadPanel } from "../../../components/UploadPanel";
@@ -11,24 +10,25 @@ import { MembersPanel } from "../../../components/MembersPanel";
 import { RemindersPanel } from "../../../components/RemindersPanel";
 import { ReminderCandidatesPanel } from "../../../components/ReminderCandidatesPanel";
 import { listHubs, listSources, trackHubAccess } from "../../../lib/api";
-
-type HubTab = 'chat' | 'sources' | 'members' | 'reminders';
+import { useSourceSelection } from "../../../lib/useSourceSelection";
+import { useHubTab } from "../../../lib/HubTabContext";
 
 const REMINDER_TABS = [
   { key: 'suggested', label: 'Suggested' },
   { key: 'manual', label: 'Manual' },
 ];
 
+const EMPTY_SOURCES: never[] = [];
+
 export default function HubDetail({ params }: { params: { hubId: string } }) {
   const queryClient = useQueryClient();
   const hasTrackedAccess = useRef(false);
-  const searchParams = useSearchParams();
+  const { activeTab } = useHubTab();
   const [reminderSubTab, setReminderSubTab] = useState('suggested');
-
-  const activeTab = (searchParams.get('tab') as HubTab) || 'chat';
 
   const { data: hubs } = useQuery({ queryKey: ["hubs"], queryFn: listHubs });
   const hub = hubs?.find((h) => h.id === params.hubId);
+  const hubResolved = !!hub;
   const canUpload = hub?.role === 'owner' || hub?.role === 'editor';
 
   const { data: sources, refetch: refetchSources } = useQuery({
@@ -38,12 +38,14 @@ export default function HubDetail({ params }: { params: { hubId: string } }) {
     refetchInterval: activeTab === 'sources' ? 4000 : false,
   });
 
+  const sourceSelection = useSourceSelection(params.hubId, sources ?? EMPTY_SOURCES);
+
   useEffect(() => {
     hasTrackedAccess.current = false;
   }, [params.hubId]);
 
   useEffect(() => {
-    if (hub && !hasTrackedAccess.current) {
+    if (hubResolved && !hasTrackedAccess.current) {
       hasTrackedAccess.current = true;
       const timestamp = new Date().toISOString();
 
@@ -69,7 +71,7 @@ export default function HubDetail({ params }: { params: { hubId: string } }) {
           queryClient.invalidateQueries({ queryKey: ["hubs"] });
         });
     }
-  }, [hub, params.hubId, queryClient, hubs]);
+  }, [hubResolved, params.hubId, queryClient]);
 
   return (
     <main className="page-content page-content--no-hero">
@@ -84,7 +86,11 @@ export default function HubDetail({ params }: { params: { hubId: string } }) {
 
         <div className="hub-tab-content">
           {activeTab === 'chat' && (
-            <ChatPanel hubId={params.hubId} />
+            <ChatPanel
+              hubId={params.hubId}
+              selectedSourceIds={sourceSelection.selectedIds}
+              hasSelectableSources={sourceSelection.completeCount > 0}
+            />
           )}
           {activeTab === 'sources' && (
             <UploadPanel
@@ -92,6 +98,10 @@ export default function HubDetail({ params }: { params: { hubId: string } }) {
               sources={sources ?? []}
               onRefresh={() => refetchSources()}
               canUpload={canUpload}
+              selectedSourceIds={sourceSelection.selectedIds}
+              onToggleSource={sourceSelection.toggleSource}
+              onSelectAllSources={sourceSelection.selectAll}
+              onClearSourceSelection={sourceSelection.clearAll}
             />
           )}
           {activeTab === 'members' && (
