@@ -19,9 +19,22 @@ interface Props {
   sources: Source[];
   onRefresh: () => void;
   canUpload?: boolean;
+  selectedSourceIds?: string[];
+  onToggleSource?: (sourceId: string) => void;
+  onSelectAllSources?: () => void;
+  onClearSourceSelection?: () => void;
 }
 
-export function UploadPanel({ hubId, sources, onRefresh, canUpload = true }: Props) {
+export function UploadPanel({
+  hubId,
+  sources,
+  onRefresh,
+  canUpload = true,
+  selectedSourceIds = [],
+  onToggleSource = () => undefined,
+  onSelectAllSources = () => undefined,
+  onClearSourceSelection = () => undefined,
+}: Props) {
   const [file, setFile] = useState<File | null>(null);
   const [url, setUrl] = useState("");
   const [youtubeUrl, setYouTubeUrl] = useState("");
@@ -216,6 +229,13 @@ export function UploadPanel({ hubId, sources, onRefresh, canUpload = true }: Pro
     () => [...sources].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()),
     [sources]
   );
+  const selectableSources = useMemo(
+    () => sortedSources.filter((source) => source.status === "complete"),
+    [sortedSources]
+  );
+  const selectedSourceSet = useMemo(() => new Set(selectedSourceIds), [selectedSourceIds]);
+  const selectedCount = selectableSources.filter((source) => selectedSourceSet.has(source.id)).length;
+  const selectableCount = selectableSources.length;
 
   return (
     <div className="card grid">
@@ -284,8 +304,37 @@ export function UploadPanel({ hubId, sources, onRefresh, canUpload = true }: Pro
       </button>
       {!canUpload && <p className="muted">You only have view access. Ask the hub owner to grant edit permissions.</p>}
       {statusMessage && <p className="muted">{statusMessage}</p>}
+      {selectableCount > 0 && (
+        <div className="card" style={{ borderColor: "#1e2535" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px" }}>
+            <p className="muted" style={{ margin: 0 }}>
+              Sources used for answers: {selectedCount} of {selectableCount}
+            </p>
+            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+              <button
+                className="button"
+                type="button"
+                onClick={onSelectAllSources}
+                disabled={selectedCount === selectableCount}
+              >
+                Select all
+              </button>
+              <button
+                className="button"
+                type="button"
+                onClick={onClearSourceSelection}
+                disabled={selectedCount === 0}
+              >
+                Clear
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="grid" style={{ gap: "10px" }}>
         {sortedSources.map((source) => {
+          const isSelectable = source.status === "complete";
+          const isSelected = isSelectable && selectedSourceSet.has(source.id);
           const webSnapshotReady =
             source.type === "web" &&
             source.status === "complete" &&
@@ -302,20 +351,33 @@ export function UploadPanel({ hubId, sources, onRefresh, canUpload = true }: Pro
           const isReprocessingThis = reprocessingSourceId === source.id;
           return (
             <div key={source.id} className="card" style={{ borderColor: "#1e2535" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <div>
-                <strong>{source.original_name}</strong>
-                <p className="muted">
-                  {source.type === "web"
-                    ? "Web URL"
-                    : source.type === "youtube"
-                      ? "YouTube"
-                      : "File"}{" "}
-                  - {formatIrelandDateTime(new Date(source.created_at))}
-                </p>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px" }}>
+                <div>
+                  <label style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      disabled={!isSelectable}
+                      onChange={() => onToggleSource(source.id)}
+                      aria-label={`Use ${source.original_name} for answers`}
+                      title={isSelectable ? "Use this source for answers." : "Available after processing."}
+                    />
+                    <strong>{source.original_name}</strong>
+                  </label>
+                  <p className="muted">
+                    {source.type === "web"
+                      ? "Web URL"
+                      : source.type === "youtube"
+                        ? "YouTube"
+                        : "File"}{" "}
+                    - {formatIrelandDateTime(new Date(source.created_at))}
+                  </p>
+                  {!isSelectable && source.status !== "failed" && (
+                    <p className="muted">Available after processing completes.</p>
+                  )}
+                </div>
+                <StatusPill status={source.status} />
               </div>
-              <StatusPill status={source.status} />
-            </div>
             {source.failure_reason && <p className="muted">Error: {source.failure_reason}</p>}
             {source.status === "failed" && (
               <div style={{ display: "flex", gap: "8px", marginTop: "8px", flexWrap: "wrap" }}>

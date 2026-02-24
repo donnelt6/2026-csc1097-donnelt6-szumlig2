@@ -7,16 +7,26 @@ import type { ChatResponse, Citation } from "../lib/types";
 
 interface Props {
   hubId: string;
+  selectedSourceIds: string[];
+  hasSelectableSources: boolean;
 }
 
-export function ChatPanel({ hubId }: Props) {
+export function ChatPanel({ hubId, selectedSourceIds, hasSelectableSources }: Props) {
   const [question, setQuestion] = useState("");
   const [response, setResponse] = useState<ChatResponse | null>(null);
   const [scope, setScope] = useState<"hub" | "global">("hub");
   const [activeCitation, setActiveCitation] = useState<Citation | null>(null);
+  const hasSelection = selectedSourceIds.length > 0;
+  const canAsk = !hasSelectableSources || hasSelection;
 
   const mutation = useMutation({
-    mutationFn: () => askQuestion({ hub_id: hubId, scope, question }),
+    mutationFn: () =>
+      askQuestion({
+        hub_id: hubId,
+        scope,
+        question,
+        source_ids: hasSelection ? selectedSourceIds : undefined,
+      }),
     onSuccess: (data) => {
       setResponse(data);
     },
@@ -59,9 +69,12 @@ export function ChatPanel({ hubId }: Props) {
           onChange={(e) => setQuestion(e.target.value)}
           placeholder="What are the onboarding steps for engineering?"
         />
-        <button className="button" type="submit" disabled={mutation.isPending}>
+        <button className="button" type="submit" disabled={mutation.isPending || !canAsk}>
           {mutation.isPending ? "Thinking..." : "Ask"}
         </button>
+        {!canAsk && (
+          <p className="muted">Select at least one source to ask a question.</p>
+        )}
       </form>
       {mutation.error && <p className="muted">Error: {(mutation.error as Error).message}</p>}
       {response && (

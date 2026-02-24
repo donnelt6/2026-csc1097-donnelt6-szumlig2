@@ -102,7 +102,7 @@ def test_chat_returns_fallback_when_no_matches(monkeypatch) -> None:
     # Forces empty matches; expect fallback answer and no citations.
     fake_client = FakeClient()
     monkeypatch.setattr(store, "_embed_query", lambda text: [0.1])
-    monkeypatch.setattr(store, "_match_chunks", lambda client, hub_id, embedding, top_k: [])
+    monkeypatch.setattr(store, "_match_chunks", lambda client, hub_id, embedding, top_k, source_ids=None: [])
 
     payload = ChatRequest(hub_id="11111111-1111-1111-1111-111111111111", question="What is this?")
     result = store.chat(fake_client, "user-1", payload)
@@ -118,7 +118,7 @@ def test_chat_includes_citations_when_matches(monkeypatch) -> None:
     monkeypatch.setattr(
         store,
         "_match_chunks",
-        lambda client, hub_id, embedding, top_k: [
+        lambda client, hub_id, embedding, top_k, source_ids=None: [
             {"source_id": "src-1", "text": "Snippet", "chunk_index": 0, "similarity": 0.9}
         ],
     )
@@ -136,7 +136,7 @@ def test_chat_includes_citations_when_matches(monkeypatch) -> None:
 def test_chat_global_uses_web_search(monkeypatch) -> None:
     fake_client = FakeClient()
     monkeypatch.setattr(store, "_embed_query", lambda text: [0.1])
-    monkeypatch.setattr(store, "_match_chunks", lambda client, hub_id, embedding, top_k: [])
+    monkeypatch.setattr(store, "_match_chunks", lambda client, hub_id, embedding, top_k, source_ids=None: [])
     response = FakeWebSearchResponse("Global answer")
     monkeypatch.setattr(store, "llm_client", FakeLLMClientWithResponses(response))
 
@@ -150,3 +150,24 @@ def test_chat_global_uses_web_search(monkeypatch) -> None:
     assert result.answer == "Global answer"
     assert result.citations
     assert result.citations[0].source_id == "https://example.com"
+
+
+def test_chat_filters_by_selected_sources(monkeypatch) -> None:
+    fake_client = FakeClient()
+    captured: dict[str, list[str] | None] = {}
+
+    def fake_match(client, hub_id, embedding, top_k, source_ids=None):
+        captured["source_ids"] = source_ids
+        return []
+
+    monkeypatch.setattr(store, "_embed_query", lambda text: [0.1])
+    monkeypatch.setattr(store, "_match_chunks", fake_match)
+
+    payload = ChatRequest(
+        hub_id="11111111-1111-1111-1111-111111111111",
+        question="What is this?",
+        source_ids=["22222222-2222-2222-2222-222222222222"],
+    )
+    store.chat(fake_client, "user-1", payload)
+
+    assert captured["source_ids"] == ["22222222-2222-2222-2222-222222222222"]

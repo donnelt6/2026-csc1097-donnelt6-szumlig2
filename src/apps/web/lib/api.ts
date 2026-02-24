@@ -155,7 +155,12 @@ export async function deleteSource(sourceId: string): Promise<void> {
   }
 }
 
-export async function askQuestion(data: { hub_id: string; scope: "hub" | "global"; question: string }): Promise<ChatResponse> {
+export async function askQuestion(data: {
+  hub_id: string;
+  scope: "hub" | "global";
+  question: string;
+  source_ids?: string[];
+}): Promise<ChatResponse> {
   const res = await authedFetch(`${API_BASE}/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

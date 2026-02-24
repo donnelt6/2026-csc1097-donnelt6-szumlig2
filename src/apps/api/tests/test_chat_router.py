@@ -40,3 +40,30 @@ def test_chat_success(client, monkeypatch) -> None:
     assert resp.status_code == 200
     data = resp.json()
     assert data["answer"] == "Answer"
+
+
+def test_chat_accepts_source_ids(client, monkeypatch) -> None:
+    rl = rate_limit_module.RateLimitResult(allowed=True, remaining=1, reset_in_seconds=60)
+    monkeypatch.setitem(app.dependency_overrides, get_rate_limiter, lambda: FixedRateLimiter(rl))
+
+    response = ChatResponse(
+        answer="Answer",
+        citations=[],
+        message_id="msg-2",
+    )
+    captured = {}
+
+    def fake_chat(_client, user_id, payload):
+        captured["source_ids"] = payload.source_ids
+        return response
+
+    monkeypatch.setattr(store_module.store, "chat", fake_chat)
+
+    payload = {
+        "hub_id": "11111111-1111-1111-1111-111111111111",
+        "question": "Hi",
+        "source_ids": ["22222222-2222-2222-2222-222222222222"],
+    }
+    resp = client.post("/chat", json=payload)
+    assert resp.status_code == 200
+    assert [str(value) for value in captured["source_ids"]] == ["22222222-2222-2222-2222-222222222222"]
