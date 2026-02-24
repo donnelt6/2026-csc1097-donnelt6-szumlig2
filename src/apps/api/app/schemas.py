@@ -205,6 +205,40 @@ class ChatResponse(BaseModel):
     message_id: str
 
 
+class FaqEntry(BaseModel):
+    id: str
+    hub_id: str
+    question: str
+    answer: str
+    citations: List[Citation] = Field(default_factory=list)
+    source_ids: List[str] = Field(default_factory=list)
+    confidence: float
+    is_pinned: bool = False
+    archived_at: Optional[datetime] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_by: Optional[str] = None
+    updated_at: Optional[datetime] = None
+    updated_by: Optional[str] = None
+    generation_batch_id: Optional[str] = None
+
+
+class FaqGenerateRequest(StrictModel):
+    hub_id: UUID
+    source_ids: List[UUID]
+    count: Optional[int] = Field(default=None, ge=1, le=20)
+
+
+class FaqGenerateResponse(BaseModel):
+    entries: List[FaqEntry] = Field(default_factory=list)
+
+
+class FaqUpdateRequest(StrictModel):
+    question: Optional[str] = Field(default=None, min_length=1, max_length=4000)
+    answer: Optional[str] = Field(default=None, min_length=1, max_length=8000)
+    is_pinned: Optional[bool] = None
+    archived: Optional[bool] = None
+
+
 class ReminderStatus(str, Enum):
     scheduled = "scheduled"
     sent = "sent"

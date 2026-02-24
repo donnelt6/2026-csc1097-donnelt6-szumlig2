@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .core.config import get_settings
 from .dependencies import rate_limit_ip_only
-from .routers import chat, hubs, memberships, reminders, sources, users
+from .routers import chat, faqs, hubs, memberships, reminders, sources, users
 
 settings = get_settings()
 
@@ -24,6 +24,7 @@ app.add_middleware(
 app.include_router(hubs.router)
 app.include_router(sources.router)
 app.include_router(chat.router)
+app.include_router(faqs.router)
 app.include_router(memberships.router)
 app.include_router(users.router)
 app.include_router(reminders.router)
