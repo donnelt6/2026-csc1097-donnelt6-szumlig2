@@ -38,6 +38,23 @@ export interface Citation {
   chunk_index?: number;
 }
 
+export interface FaqEntry {
+  id: string;
+  hub_id: string;
+  question: string;
+  answer: string;
+  citations: Citation[];
+  source_ids: string[];
+  confidence: number;
+  is_pinned: boolean;
+  archived_at?: string | null;
+  created_at: string;
+  created_by?: string | null;
+  updated_at?: string | null;
+  updated_by?: string | null;
+  generation_batch_id?: string | null;
+}
+
 export interface HubMember {
   hub_id: string;
   user_id: string;

@@ -3,6 +3,7 @@ import type {
   ChatResponse,
   Hub,
   HubMember,
+  FaqEntry,
   NotificationEvent,
   PendingInvite,
   Reminder,
@@ -167,6 +168,50 @@ export async function askQuestion(data: {
     body: JSON.stringify(data),
   });
   return handle<ChatResponse>(res);
+}
+
+export async function listFaqs(hubId: string): Promise<FaqEntry[]> {
+  const res = await authedFetch(`${API_BASE}/faqs?hub_id=${hubId}`, { cache: "no-store" });
+  return handle<FaqEntry[]>(res);
+}
+
+export async function generateFaqs(data: {
+  hub_id: string;
+  source_ids: string[];
+  count?: number;
+}): Promise<{ entries: FaqEntry[] }> {
+  const res = await authedFetch(`${API_BASE}/faqs/generate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  return handle(res);
+}
+
+export async function updateFaq(
+  faqId: string,
+  data: {
+    question?: string;
+    answer?: string;
+    is_pinned?: boolean;
+    archived?: boolean;
+  }
+): Promise<FaqEntry> {
+  const res = await authedFetch(`${API_BASE}/faqs/${faqId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  return handle(res);
+}
+
+export async function archiveFaq(faqId: string): Promise<void> {
+  const res = await authedFetch(`${API_BASE}/faqs/${faqId}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) {
+    await handle(res);
+  }
 }
 
 export async function listMembers(hubId: string): Promise<HubMember[]> {

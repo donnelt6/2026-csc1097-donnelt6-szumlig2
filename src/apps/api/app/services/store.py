@@ -1,3 +1,4 @@
+import json
 import re
 import uuid
 from datetime import datetime
@@ -13,6 +14,8 @@ from ..schemas import (
     ChatRequest,
     ChatResponse,
     Citation,
+    FaqEntry,
+    FaqGenerateRequest,
     Hub,
     HubCreate,
     HubInviteRequest,
@@ -55,6 +58,10 @@ class SupabaseStore:
         self.top_k = settings.top_k
         self.min_similarity = settings.min_similarity
         self.max_citations = settings.max_citations
+        self.faq_default_count = settings.faq_default_count
+        self.faq_context_chunks_per_source = settings.faq_context_chunks_per_source
+        self.faq_max_citations = settings.faq_max_citations
+        self.faq_min_similarity = settings.faq_min_similarity
         self.service_client: Client = create_client(settings.supabase_url, settings.supabase_service_role_key)
         self.llm_client = OpenAI(api_key=settings.openai_api_key)
 
@@ -543,6 +550,131 @@ class SupabaseStore:
         )
         return ChatResponse(answer=answer, citations=citations, message_id=assistant_row.data[0]["id"])
 
+    def list_faqs(self, client: Client, hub_id: str) -> List[FaqEntry]:
+        response = (
+            client.table("faq_entries")
+            .select("*")
+            .eq("hub_id", str(hub_id))
+            .is_("archived_at", "null")
+            .order("is_pinned", desc=True)
+            .order("created_at", desc=True)
+            .execute()
+        )
+        return [FaqEntry(**row) for row in response.data]
+
+    def get_faq(self, client: Client, faq_id: str) -> FaqEntry:
+        response = client.table("faq_entries").select("*").eq("id", str(faq_id)).limit(1).execute()
+        if not response.data:
+            raise KeyError("FAQ entry not found")
+        return FaqEntry(**response.data[0])
+
+    def generate_faqs(self, client: Client, user_id: str, payload: FaqGenerateRequest) -> List[FaqEntry]:
+        hub_id = str(payload.hub_id)
+        source_ids = [str(source_id) for source_id in payload.source_ids]
+        if not source_ids:
+            raise ValueError("Select at least one source to generate FAQs.")
+
+        count = payload.count or self.faq_default_count
+        count = max(1, min(int(count), 20))
+
+        context_chunks: List[dict] = []
+        for source_id in source_ids:
+            context_chunks.extend(
+                self._fetch_source_context(client, hub_id, source_id, self.faq_context_chunks_per_source)
+            )
+
+        if not context_chunks:
+            return []
+
+        context_blocks: List[str] = []
+        for chunk in context_chunks:
+            text = chunk.get("text") or ""
+            snippet = _trim_text(text, 900)
+            context_blocks.append(
+                f"Source {chunk.get('source_id')} [chunk {chunk.get('chunk_index')}]: {snippet}"
+            )
+
+        questions = self._generate_faq_questions(context_blocks, count)
+        if not questions:
+            return []
+
+        entries_payload: List[dict] = []
+        now = datetime.utcnow().isoformat()
+        batch_id = str(uuid.uuid4())
+
+        for question in questions:
+            query_embedding = self._embed_query(question)
+            raw_matches = self._match_chunks(client, hub_id, query_embedding, self.top_k, source_ids)
+            matches = [match for match in raw_matches if (match.get("similarity") or 0) >= self.faq_min_similarity]
+            matches = matches[: self.faq_max_citations]
+            if not matches:
+                continue
+
+            citations: List[Citation] = []
+            answer_context: List[str] = []
+            for idx, match in enumerate(matches, start=1):
+                snippet = match.get("text") or ""
+                trimmed = _trim_text(snippet, 600)
+                citations.append(
+                    Citation(source_id=match["source_id"], snippet=trimmed, chunk_index=match.get("chunk_index"))
+                )
+                answer_context.append(f"[{idx}] {trimmed}")
+
+            answer = self._generate_faq_answer(question, answer_context)
+            if not _answer_has_citation(answer, len(answer_context)):
+                continue
+
+            confidence = _average_similarity(matches)
+
+            entries_payload.append(
+                {
+                    "hub_id": hub_id,
+                    "question": question,
+                    "answer": answer,
+                    "citations": [citation.model_dump() for citation in citations],
+                    "source_ids": source_ids,
+                    "confidence": confidence,
+                    "is_pinned": False,
+                    "created_by": user_id,
+                    "updated_by": user_id,
+                    "updated_at": now,
+                    "generation_batch_id": batch_id,
+                }
+            )
+
+        if not entries_payload:
+            return []
+
+        (
+            client.table("faq_entries")
+            .eq("hub_id", hub_id)
+            .is_("archived_at", "null")
+            .eq("is_pinned", False)
+            .update({"archived_at": now, "updated_at": now, "updated_by": user_id})
+            .execute()
+        )
+
+        response = client.table("faq_entries").insert(entries_payload).execute()
+        return [FaqEntry(**row) for row in response.data]
+
+    def update_faq(self, client: Client, faq_id: str, payload: dict) -> FaqEntry:
+        response = client.table("faq_entries").update(payload).eq("id", str(faq_id)).execute()
+        if not response.data:
+            raise KeyError("FAQ entry not found")
+        return FaqEntry(**response.data[0])
+
+    def archive_faq(self, client: Client, faq_id: str, user_id: str) -> FaqEntry:
+        now = datetime.utcnow().isoformat()
+        response = (
+            client.table("faq_entries")
+            .update({"archived_at": now, "updated_at": now, "updated_by": user_id})
+            .eq("id", str(faq_id))
+            .execute()
+        )
+        if not response.data:
+            raise KeyError("FAQ entry not found")
+        return FaqEntry(**response.data[0])
+
     def list_reminders(
         self,
         client: Client,
@@ -741,6 +873,61 @@ class SupabaseStore:
         ).execute()
         return response.data or []
 
+    def _fetch_source_context(
+        self,
+        client: Client,
+        hub_id: str,
+        source_id: str,
+        limit: int,
+    ) -> List[dict]:
+        response = (
+            client.table("source_chunks")
+            .select("source_id, chunk_index, text")
+            .eq("hub_id", str(hub_id))
+            .eq("source_id", str(source_id))
+            .order("chunk_index")
+            .limit(limit)
+            .execute()
+        )
+        return response.data or []
+
+    def _generate_faq_questions(self, context_blocks: List[str], count: int) -> List[str]:
+        system_prompt = (
+            "You are Caddie, an onboarding assistant. Generate distinct FAQ questions "
+            "grounded strictly in the provided context. Return a JSON array of strings only."
+        )
+        context = "\n".join(context_blocks)
+        user_prompt = (
+            f"Context:\n{context}\n\n"
+            f"Generate {count} concise FAQ questions that an onboarding user would ask."
+        )
+        completion = self.llm_client.chat.completions.create(
+            model=self.chat_model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            temperature=0.2,
+        )
+        raw = completion.choices[0].message.content or ""
+        return _parse_questions_from_text(raw, count)
+
+    def _generate_faq_answer(self, question: str, context_blocks: List[str]) -> str:
+        system_prompt = (
+            "You are Caddie, an onboarding assistant. Answer using only the provided context. "
+            "Cite sources inline using [n] that match the context list."
+        )
+        user_prompt = f"Question: {question}\n\nContext:\n" + "\n".join(context_blocks)
+        completion = self.llm_client.chat.completions.create(
+            model=self.chat_model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            temperature=0.2,
+        )
+        return completion.choices[0].message.content or ""
+
 
 store = SupabaseStore()
 
@@ -817,6 +1004,87 @@ def _normalize_youtube_id(value: str) -> Optional[str]:
     if not _YOUTUBE_ID_RE.fullmatch(candidate):
         return None
     return candidate
+
+
+def _trim_text(text: str, max_chars: int) -> str:
+    cleaned = " ".join((text or "").split()).strip()
+    if len(cleaned) <= max_chars:
+        return cleaned
+    return f"{cleaned[:max_chars].rstrip()}..."
+
+
+def _parse_questions_from_text(raw: str, max_count: int) -> List[str]:
+    if not raw:
+        return []
+    text = raw.strip()
+    candidates: List[str] = []
+    seen: set[str] = set()
+
+    def _add(items: List[str]) -> None:
+        for item in items:
+            cleaned = str(item).strip().strip('"').strip("'")
+            if not cleaned:
+                continue
+            if not cleaned.endswith("?"):
+                cleaned = cleaned.rstrip(".")
+                cleaned = f"{cleaned}?"
+            key = cleaned.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            candidates.append(cleaned)
+            if len(candidates) >= max_count:
+                break
+
+    def _load_json_array(value: str) -> Optional[List[str]]:
+        try:
+            parsed = json.loads(value)
+        except json.JSONDecodeError:
+            return None
+        if isinstance(parsed, list):
+            return [str(item) for item in parsed]
+        return None
+
+    parsed = _load_json_array(text)
+    if parsed is None:
+        start = text.find("[")
+        end = text.rfind("]")
+        if start != -1 and end != -1 and end > start:
+            parsed = _load_json_array(text[start : end + 1])
+
+    if parsed is not None:
+        _add(parsed)
+        return candidates
+
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    cleaned_lines: List[str] = []
+    for line in lines:
+        cleaned = re.sub(r"^[\-\*\d\.\)\s]+", "", line).strip()
+        if cleaned:
+            cleaned_lines.append(cleaned)
+    _add(cleaned_lines)
+    return candidates
+
+
+def _answer_has_citation(answer: str, max_index: int) -> bool:
+    if not answer:
+        return False
+    for match in re.findall(r"\[(\d+)\]", answer):
+        try:
+            idx = int(match)
+        except ValueError:
+            continue
+        if 1 <= idx <= max_index:
+            return True
+    return False
+
+
+def _average_similarity(matches: List[Dict[str, Any]]) -> float:
+    if not matches:
+        return 0.0
+    values = [float(match.get("similarity") or 0) for match in matches]
+    return sum(values) / len(values)
+
 
 def _get_attr(obj: Any, name: str, default: Any = None) -> Any:
     if isinstance(obj, dict):

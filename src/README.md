@@ -79,6 +79,7 @@ Run the SQL migration in Supabase SQL Editor:
 `2026-csc1097-donnelt6-szumlig2/src/apps/api/migrations/009_hub_last_accessed.sql`
 `2026-csc1097-donnelt6-szumlig2/src/apps/api/migrations/010_hub_favourite.sql`
 `2026-csc1097-donnelt6-szumlig2/src/apps/api/migrations/011_match_source_chunks_sources.sql`
+`2026-csc1097-donnelt6-szumlig2/src/apps/api/migrations/012_faq_entries.sql`
 
 ## Auth note
 Sign in via `/auth` using Supabase email/password auth. The web app stores the Supabase session and sends `Authorization: Bearer <JWT>` on API requests. The API enforces RLS with the user token and only uses the service role key for storage/admin tasks (ingestion, member lookups).

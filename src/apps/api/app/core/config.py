@@ -25,6 +25,10 @@ class Settings(BaseSettings):
     trust_proxy_headers: bool = False
     environment: str = "local"
     allowed_origins: str = "http://localhost:3000"
+    faq_default_count: int = 6
+    faq_context_chunks_per_source: int = 2
+    faq_max_citations: int = 3
+    faq_min_similarity: float = 0.55
 
     class Config:
         env_file = ".env"

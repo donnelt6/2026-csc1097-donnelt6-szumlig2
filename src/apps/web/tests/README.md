@@ -7,6 +7,7 @@ What is tested
 - Auth routing behavior in `AuthGate`.
 - Hub listing and filtering in `HubsList`.
 - Upload flow, retries, and permissions in `UploadPanel`.
+- FAQ generation UI in `FaqPanel`.
 
 Run the tests
 ```
