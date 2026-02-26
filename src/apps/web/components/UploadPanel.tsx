@@ -3,6 +3,12 @@
 import { useMutation } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  DocumentTextIcon,
+  GlobeAltIcon,
+  PlayCircleIcon,
+  DocumentPlusIcon,
+} from "@heroicons/react/24/outline";
+import {
   createSource,
   createSourceUploadUrl,
   createWebSource,
@@ -75,7 +81,6 @@ export function UploadPanel({
         }
       } catch (err) {
         const reason = clampFailureReason(err);
-        // Mark the source as failed so the user can retry or delete explicitly.
         setRetryFiles((prev) => ({ ...prev, [enqueue.source.id]: uploadFile }));
         await failSource(enqueue.source.id, reason).catch(() => undefined);
         onRefresh();
@@ -239,11 +244,7 @@ export function UploadPanel({
   const selectableCount = selectableSources.length;
 
   return (
-    <div className="card grid">
-      <div>
-        <h3 style={{ margin: 0 }}>Upload a source</h3>
-        <p className="muted">PDF, DOCX, TXT, Markdown, web URLs, or YouTube videos. Progress updates appear below.</p>
-      </div>
+    <div className="sources">
       <input
         ref={fileInputRef}
         type="file"
@@ -252,98 +253,92 @@ export function UploadPanel({
         disabled={!canUpload}
         style={{ display: "none" }}
       />
-      <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-        <button
-          className="button--secondary button"
-          type="button"
-          onClick={() => fileInputRef.current?.click()}
-          disabled={!canUpload}
-        >
-          Choose file
-        </button>
-        <span className="muted">{file ? file.name : "No file chosen"}</span>
-      </div>
-      <button className="button button--primary" onClick={() => mutation.mutate()} disabled={!canUpload || mutation.isPending || !file}>
-        {mutation.isPending ? "Uploading..." : "Upload"}
-      </button>
-      <label>
-        <input
-          type="url"
-          placeholder="https://example.com/onboarding"
-          value={url}
-          onChange={(e) => setUrl(e.target.value)}
-          disabled={!canUpload}
-        />
-      </label>
-      <button className="button button--primary" onClick={handleSubmitUrl} disabled={!canUpload || isSubmittingUrl || !url.trim()}>
-        {isSubmittingUrl ? "Adding..." : "Add URL"}
-      </button>
-      <label>
-        <input
-          type="url"
-          placeholder="https://www.youtube.com/watch?v=..."
-          value={youtubeUrl}
-          onChange={(e) => setYouTubeUrl(e.target.value)}
-          disabled={!canUpload}
-        />
-      </label>
-      <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-        <label style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-          <input
-            type="text"
-            placeholder="Language (optional, e.g. en)"
-            value={youtubeLanguage}
-            onChange={(e) => setYouTubeLanguage(e.target.value)}
-            disabled={!canUpload}
-          />
-        </label>
-        <label className="checkbox-label">
-          <input
-            type="checkbox"
-            checked={youtubeAutoCaptions}
-            onChange={(e) => setYouTubeAutoCaptions(e.target.checked)}
-            disabled={!canUpload}
-          />
-          <span>Allow auto-captions</span>
-        </label>
-      </div>
-      <button
-        className="button button--primary"
-        onClick={handleSubmitYouTube}
-        disabled={!canUpload || isSubmittingYouTube || !youtubeUrl.trim()}
-      >
-        {isSubmittingYouTube ? "Adding..." : "Add YouTube"}
-      </button>
-      {!canUpload && <p className="muted">You only have view access. Ask the hub owner to grant edit permissions.</p>}
-      {statusMessage && <p className="muted">{statusMessage}</p>}
-      {selectableCount > 0 && (
-        <div className="card" style={{ borderColor: "#1e2535" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px" }}>
-            <p className="muted" style={{ margin: 0 }}>
-              Sources used for answers: {selectedCount} of {selectableCount}
-            </p>
-            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-              <button
-                className="button"
-                type="button"
-                onClick={onSelectAllSources}
-                disabled={selectedCount === selectableCount}
-              >
-                Select all
-              </button>
-              <button
-                className="button"
-                type="button"
-                onClick={onClearSourceSelection}
-                disabled={selectedCount === 0}
-              >
-                Clear
-              </button>
+
+      <div className="sources__upload-card">
+        {/* File upload section */}
+        <div className="sources__section">
+          <div className="sources__section-header">
+            <DocumentTextIcon className="sources__section-icon sources__type-icon--file" />
+            <div>
+              <h3 className="sources__section-title">Upload a file</h3>
+              <p className="sources__section-desc">PDF, DOCX, TXT, or Markdown</p>
             </div>
+          </div>
+          <div className="sources__file-row">
+            <button className="button--secondary button" type="button" onClick={() => fileInputRef.current?.click()} disabled={!canUpload}>
+              Choose file
+            </button>
+            <span className="sources__file-name">{file ? file.name : "No file chosen"}</span>
+            <button className="button button--primary" onClick={() => mutation.mutate()} disabled={!canUpload || mutation.isPending || !file}>
+              {mutation.isPending ? "Uploading..." : "Upload"}
+            </button>
+          </div>
+        </div>
+
+        {/* Web URL section */}
+        <div className="sources__section">
+          <div className="sources__section-header">
+            <GlobeAltIcon className="sources__section-icon sources__type-icon--web" />
+            <div>
+              <h3 className="sources__section-title">Add a web page</h3>
+              <p className="sources__section-desc">Enter a URL to scrape and ingest</p>
+            </div>
+          </div>
+          <div className="sources__input-row">
+            <input type="url" placeholder="https://example.com/onboarding" value={url} onChange={(e) => setUrl(e.target.value)} disabled={!canUpload} />
+            <button className="button button--primary" onClick={handleSubmitUrl} disabled={!canUpload || isSubmittingUrl || !url.trim()}>
+              {isSubmittingUrl ? "Adding..." : "Add URL"}
+            </button>
+          </div>
+        </div>
+
+        {/* YouTube section */}
+        <div className="sources__section">
+          <div className="sources__section-header">
+            <PlayCircleIcon className="sources__section-icon sources__type-icon--youtube" />
+            <div>
+              <h3 className="sources__section-title">Add a YouTube video</h3>
+              <p className="sources__section-desc">Transcript will be extracted and ingested</p>
+            </div>
+          </div>
+          <div className="sources__input-row">
+            <input type="url" placeholder="https://www.youtube.com/watch?v=..." value={youtubeUrl} onChange={(e) => setYouTubeUrl(e.target.value)} disabled={!canUpload} />
+            <button className="button button--primary" onClick={handleSubmitYouTube} disabled={!canUpload || isSubmittingYouTube || !youtubeUrl.trim()}>
+              {isSubmittingYouTube ? "Adding..." : "Add YouTube"}
+            </button>
+          </div>
+          <div className="sources__youtube-options">
+            <input type="text" placeholder="Language (optional, e.g. en)" value={youtubeLanguage} onChange={(e) => setYouTubeLanguage(e.target.value)} disabled={!canUpload} />
+            <label className="checkbox-label">
+              <input type="checkbox" checked={youtubeAutoCaptions} onChange={(e) => setYouTubeAutoCaptions(e.target.checked)} disabled={!canUpload} />
+              <span>Allow auto-captions</span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      {!canUpload && (
+        <p className="sources__permission-notice">You only have view access. Ask the hub owner to grant edit permissions.</p>
+      )}
+      {statusMessage && <p className="sources__status">{statusMessage}</p>}
+
+      <hr className="sources__divider" />
+
+      {selectableCount > 0 && (
+        <div className="sources__selection-bar">
+          <p className="sources__selection-text">Sources used for answers: {selectedCount} of {selectableCount}</p>
+          <div className="sources__selection-actions">
+            <button className="button--small" type="button" onClick={onSelectAllSources} disabled={selectedCount === selectableCount}>
+              Select all
+            </button>
+            <button className="button--small" type="button" onClick={onClearSourceSelection} disabled={selectedCount === 0}>
+              Clear
+            </button>
           </div>
         </div>
       )}
-      <div className="grid" style={{ gap: "10px" }}>
+
+      <div className="sources__list">
         {sortedSources.map((source) => {
           const isSelectable = source.status === "complete";
           const isSelected = isSelectable && selectedSourceSet.has(source.id);
@@ -362,10 +357,10 @@ export function UploadPanel({
           const isRefreshingThis = refreshingSourceId === source.id;
           const isReprocessingThis = reprocessingSourceId === source.id;
           return (
-            <div key={source.id} className="card" style={{ borderColor: "#1e2535" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px" }}>
-                <div style={{ minWidth: 0 }}>
-                  <label style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+            <div key={source.id} className="sources__card">
+              <div className="sources__card-top">
+                <div className="sources__card-info">
+                  <div className="sources__card-checkbox">
                     <input
                       type="checkbox"
                       checked={isSelected}
@@ -374,138 +369,89 @@ export function UploadPanel({
                       aria-label={`Use ${source.original_name} for answers`}
                       title={isSelectable ? "Use this source for answers." : "Available after processing."}
                     />
-                    <strong style={{ wordBreak: "break-word" }}>{source.original_name}</strong>
-                  </label>
-                  <p className="muted">
-                    {source.type === "web"
-                      ? "Web URL"
-                      : source.type === "youtube"
-                        ? "YouTube"
-                        : "File"}{" "}
-                    - {formatIrelandDateTime(new Date(source.created_at))}
-                  </p>
-                  {!isSelectable && source.status !== "failed" && (
-                    <p className="muted">Available after processing completes.</p>
-                  )}
+                  </div>
+                  {source.type === "file" && <DocumentTextIcon className="sources__type-icon sources__type-icon--file" />}
+                  {source.type === "web" && <GlobeAltIcon className="sources__type-icon sources__type-icon--web" />}
+                  {source.type === "youtube" && <PlayCircleIcon className="sources__type-icon sources__type-icon--youtube" />}
+                  <div className="sources__card-details">
+                    <p className="sources__card-name">{source.original_name}</p>
+                    <p className="sources__card-meta">
+                      {source.type === "web" ? "Web URL" : source.type === "youtube" ? "YouTube" : "File"}{" "}
+                      &middot; {formatIrelandDateTime(new Date(source.created_at))}
+                    </p>
+                    {!isSelectable && source.status !== "failed" && (
+                      <p className="sources__card-note">Available after processing completes.</p>
+                    )}
+                  </div>
                 </div>
                 <StatusPill status={source.status} />
               </div>
-            {source.failure_reason && <p className="muted">Error: {source.failure_reason}</p>}
-            {source.status === "failed" && (
-              <div style={{ display: "flex", gap: "8px", marginTop: "8px", flexWrap: "wrap" }}>
-                {isRemoteSource ? (
-                  <button
-                    className="button"
-                    type="button"
-                    onClick={() => handleRefreshSource(source.id)}
-                    disabled={isRefreshingThis}
-                  >
+              {source.failure_reason && <p className="sources__card-error">Error: {source.failure_reason}</p>}
+              {source.status === "failed" && (
+                <div className="sources__card-actions">
+                  {isRemoteSource ? (
+                    <button className="button--small" type="button" onClick={() => handleRefreshSource(source.id)} disabled={isRefreshingThis}>
+                      {isRefreshingThis ? "Refreshing..." : "Refresh"}
+                    </button>
+                  ) : (
+                    <button className="button--small" type="button" onClick={() => handleRetryUpload(source.id)} disabled={isRetryingThis || isDeleting || !retryFiles[source.id]}>
+                      {isRetryingThis ? "Retrying..." : "Retry upload"}
+                    </button>
+                  )}
+                  {canUpload && (
+                    <button className="button--small" type="button" onClick={() => handleDeleteSource(source.id)} disabled={isRetryingThis || isDeleting || isRefreshingThis}>
+                      {isDeleting ? "Deleting..." : "Delete"}
+                    </button>
+                  )}
+                </div>
+              )}
+              {isRemoteSource && source.status !== "failed" && (
+                <div className="sources__card-actions">
+                  <button className="button--small" type="button" onClick={() => handleReprocessSource(source.id)} disabled={isReprocessingThis || isRefreshingThis || !snapshotReady}>
+                    {isReprocessingThis ? "Reprocessing..." : "Reprocess"}
+                  </button>
+                  <button className="button--small" type="button" onClick={() => handleRefreshSource(source.id)} disabled={isRefreshingThis || isReprocessingThis}>
                     {isRefreshingThis ? "Refreshing..." : "Refresh"}
                   </button>
-                ) : (
-                  <button
-                    className="button"
-                    type="button"
-                    onClick={() => handleRetryUpload(source.id)}
-                    disabled={isRetryingThis || isDeleting || !retryFiles[source.id]}
-                  >
-                    {isRetryingThis ? "Retrying..." : "Retry upload"}
-                  </button>
-                )}
-                {canUpload && (
-                  <button
-                    className="button"
-                    type="button"
-                    onClick={() => handleDeleteSource(source.id)}
-                    disabled={isRetryingThis || isDeleting || isRefreshingThis}
-                  >
+                  {canUpload && (
+                    <button className="button--small" type="button" onClick={() => handleDeleteSource(source.id)} disabled={isDeleting || isRefreshingThis || isReprocessingThis}>
+                      {isDeleting ? "Deleting..." : "Delete"}
+                    </button>
+                  )}
+                </div>
+              )}
+              {!isRemoteSource && source.status !== "failed" && canUpload && (
+                <div className="sources__card-actions">
+                  <button className="button--small" type="button" onClick={() => handleDeleteSource(source.id)} disabled={isDeleting}>
                     {isDeleting ? "Deleting..." : "Delete"}
                   </button>
-                )}
-              </div>
-            )}
-            {isRemoteSource && source.status !== "failed" && (
-              <div style={{ display: "flex", gap: "8px", marginTop: "8px", flexWrap: "wrap" }}>
-                <button
-                  className="button"
-                  type="button"
-                  onClick={() => handleReprocessSource(source.id)}
-                  disabled={
-                    isReprocessingThis ||
-                    isRefreshingThis ||
-                    !snapshotReady
-                  }
-                >
-                  {isReprocessingThis ? "Reprocessing..." : "Reprocess"}
-                </button>
-                <button
-                  className="button"
-                  type="button"
-                  onClick={() => handleRefreshSource(source.id)}
-                  disabled={isRefreshingThis || isReprocessingThis}
-                >
-                  {isRefreshingThis ? "Refreshing..." : "Refresh"}
-                </button>
-                {canUpload && (
-                  <button
-                    className="button"
-                    type="button"
-                    onClick={() => handleDeleteSource(source.id)}
-                    disabled={isDeleting || isRefreshingThis || isReprocessingThis}
-                  >
-                    {isDeleting ? "Deleting..." : "Delete"}
-                  </button>
-                )}
-              </div>
-            )}
-            {!isRemoteSource && source.status !== "failed" && canUpload && (
-              <div style={{ display: "flex", gap: "8px", marginTop: "8px", flexWrap: "wrap" }}>
-                <button
-                  className="button"
-                  type="button"
-                  onClick={() => handleDeleteSource(source.id)}
-                  disabled={isDeleting}
-                >
-                  {isDeleting ? "Deleting..." : "Delete"}
-                </button>
-              </div>
-            )}
-            {isRemoteSource && source.status !== "failed" && !snapshotReady && (
-              <p className="muted">Reprocess is available after the first successful ingest.</p>
-            )}
-            {source.status === "failed" && !isRemoteSource && !retryFiles[source.id] && (
-              <p className="muted">Retry is available until you refresh this page.</p>
-            )}
+                </div>
+              )}
+              {isRemoteSource && source.status !== "failed" && !snapshotReady && (
+                <p className="sources__card-note">Reprocess is available after the first successful ingest.</p>
+              )}
+              {source.status === "failed" && !isRemoteSource && !retryFiles[source.id] && (
+                <p className="sources__card-note">Retry is available until you refresh this page.</p>
+              )}
             </div>
           );
         })}
-        {!sortedSources.length && <p className="muted">No sources yet. Upload your first document.</p>}
+        {!sortedSources.length && (
+          <div className="sources__empty">
+            <DocumentPlusIcon className="sources__empty-icon" />
+            <p className="sources__empty-title">No sources yet</p>
+            <p className="sources__empty-desc">Upload your first document, add a URL, or paste a YouTube link above.</p>
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
 function StatusPill({ status }: { status: Source["status"] }) {
-  const colors: Record<Source["status"], string> = {
-    queued: "#a1a1aa",
-    processing: "#fbbf24",
-    failed: "#f87171",
-    complete: "#34d399",
-  };
   return (
-    <span
-      style={{
-        borderRadius: "999px",
-        padding: "6px 10px",
-        fontWeight: 700,
-        fontSize: "0.8rem",
-        background: colors[status],
-        color: "#0b1221",
-        flexShrink: 0,
-        whiteSpace: "nowrap",
-      }}
-    >
-      {status.toUpperCase()}
+    <span className={`sources__pill sources__pill--${status}`}>
+      {status.charAt(0).toUpperCase() + status.slice(1)}
     </span>
   );
 }
