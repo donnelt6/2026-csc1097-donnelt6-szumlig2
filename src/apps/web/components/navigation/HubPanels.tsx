@@ -1,11 +1,12 @@
 'use client';
 
-import { usePathname } from 'next/navigation';
+import { useParams } from 'next/navigation';
 import {
   ChatBubbleLeftRightIcon,
   DocumentTextIcon,
   BellIcon,
   UsersIcon,
+  QuestionMarkCircleIcon,
 } from '@heroicons/react/24/outline';
 import { useHubTab, type HubTab } from '../../lib/HubTabContext';
 
@@ -14,14 +15,14 @@ const items: { key: HubTab; icon: typeof DocumentTextIcon; label: string }[] = [
   { key: 'sources', icon: DocumentTextIcon, label: 'Sources' },
   { key: 'members', icon: UsersIcon, label: 'Members' },
   { key: 'reminders', icon: BellIcon, label: 'Reminders' },
+  { key: 'faq', icon: QuestionMarkCircleIcon, label: 'FAQs' },
 ];
 
 export function HubPanels() {
-  const pathname = usePathname();
+  const params = useParams<{ hubId: string }>();
   const { activeTab, setActiveTab } = useHubTab();
 
-  const hubMatch = pathname.match(/^\/hubs\/([^/]+)/);
-  const hubId = hubMatch?.[1] ?? null;
+  const hubId = params?.hubId ?? null;
 
   if (!hubId) return null;
 

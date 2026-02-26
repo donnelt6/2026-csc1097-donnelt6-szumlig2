@@ -2,17 +2,14 @@
 
 import { createContext, useCallback, useContext, useState } from 'react';
 
-export type HubTab = 'chat' | 'sources' | 'members' | 'reminders';
+export type HubTab = 'chat' | 'sources' | 'members' | 'reminders' | 'faq';
 
 interface HubTabState {
   activeTab: HubTab;
   setActiveTab: (tab: HubTab) => void;
 }
 
-const HubTabContext = createContext<HubTabState>({
-  activeTab: 'chat',
-  setActiveTab: () => undefined,
-});
+const HubTabContext = createContext<HubTabState | null>(null);
 
 export function HubTabProvider({ children }: { children: React.ReactNode }) {
   const [activeTab, setRaw] = useState<HubTab>('chat');
@@ -24,6 +21,8 @@ export function HubTabProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
-export function useHubTab() {
-  return useContext(HubTabContext);
+export function useHubTab(): HubTabState {
+  const ctx = useContext(HubTabContext);
+  if (!ctx) throw new Error('useHubTab must be used within HubTabProvider');
+  return ctx;
 }

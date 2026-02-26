@@ -93,9 +93,18 @@ export function NotificationsMenu() {
         detailsRef.current.open = false;
       }
     };
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && detailsRef.current?.open) {
+        detailsRef.current.open = false;
+      }
+    };
 
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleKey);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKey);
+    };
   }, []);
 
   if (!user) return null;
