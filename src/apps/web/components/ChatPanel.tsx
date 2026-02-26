@@ -1,7 +1,7 @@
 'use client';
 
-import { useMutation } from "@tanstack/react-query";
-import { useState, useRef, useEffect } from "react";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { ChevronDownIcon, PaperAirplaneIcon } from "@heroicons/react/24/outline";
 import { askQuestion, getChatHistory } from "../lib/api";
 import type { ChatResponse, Citation, HistoryMessage, Source } from "../lib/types";
@@ -77,38 +77,42 @@ export function ChatPanel({ hubId, hubName, hubDescription, selectedSourceIds, h
     return () => document.removeEventListener('keydown', handleKey);
   }, [activeCitation]);
 
+  // Load chat history
+  const { data: historyData } = useQuery({
+    queryKey: ['chatHistory', hubId],
+    queryFn: () => getChatHistory(hubId),
+  });
+
+  const historyPairs = useMemo<MessagePair[]>(() => {
+    if (!historyData || historyData.length === 0) return [];
+    const pairs: MessagePair[] = [];
+    for (let i = 0; i < historyData.length; i += 2) {
+      const userMsg: HistoryMessage | undefined = historyData[i];
+      const aiMsg: HistoryMessage | undefined = historyData[i + 1];
+      if (userMsg && userMsg.role === "user") {
+        pairs.push({
+          id: `history-${i}`,
+          question: userMsg.content,
+          response: aiMsg
+            ? { answer: aiMsg.content, citations: aiMsg.citations, message_id: `history-${i + 1}` }
+            : null,
+          error: null,
+          isLoading: false,
+        });
+      }
+    }
+    return pairs;
+  }, [historyData]);
+
+  const allMessages = useMemo(
+    () => [...historyPairs, ...messages],
+    [historyPairs, messages]
+  );
+
   // Auto-scroll to bottom on new messages
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
-
-  // Load chat history on mount
-  useEffect(() => {
-    let cancelled = false;
-    getChatHistory(hubId).then((history) => {
-      if (cancelled || history.length === 0) return;
-      const pairs: MessagePair[] = [];
-      for (let i = 0; i < history.length; i += 2) {
-        const userMsg: HistoryMessage | undefined = history[i];
-        const aiMsg: HistoryMessage | undefined = history[i + 1];
-        if (userMsg && userMsg.role === "user") {
-          pairs.push({
-            id: `history-${i}`,
-            question: userMsg.content,
-            response: aiMsg
-              ? { answer: aiMsg.content, citations: aiMsg.citations, message_id: `history-${i + 1}` }
-              : null,
-            error: null,
-            isLoading: false,
-          });
-        }
-      }
-      setMessages(pairs);
-    }).catch(() => {
-      // Silently ignore — history is optional
-    });
-    return () => { cancelled = true; };
-  }, [hubId]);
+  }, [allMessages]);
 
   const mutation = useMutation({
     mutationFn: ({ questionText }: { msgId: string; questionText: string }) =>
@@ -226,13 +230,13 @@ export function ChatPanel({ hubId, hubName, hubDescription, selectedSourceIds, h
         </div>
 
         <div className="chat__messages">
-          {messages.length === 0 && (
+          {allMessages.length === 0 && (
             <div className="chat__empty">
               <p className="chat__empty-text">Ask a question about your hub</p>
               <p className="muted">Answers use your selected sources. Flip the scope to include broader context.</p>
             </div>
           )}
-          {messages.map((msg) => (
+          {allMessages.map((msg) => (
             <div key={msg.id} className="chat__pair">
               <div className="chat__message chat__message--user">
                 <div className="chat__bubble chat__bubble--user">
