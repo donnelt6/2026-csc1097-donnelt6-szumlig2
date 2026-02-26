@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { ChatPanel } from "../../../components/ChatPanel";
 import { FaqPanel } from "../../../components/FaqPanel";
+import { GuidePanel } from "../../../components/GuidePanel";
 import { TabSwitcher } from "../../../components/TabSwitcher";
 import { UploadPanel } from "../../../components/UploadPanel";
 import { MembersPanel } from "../../../components/MembersPanel";
@@ -117,6 +118,14 @@ export default function HubDetail({ params }: { params: { hubId: string } }) {
           )}
           {activeTab === 'members' && (
             <MembersPanel hubId={params.hubId} role={hub?.role ?? undefined} />
+          )}
+          {activeTab === 'guides' && (
+            <GuidePanel
+              hubId={params.hubId}
+              selectedSourceIds={sourceSelection.selectedIds}
+              hasSelectableSources={sourceSelection.completeCount > 0}
+              canEdit={canUpload}
+            />
           )}
           {activeTab === 'faq' && (
             <FaqPanel

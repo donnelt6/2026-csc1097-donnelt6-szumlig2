@@ -62,6 +62,36 @@ export interface FaqEntry {
   generation_batch_id?: string | null;
 }
 
+export interface GuideStep {
+  id: string;
+  guide_id: string;
+  step_index: number;
+  title?: string | null;
+  instruction: string;
+  citations: Citation[];
+  confidence: number;
+  created_at: string;
+  updated_at?: string | null;
+  is_complete?: boolean;
+  completed_at?: string | null;
+}
+
+export interface GuideEntry {
+  id: string;
+  hub_id: string;
+  title: string;
+  topic?: string | null;
+  summary?: string | null;
+  source_ids: string[];
+  archived_at?: string | null;
+  created_at: string;
+  created_by?: string | null;
+  updated_at?: string | null;
+  updated_by?: string | null;
+  generation_batch_id?: string | null;
+  steps: GuideStep[];
+}
+
 export interface HubMember {
   hub_id: string;
   user_id: string;

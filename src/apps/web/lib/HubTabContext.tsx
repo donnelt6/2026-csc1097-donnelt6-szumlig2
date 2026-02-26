@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useState } from 'react';
 
-export type HubTab = 'chat' | 'sources' | 'members' | 'reminders' | 'faq';
+export type HubTab = 'chat' | 'sources' | 'members' | 'reminders' | 'faq' | 'guides';
 
 interface HubTabState {
   activeTab: HubTab;
