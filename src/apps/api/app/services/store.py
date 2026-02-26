@@ -16,6 +16,7 @@ from ..schemas import (
     Citation,
     FaqEntry,
     FaqGenerateRequest,
+    HistoryMessage,
     Hub,
     HubCreate,
     HubInviteRequest,
@@ -549,6 +550,38 @@ class SupabaseStore:
             .execute()
         )
         return ChatResponse(answer=answer, citations=citations, message_id=assistant_row.data[0]["id"])
+
+    def chat_history(self, client: Client, user_id: str, hub_id: str) -> List[HistoryMessage]:
+        sessions_resp = (
+            client.table("chat_sessions")
+            .select("id")
+            .eq("hub_id", hub_id)
+            .eq("created_by", user_id)
+            .order("created_at", desc=True)
+            .limit(5)
+            .execute()
+        )
+        if not sessions_resp.data:
+            return []
+
+        session_ids = [s["id"] for s in sessions_resp.data]
+        messages_resp = (
+            client.table("messages")
+            .select("role, content, citations, created_at")
+            .in_("session_id", session_ids)
+            .order("created_at", desc=False)
+            .execute()
+        )
+
+        return [
+            HistoryMessage(
+                role=m["role"],
+                content=m["content"],
+                citations=[Citation(**c) for c in (m.get("citations") or [])],
+                created_at=m["created_at"],
+            )
+            for m in messages_resp.data
+        ]
 
     def list_faqs(self, client: Client, hub_id: str) -> List[FaqEntry]:
         response = (

@@ -32,7 +32,7 @@ export default function HubDetail({ params }: { params: { hubId: string } }) {
   const hubResolved = !!hub;
   const canUpload = hub?.role === 'owner' || hub?.role === 'editor';
 
-  const { data: sources, refetch: refetchSources } = useQuery({
+  const { data: sources, refetch: refetchSources, isLoading: sourcesLoading } = useQuery({
     queryKey: ['sources', params.hubId],
     queryFn: () => listSources(params.hubId),
     refetchInterval: activeTab === 'sources' ? 4000 : false,
@@ -97,6 +97,7 @@ export default function HubDetail({ params }: { params: { hubId: string } }) {
               selectedSourceIds={sourceSelection.selectedIds}
               hasSelectableSources={sourceSelection.completeCount > 0}
               sources={sources ?? []}
+              sourcesLoading={sourcesLoading}
               onToggleSource={sourceSelection.toggleSource}
               onSelectAllSources={sourceSelection.selectAll}
               onClearSourceSelection={sourceSelection.clearAll}

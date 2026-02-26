@@ -1,12 +1,14 @@
 import logging
+from typing import List
+from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from openai import OpenAIError
 from postgrest.exceptions import APIError
 from supabase import Client
 
 from ..dependencies import CurrentUser, get_current_user, get_supabase_user_client, rate_limit_user_ip
-from ..schemas import ChatRequest, ChatResponse
+from ..schemas import ChatRequest, ChatResponse, HistoryMessage
 from ..services.store import store
 from .errors import raise_postgrest_error
 
@@ -35,5 +37,17 @@ def ask(
                 detail="OpenAI quota or rate limit exceeded.",
             ) from exc
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="OpenAI request failed.") from exc
+    except APIError as exc:
+        raise_postgrest_error(exc)
+
+
+@router.get("/history", response_model=List[HistoryMessage])
+def chat_history(
+    hub_id: UUID = Query(...),
+    client: Client = Depends(get_supabase_user_client),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> List[HistoryMessage]:
+    try:
+        return store.chat_history(client, current_user.id, str(hub_id))
     except APIError as exc:
         raise_postgrest_error(exc)

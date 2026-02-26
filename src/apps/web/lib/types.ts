@@ -38,6 +38,13 @@ export interface Citation {
   chunk_index?: number;
 }
 
+export interface HistoryMessage {
+  role: string;
+  content: string;
+  citations: Citation[];
+  created_at: string;
+}
+
 export interface FaqEntry {
   id: string;
   hub_id: string;

@@ -3,8 +3,8 @@
 import { useMutation } from "@tanstack/react-query";
 import { useState, useRef, useEffect } from "react";
 import { ChevronDownIcon, PaperAirplaneIcon } from "@heroicons/react/24/outline";
-import { askQuestion } from "../lib/api";
-import type { ChatResponse, Citation, Source } from "../lib/types";
+import { askQuestion, getChatHistory } from "../lib/api";
+import type { ChatResponse, Citation, HistoryMessage, Source } from "../lib/types";
 import { SourceSelector } from "./SourceSelector";
 
 const SCOPE_OPTIONS = [
@@ -27,12 +27,13 @@ interface Props {
   selectedSourceIds: string[];
   hasSelectableSources: boolean;
   sources: Source[];
+  sourcesLoading?: boolean;
   onToggleSource: (id: string) => void;
   onSelectAllSources: () => void;
   onClearSourceSelection: () => void;
 }
 
-export function ChatPanel({ hubId, hubName, hubDescription, selectedSourceIds, hasSelectableSources, sources, onToggleSource, onSelectAllSources, onClearSourceSelection }: Props) {
+export function ChatPanel({ hubId, hubName, hubDescription, selectedSourceIds, hasSelectableSources, sources, sourcesLoading, onToggleSource, onSelectAllSources, onClearSourceSelection }: Props) {
   const [question, setQuestion] = useState("");
   const [messages, setMessages] = useState<MessagePair[]>([]);
   const [scope, setScope] = useState<"hub" | "global">("hub");
@@ -80,6 +81,34 @@ export function ChatPanel({ hubId, hubName, hubDescription, selectedSourceIds, h
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  // Load chat history on mount
+  useEffect(() => {
+    let cancelled = false;
+    getChatHistory(hubId).then((history) => {
+      if (cancelled || history.length === 0) return;
+      const pairs: MessagePair[] = [];
+      for (let i = 0; i < history.length; i += 2) {
+        const userMsg: HistoryMessage | undefined = history[i];
+        const aiMsg: HistoryMessage | undefined = history[i + 1];
+        if (userMsg && userMsg.role === "user") {
+          pairs.push({
+            id: `history-${i}`,
+            question: userMsg.content,
+            response: aiMsg
+              ? { answer: aiMsg.content, citations: aiMsg.citations, message_id: `history-${i + 1}` }
+              : null,
+            error: null,
+            isLoading: false,
+          });
+        }
+      }
+      setMessages(pairs);
+    }).catch(() => {
+      // Silently ignore — history is optional
+    });
+    return () => { cancelled = true; };
+  }, [hubId]);
 
   const mutation = useMutation({
     mutationFn: ({ questionText }: { msgId: string; questionText: string }) =>
@@ -159,6 +188,7 @@ export function ChatPanel({ hubId, hubName, hubDescription, selectedSourceIds, h
           <div className="chat__controls-right">
             <SourceSelector
               sources={sources}
+              sourcesLoading={sourcesLoading}
               selectedSourceIds={selectedSourceIds}
               onToggleSource={onToggleSource}
               onSelectAllSources={onSelectAllSources}

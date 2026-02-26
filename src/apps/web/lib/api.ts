@@ -1,6 +1,7 @@
 import { getAccessToken } from "./supabaseClient";
 import type {
   ChatResponse,
+  HistoryMessage,
   Hub,
   HubMember,
   FaqEntry,
@@ -154,6 +155,11 @@ export async function deleteSource(sourceId: string): Promise<void> {
   if (!res.ok) {
     await handle(res);
   }
+}
+
+export async function getChatHistory(hubId: string): Promise<HistoryMessage[]> {
+  const res = await authedFetch(`${API_BASE}/chat/history?hub_id=${hubId}`, { cache: "no-store" });
+  return handle<HistoryMessage[]>(res);
 }
 
 export async function askQuestion(data: {

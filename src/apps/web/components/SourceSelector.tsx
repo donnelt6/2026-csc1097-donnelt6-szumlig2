@@ -6,6 +6,7 @@ import type { Source } from '../lib/types';
 
 interface Props {
   sources: Source[];
+  sourcesLoading?: boolean;
   selectedSourceIds: string[];
   onToggleSource: (id: string) => void;
   onSelectAllSources: () => void;
@@ -14,6 +15,7 @@ interface Props {
 
 export function SourceSelector({
   sources,
+  sourcesLoading,
   selectedSourceIds,
   onToggleSource,
   onSelectAllSources,
@@ -44,7 +46,16 @@ export function SourceSelector({
     };
   }, [open]);
 
-  if (sources.length === 0) return null;
+  if (sources.length === 0) {
+    return (
+      <div className="source-selector" ref={ref}>
+        <button type="button" className="source-selector__toggle" disabled>
+          <span>{sourcesLoading ? 'Sources (loading…)' : 'Sources (0/0)'}</span>
+          <ChevronDownIcon className="source-selector__chevron" />
+        </button>
+      </div>
+    );
+  }
 
   if (totalCount === 0) {
     return (
