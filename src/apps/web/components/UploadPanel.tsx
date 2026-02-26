@@ -7,6 +7,7 @@ import {
   GlobeAltIcon,
   PlayCircleIcon,
   DocumentPlusIcon,
+  MagnifyingGlassIcon,
 } from "@heroicons/react/24/outline";
 import {
   createSource,
@@ -56,6 +57,8 @@ export function UploadPanel({
   const [isSubmittingUrl, setIsSubmittingUrl] = useState(false);
   const [isSubmittingYouTube, setIsSubmittingYouTube] = useState(false);
   const [retryFiles, setRetryFiles] = useState<Record<string, File>>({});
+  const [searchQuery, setSearchQuery] = useState("");
+  const [typeFilter, setTypeFilter] = useState<"all" | "file" | "web" | "youtube">("all");
 
   useEffect(() => {
     if (!statusMessage) return;
@@ -235,6 +238,17 @@ export function UploadPanel({
     () => [...sources].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()),
     [sources]
   );
+  const filteredSources = useMemo(() => {
+    let result = sortedSources;
+    if (typeFilter !== "all") {
+      result = result.filter((s) => s.type === typeFilter);
+    }
+    if (searchQuery.trim()) {
+      const q = searchQuery.trim().toLowerCase();
+      result = result.filter((s) => s.original_name.toLowerCase().includes(q));
+    }
+    return result;
+  }, [sortedSources, typeFilter, searchQuery]);
   const selectableSources = useMemo(
     () => sortedSources.filter((source) => source.status === "complete"),
     [sortedSources]
@@ -324,6 +338,33 @@ export function UploadPanel({
 
       <hr className="sources__divider" />
 
+      {sortedSources.length > 0 && (
+        <div className="sources__filter-bar">
+          <div className="sources__search">
+            <MagnifyingGlassIcon className="sources__search-icon" />
+            <input
+              type="text"
+              className="sources__search-input"
+              placeholder="Search sources..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+          </div>
+          <div className="sources__filter-pills">
+            {(["all", "file", "web", "youtube"] as const).map((type) => (
+              <button
+                key={type}
+                type="button"
+                className={`sources__filter-pill${typeFilter === type ? " sources__filter-pill--active" : ""}`}
+                onClick={() => setTypeFilter(type)}
+              >
+                {type === "all" ? "All" : type === "file" ? "Files" : type === "web" ? "Web" : "YouTube"}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {selectableCount > 0 && (
         <div className="sources__selection-bar">
           <p className="sources__selection-text">Sources used for answers: {selectedCount} of {selectableCount}</p>
@@ -339,7 +380,7 @@ export function UploadPanel({
       )}
 
       <div className="sources__list">
-        {sortedSources.map((source) => {
+        {filteredSources.map((source) => {
           const isSelectable = source.status === "complete";
           const isSelected = isSelectable && selectedSourceSet.has(source.id);
           const webSnapshotReady =
@@ -384,49 +425,50 @@ export function UploadPanel({
                     )}
                   </div>
                 </div>
-                <StatusPill status={source.status} />
+                <div className="sources__card-right">
+                  {source.status === "failed" && (
+                    <div className="sources__card-actions">
+                      {isRemoteSource ? (
+                        <button className="button--small" type="button" onClick={() => handleRefreshSource(source.id)} disabled={isRefreshingThis}>
+                          {isRefreshingThis ? "Refreshing..." : "Refresh"}
+                        </button>
+                      ) : (
+                        <button className="button--small" type="button" onClick={() => handleRetryUpload(source.id)} disabled={isRetryingThis || isDeleting || !retryFiles[source.id]}>
+                          {isRetryingThis ? "Retrying..." : "Retry upload"}
+                        </button>
+                      )}
+                      {canUpload && (
+                        <button className="button--small" type="button" onClick={() => handleDeleteSource(source.id)} disabled={isRetryingThis || isDeleting || isRefreshingThis}>
+                          {isDeleting ? "Deleting..." : "Delete"}
+                        </button>
+                      )}
+                    </div>
+                  )}
+                  {isRemoteSource && source.status !== "failed" && (
+                    <div className="sources__card-actions">
+                      <button className="button--small" type="button" onClick={() => handleReprocessSource(source.id)} disabled={isReprocessingThis || isRefreshingThis || !snapshotReady}>
+                        {isReprocessingThis ? "Reprocessing..." : "Reprocess"}
+                      </button>
+                      <button className="button--small" type="button" onClick={() => handleRefreshSource(source.id)} disabled={isRefreshingThis || isReprocessingThis}>
+                        {isRefreshingThis ? "Refreshing..." : "Refresh"}
+                      </button>
+                      {canUpload && (
+                        <button className="button--small" type="button" onClick={() => handleDeleteSource(source.id)} disabled={isDeleting || isRefreshingThis || isReprocessingThis}>
+                          {isDeleting ? "Deleting..." : "Delete"}
+                        </button>
+                      )}
+                    </div>
+                  )}
+                  {!isRemoteSource && source.status !== "failed" && canUpload && (
+                    <div className="sources__card-actions">
+                      <button className="button--small" type="button" onClick={() => handleDeleteSource(source.id)} disabled={isDeleting}>
+                        {isDeleting ? "Deleting..." : "Delete"}
+                      </button>
+                    </div>
+                  )}
+                  <StatusPill status={source.status} />
+                </div>
               </div>
-              {source.failure_reason && <p className="sources__card-error">Error: {source.failure_reason}</p>}
-              {source.status === "failed" && (
-                <div className="sources__card-actions">
-                  {isRemoteSource ? (
-                    <button className="button--small" type="button" onClick={() => handleRefreshSource(source.id)} disabled={isRefreshingThis}>
-                      {isRefreshingThis ? "Refreshing..." : "Refresh"}
-                    </button>
-                  ) : (
-                    <button className="button--small" type="button" onClick={() => handleRetryUpload(source.id)} disabled={isRetryingThis || isDeleting || !retryFiles[source.id]}>
-                      {isRetryingThis ? "Retrying..." : "Retry upload"}
-                    </button>
-                  )}
-                  {canUpload && (
-                    <button className="button--small" type="button" onClick={() => handleDeleteSource(source.id)} disabled={isRetryingThis || isDeleting || isRefreshingThis}>
-                      {isDeleting ? "Deleting..." : "Delete"}
-                    </button>
-                  )}
-                </div>
-              )}
-              {isRemoteSource && source.status !== "failed" && (
-                <div className="sources__card-actions">
-                  <button className="button--small" type="button" onClick={() => handleReprocessSource(source.id)} disabled={isReprocessingThis || isRefreshingThis || !snapshotReady}>
-                    {isReprocessingThis ? "Reprocessing..." : "Reprocess"}
-                  </button>
-                  <button className="button--small" type="button" onClick={() => handleRefreshSource(source.id)} disabled={isRefreshingThis || isReprocessingThis}>
-                    {isRefreshingThis ? "Refreshing..." : "Refresh"}
-                  </button>
-                  {canUpload && (
-                    <button className="button--small" type="button" onClick={() => handleDeleteSource(source.id)} disabled={isDeleting || isRefreshingThis || isReprocessingThis}>
-                      {isDeleting ? "Deleting..." : "Delete"}
-                    </button>
-                  )}
-                </div>
-              )}
-              {!isRemoteSource && source.status !== "failed" && canUpload && (
-                <div className="sources__card-actions">
-                  <button className="button--small" type="button" onClick={() => handleDeleteSource(source.id)} disabled={isDeleting}>
-                    {isDeleting ? "Deleting..." : "Delete"}
-                  </button>
-                </div>
-              )}
               {isRemoteSource && source.status !== "failed" && !snapshotReady && (
                 <p className="sources__card-note">Reprocess is available after the first successful ingest.</p>
               )}
@@ -436,6 +478,9 @@ export function UploadPanel({
             </div>
           );
         })}
+        {sortedSources.length > 0 && filteredSources.length === 0 && (
+          <p className="muted" style={{ textAlign: "center", padding: "24px 0" }}>No sources match your search.</p>
+        )}
         {!sortedSources.length && (
           <div className="sources__empty">
             <DocumentPlusIcon className="sources__empty-icon" />
