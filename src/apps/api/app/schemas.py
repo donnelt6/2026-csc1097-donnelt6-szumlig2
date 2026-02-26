@@ -205,6 +205,13 @@ class ChatResponse(BaseModel):
     message_id: str
 
 
+class HistoryMessage(BaseModel):
+    role: str
+    content: str
+    citations: List[Citation] = []
+    created_at: str
+
+
 class FaqEntry(BaseModel):
     id: str
     hub_id: str

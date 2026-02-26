@@ -16,6 +16,7 @@ from ..schemas import (
     Citation,
     FaqEntry,
     FaqGenerateRequest,
+    HistoryMessage,
     Hub,
     HubCreate,
     HubInviteRequest,
@@ -462,8 +463,43 @@ class SupabaseStore:
         if not response.data:
             raise KeyError("Hub membership not found")
 
+    def _fetch_recent_messages(
+        self, client: Client, user_id: str, hub_id: str, limit: int, fields: str
+    ) -> List[Dict[str, Any]]:
+        sessions_resp = (
+            client.table("chat_sessions")
+            .select("id")
+            .eq("hub_id", hub_id)
+            .eq("created_by", user_id)
+            .order("created_at", desc=True)
+            .limit(limit)
+            .execute()
+        )
+        if not sessions_resp.data:
+            return []
+        session_ids = [s["id"] for s in sessions_resp.data]
+        messages_resp = (
+            client.table("messages")
+            .select(fields)
+            .in_("session_id", session_ids)
+            .order("created_at", desc=False)
+            .execute()
+        )
+        return messages_resp.data or []
+
+    def _recent_conversation(self, client: Client, user_id: str, hub_id: str) -> List[Dict[str, str]]:
+        try:
+            rows = self._fetch_recent_messages(client, user_id, hub_id, 5, "role, content")
+            return [{"role": m["role"], "content": m["content"]} for m in rows]
+        except Exception:
+            return []
+
     def chat(self, client: Client, user_id: str, payload: ChatRequest) -> ChatResponse:
         hub_id = str(payload.hub_id)
+
+        # Fetch conversation history before creating the new session
+        history_messages = self._recent_conversation(client, user_id, hub_id)
+
         session_row = (
             client.table("chat_sessions")
             .insert({"hub_id": hub_id, "scope": payload.scope.value, "created_by": user_id})
@@ -528,6 +564,7 @@ class SupabaseStore:
             model=self.chat_model,
             messages=[
                 {"role": "system", "content": system_prompt},
+                *history_messages,
                 {"role": "user", "content": user_prompt},
             ],
             temperature=0.2,
@@ -549,6 +586,18 @@ class SupabaseStore:
             .execute()
         )
         return ChatResponse(answer=answer, citations=citations, message_id=assistant_row.data[0]["id"])
+
+    def chat_history(self, client: Client, user_id: str, hub_id: str) -> List[HistoryMessage]:
+        rows = self._fetch_recent_messages(client, user_id, hub_id, 5, "role, content, citations, created_at")
+        return [
+            HistoryMessage(
+                role=m["role"],
+                content=m["content"],
+                citations=[Citation(**c) for c in (m.get("citations") or [])],
+                created_at=m["created_at"],
+            )
+            for m in rows
+        ]
 
     def list_faqs(self, client: Client, hub_id: str) -> List[FaqEntry]:
         response = (

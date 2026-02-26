@@ -32,7 +32,7 @@ export default function HubDetail({ params }: { params: { hubId: string } }) {
   const hubResolved = !!hub;
   const canUpload = hub?.role === 'owner' || hub?.role === 'editor';
 
-  const { data: sources, refetch: refetchSources } = useQuery({
+  const { data: sources, refetch: refetchSources, isLoading: sourcesLoading } = useQuery({
     queryKey: ['sources', params.hubId],
     queryFn: () => listSources(params.hubId),
     refetchInterval: activeTab === 'sources' ? 4000 : false,
@@ -74,31 +74,34 @@ export default function HubDetail({ params }: { params: { hubId: string } }) {
   }, [hubResolved, params.hubId, queryClient]);
 
   return (
-    <main className="page-content page-content--no-hero">
+    <main className={`page-content page-content--no-hero${activeTab === 'chat' ? ' page-content--fullscreen' : ''}`}>
       <div className="content-inner">
         <Link href="/" className="muted" style={{ display: "block", marginBottom: "20px" }}>
-          â† Back to hubs
+          &larr; Back to hubs
         </Link>
-        <header className="card" style={{ marginBottom: "20px" }}>
-          <h2 style={{ margin: "0 0 4px" }}>{hub?.name ?? "Hub"}</h2>
-          <p className="muted">{hub?.description ?? params.hubId}</p>
-        </header>
+        {activeTab !== 'chat' && (
+          <header className="hub-header">
+            <h2 className="hub-header__name">{hub?.name ?? "Hub"}</h2>
+            {(hub?.description ?? params.hubId) && (
+              <p className="hub-header__desc">{hub?.description ?? params.hubId}</p>
+            )}
+          </header>
+        )}
 
         <div className="hub-tab-content">
           {activeTab === 'chat' && (
-            <div className="grid" style={{ gap: "16px" }}>
-              <ChatPanel
-                hubId={params.hubId}
-                selectedSourceIds={sourceSelection.selectedIds}
-                hasSelectableSources={sourceSelection.completeCount > 0}
-              />
-              <FaqPanel
-                hubId={params.hubId}
-                selectedSourceIds={sourceSelection.selectedIds}
-                hasSelectableSources={sourceSelection.completeCount > 0}
-                canEdit={canUpload}
-              />
-            </div>
+            <ChatPanel
+              hubId={params.hubId}
+              hubName={hub?.name ?? "Hub"}
+              hubDescription={hub?.description ?? undefined}
+              selectedSourceIds={sourceSelection.selectedIds}
+              hasSelectableSources={sourceSelection.completeCount > 0}
+              sources={sources ?? []}
+              sourcesLoading={sourcesLoading}
+              onToggleSource={sourceSelection.toggleSource}
+              onSelectAllSources={sourceSelection.selectAll}
+              onClearSourceSelection={sourceSelection.clearAll}
+            />
           )}
           {activeTab === 'sources' && (
             <UploadPanel
@@ -114,6 +117,14 @@ export default function HubDetail({ params }: { params: { hubId: string } }) {
           )}
           {activeTab === 'members' && (
             <MembersPanel hubId={params.hubId} role={hub?.role ?? undefined} />
+          )}
+          {activeTab === 'faq' && (
+            <FaqPanel
+              hubId={params.hubId}
+              selectedSourceIds={sourceSelection.selectedIds}
+              hasSelectableSources={sourceSelection.completeCount > 0}
+              canEdit={canUpload}
+            />
           )}
           {activeTab === 'reminders' && (
             <div className="grid" style={{ gap: '16px' }}>
