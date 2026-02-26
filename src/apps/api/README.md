@@ -26,6 +26,7 @@ Environment variables live in `.env.example`. Provide `SUPABASE_URL`, `SUPABASE_
 - `migrations/007_reminders_in_app_only.sql` - Enforce in-app notification policy defaults.
 - `migrations/011_match_source_chunks_sources.sql` - Vector search RPC with optional source filtering.
 - `migrations/012_faq_entries.sql` - FAQ entries with citations and pin/edit support.
+- `migrations/013_guides.sql` - Guide entries, steps, and per-user progress tables + policies.
 - `app/__init__.py` - Marks the package for imports.
 - `app/main.py` - FastAPI app entrypoint and router wiring.
 - `app/dependencies.py` - Auth helpers (JWT, Supabase clients).
@@ -34,6 +35,7 @@ Environment variables live in `.env.example`. Provide `SUPABASE_URL`, `SUPABASE_
 - `app/routers/__init__.py` - Router module export.
 - `app/routers/chat.py` - Chat endpoint (hub-only or hub + web search).
 - `app/routers/faqs.py` - FAQ generation/list/edit endpoints.
+- `app/routers/guides.py` - Guide generation/list/edit endpoints with step progress.
 - `app/routers/hubs.py` - Hubs CRUD endpoints.
 - `app/routers/sources.py` - Source upload/status endpoints (signed upload URL, fail, enqueue), plus web URL ingestion and refresh.
 - `app/routers/reminders.py` - Reminder CRUD, candidate review, and notifications endpoints.

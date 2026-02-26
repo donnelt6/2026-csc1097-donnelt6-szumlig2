@@ -26,6 +26,7 @@ Environment variables: see `.env.example`. Set `NEXT_PUBLIC_API_BASE_URL` to you
 - `app/hubs/[hubId]/page.tsx` - Hub detail page with upload, reminders, and chat.
 - `components/ChatPanel.tsx` - Chat UI with citations, hub/global scope, and selected sources.
 - `components/FaqPanel.tsx` - FAQ generation panel with pin/edit controls and citation chips.
+- `components/GuidePanel.tsx` - Guide generation panel with checklist steps, per-user progress, and drag-and-drop ordering.
 - `components/HubsList.tsx` - Hub list with filtering and sorting.
 - `components/InvitesPanel.tsx` - Pending invite list and accept actions.
 - `components/MembersPanel.tsx` - Member list and role management.
@@ -41,3 +42,6 @@ Environment variables: see `.env.example`. Set `NEXT_PUBLIC_API_BASE_URL` to you
 - `lib/useSourceSelection.ts` - Hook for persisting per-hub source selection.
 - `lib/supabaseClient.ts` - Supabase client initialization.
 - `lib/types.ts` - Shared TypeScript types.
+
+## Notes
+- Drag-and-drop ordering in Guides uses `@dnd-kit` (`@dnd-kit/core`, `@dnd-kit/sortable`, `@dnd-kit/utilities`).
