@@ -210,19 +210,19 @@ export function GuidePanel({ hubId, selectedSourceIds, hasSelectableSources, can
   const canGenerate = canEdit && hasSelection;
 
   const generateMutation = useMutation({
-    mutationFn: () =>
-      generateGuide({
+    mutationFn: () => {
+      const requestedStepCount = Math.max(1, Math.min(20, Number(stepCountInput) || 1));
+      return generateGuide({
         hub_id: hubId,
         source_ids: selectedSourceIds,
         topic: topic.trim() || undefined,
-        step_count: Math.max(1, Math.min(20, Number(stepCountInput) || 1)),
-      }),
+        step_count: requestedStepCount,
+      });
+    },
     onSuccess: (data) => {
-      if (data.entry) {
-        setStatusMessage("Guide generated.");
-      } else {
-        setStatusMessage("No guide could be generated from the selected sources.");
-      }
+      const requestedStepCount = Math.max(1, Math.min(20, Number(stepCountInput) || 1));
+      const actualSteps = data.entry?.steps?.length ?? 0;
+      setStatusMessage(`Generated ${actualSteps} of ${requestedStepCount} steps.`);
       queryClient.invalidateQueries({ queryKey: ["guides", hubId] });
     },
     onError: (err) => setStatusMessage((err as Error).message),

@@ -1,7 +1,7 @@
 import json
 import re
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import PurePath
 from urllib.parse import parse_qs, urlparse
 from typing import Any, Dict, List, Optional, Tuple
@@ -101,7 +101,7 @@ class SupabaseStore:
             .execute()
         )
         row = response.data[0]
-        now = datetime.utcnow().isoformat()
+        now = datetime.now(timezone.utc).isoformat()
         client.table("hub_members").insert(
             {
                 "hub_id": row["id"],
@@ -270,7 +270,7 @@ class SupabaseStore:
         new_path = _web_storage_path(source.hub_id, source.id)
         metadata = dict(source.ingestion_metadata or {})
         metadata["url"] = url
-        metadata["refresh_requested_at"] = datetime.utcnow().isoformat()
+        metadata["refresh_requested_at"] = datetime.now(timezone.utc).isoformat()
         response = (
             client.table("sources")
             .update(
@@ -310,7 +310,7 @@ class SupabaseStore:
                 "video_id": video_id,
                 "language": language,
                 "allow_auto_captions": allow_auto_captions,
-                "refresh_requested_at": datetime.utcnow().isoformat(),
+                "refresh_requested_at": datetime.now(timezone.utc).isoformat(),
             }
         )
         response = (
@@ -415,7 +415,7 @@ class SupabaseStore:
         return HubMember(**row)
 
     def accept_invite(self, client: Client, hub_id: str, user_id: str) -> HubMember:
-        now = datetime.utcnow().isoformat()
+        now = datetime.now(timezone.utc).isoformat()
         response = (
             client.table("hub_members")
             .update({"accepted_at": now, "last_accessed_at": now})
@@ -454,7 +454,7 @@ class SupabaseStore:
     def update_hub_access(self, client: Client, hub_id: str, user_id: str) -> None:
         response = (
             client.table("hub_members")
-            .update({"last_accessed_at": datetime.utcnow().isoformat()})
+            .update({"last_accessed_at": datetime.now(timezone.utc).isoformat()})
             .eq("hub_id", str(hub_id))
             .eq("user_id", str(user_id))
             .execute()
@@ -658,7 +658,7 @@ class SupabaseStore:
             return []
 
         entries_payload: List[dict] = []
-        now = datetime.utcnow().isoformat()
+        now = datetime.now(timezone.utc).isoformat()
         batch_id = str(uuid.uuid4())
 
         for question in questions:
@@ -723,7 +723,7 @@ class SupabaseStore:
         return FaqEntry(**response.data[0])
 
     def archive_faq(self, client: Client, faq_id: str, user_id: str) -> FaqEntry:
-        now = datetime.utcnow().isoformat()
+        now = datetime.now(timezone.utc).isoformat()
         response = (
             client.table("faq_entries")
             .update({"archived_at": now, "updated_at": now, "updated_by": user_id})
@@ -743,26 +743,48 @@ class SupabaseStore:
             .order("created_at", desc=True)
             .execute()
         )
+        guide_rows = response.data or []
+        if not guide_rows:
+            return []
+
+        guide_ids = [row.get("id") for row in guide_rows if row.get("id")]
+        steps_by_guide: dict[str, list[dict]] = {guide_id: [] for guide_id in guide_ids}
+        progress_by_guide: dict[str, dict[str, dict]] = {guide_id: {} for guide_id in guide_ids}
+
+        steps_response = (
+            client.table("guide_steps")
+            .select("*")
+            .in_("guide_id", guide_ids)
+            .execute()
+        )
+        for step_row in steps_response.data or []:
+            guide_id = step_row.get("guide_id")
+            if guide_id in steps_by_guide:
+                steps_by_guide[guide_id].append(step_row)
+
+        progress_response = (
+            client.table("guide_step_progress")
+            .select("guide_id, guide_step_id, is_complete, completed_at")
+            .in_("guide_id", guide_ids)
+            .eq("user_id", user_id)
+            .execute()
+        )
+        for progress_row in progress_response.data or []:
+            guide_id = progress_row.get("guide_id")
+            step_id = progress_row.get("guide_step_id")
+            if guide_id in progress_by_guide and step_id:
+                progress_by_guide[guide_id][step_id] = progress_row
+
         guides: List[GuideEntry] = []
-        for row in response.data:
+        for row in guide_rows:
             guide_id = row.get("id")
-            steps_response = (
-                client.table("guide_steps")
-                .select("*")
-                .eq("guide_id", str(guide_id))
-                .order("step_index")
-                .execute()
+            step_rows = sorted(
+                steps_by_guide.get(guide_id, []),
+                key=lambda step: step.get("step_index") or 0,
             )
-            progress_response = (
-                client.table("guide_step_progress")
-                .select("guide_step_id, is_complete, completed_at")
-                .eq("guide_id", str(guide_id))
-                .eq("user_id", user_id)
-                .execute()
-            )
-            progress_map = {item["guide_step_id"]: item for item in progress_response.data}
+            progress_map = progress_by_guide.get(guide_id, {})
             steps: List[GuideStepWithProgress] = []
-            for step_row in steps_response.data:
+            for step_row in step_rows:
                 progress = progress_map.get(step_row.get("id"), {})
                 steps.append(
                     GuideStepWithProgress(
@@ -816,7 +838,7 @@ class SupabaseStore:
         if not steps:
             return None
 
-        now = datetime.utcnow().isoformat()
+        now = datetime.now(timezone.utc).isoformat()
         batch_id = str(uuid.uuid4())
         topic = (payload.topic or "").strip() or None
         title = topic or "Onboarding Guide"
@@ -897,7 +919,7 @@ class SupabaseStore:
         return GuideEntry(**response.data[0], steps=[])
 
     def archive_guide(self, client: Client, guide_id: str, user_id: str) -> GuideEntry:
-        now = datetime.utcnow().isoformat()
+        now = datetime.now(timezone.utc).isoformat()
         response = (
             client.table("guide_entries")
             .update({"archived_at": now, "updated_at": now, "updated_by": user_id})
@@ -956,7 +978,7 @@ class SupabaseStore:
         if set(step_ids) != set(ordered_step_ids):
             raise ValueError("Step list does not match current guide steps.")
 
-        now = datetime.utcnow().isoformat()
+        now = datetime.now(timezone.utc).isoformat()
         for index, step_id in enumerate(ordered_step_ids, start=1):
             client.table("guide_steps").update({"step_index": index, "updated_at": now}).eq("id", step_id).execute()
 
@@ -977,7 +999,7 @@ class SupabaseStore:
         step_id: str,
         payload: GuideStepProgressUpdate,
     ) -> dict:
-        now = datetime.utcnow().isoformat()
+        now = datetime.now(timezone.utc).isoformat()
         completed_at = now if payload.is_complete else None
         progress_payload = {
             "guide_step_id": step_id,
@@ -987,18 +1009,10 @@ class SupabaseStore:
             "completed_at": completed_at,
             "updated_at": now,
         }
-        response = (
-            client.table("guide_step_progress")
-            .update(progress_payload)
-            .eq("guide_step_id", step_id)
-            .eq("user_id", user_id)
-            .execute()
-        )
-        if response.data:
-            return response.data[0]
-
         progress_payload["created_at"] = now
-        response = client.table("guide_step_progress").insert(progress_payload).execute()
+        response = client.table("guide_step_progress").upsert(
+            progress_payload, on_conflict="guide_step_id,user_id"
+        ).execute()
         if not response.data:
             raise KeyError("Guide step progress not found")
         return response.data[0]
@@ -1300,12 +1314,12 @@ def _sanitize_filename(name: str) -> str:
 
 
 def _web_storage_path(hub_id: str, source_id: str) -> str:
-    stamp = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     return f"{hub_id}/{source_id}/web-{stamp}.md"
 
 
 def _youtube_storage_path(hub_id: str, source_id: str) -> str:
-    stamp = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     return f"{hub_id}/{source_id}/youtube-{stamp}.md"
 
 
