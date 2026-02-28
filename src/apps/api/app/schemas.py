@@ -246,6 +246,86 @@ class FaqUpdateRequest(StrictModel):
     archived: Optional[bool] = None
 
 
+class GuideStep(BaseModel):
+    id: str
+    guide_id: str
+    step_index: int
+    title: Optional[str] = None
+    instruction: str
+    citations: List[Citation] = Field(default_factory=list)
+    confidence: float
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: Optional[datetime] = None
+
+
+class GuideStepWithProgress(GuideStep):
+    is_complete: bool = False
+    completed_at: Optional[datetime] = None
+
+
+class GuideStepProgress(BaseModel):
+    id: str
+    guide_step_id: str
+    guide_id: str
+    user_id: str
+    is_complete: bool = False
+    completed_at: Optional[datetime] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: Optional[datetime] = None
+
+
+class GuideEntry(BaseModel):
+    id: str
+    hub_id: str
+    title: str
+    topic: Optional[str] = None
+    summary: Optional[str] = None
+    source_ids: List[str] = Field(default_factory=list)
+    archived_at: Optional[datetime] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_by: Optional[str] = None
+    updated_at: Optional[datetime] = None
+    updated_by: Optional[str] = None
+    generation_batch_id: Optional[str] = None
+    steps: List[GuideStepWithProgress] = Field(default_factory=list)
+
+
+class GuideGenerateRequest(StrictModel):
+    hub_id: UUID
+    source_ids: List[UUID]
+    topic: Optional[str] = Field(default=None, max_length=240)
+    step_count: Optional[int] = Field(default=None, ge=1, le=20)
+
+
+class GuideGenerateResponse(BaseModel):
+    entry: Optional[GuideEntry] = None
+
+
+class GuideUpdateRequest(StrictModel):
+    title: Optional[str] = Field(default=None, min_length=1, max_length=240)
+    topic: Optional[str] = Field(default=None, max_length=240)
+    summary: Optional[str] = Field(default=None, max_length=2000)
+    archived: Optional[bool] = None
+
+
+class GuideStepUpdateRequest(StrictModel):
+    title: Optional[str] = Field(default=None, max_length=240)
+    instruction: Optional[str] = Field(default=None, min_length=1, max_length=4000)
+
+
+class GuideStepCreateRequest(StrictModel):
+    title: Optional[str] = Field(default=None, max_length=240)
+    instruction: str = Field(..., min_length=1, max_length=4000)
+
+
+class GuideStepReorderRequest(StrictModel):
+    ordered_step_ids: List[UUID]
+
+
+class GuideStepProgressUpdate(StrictModel):
+    is_complete: bool
+
+
 class ReminderStatus(str, Enum):
     scheduled = "scheduled"
     sent = "sent"

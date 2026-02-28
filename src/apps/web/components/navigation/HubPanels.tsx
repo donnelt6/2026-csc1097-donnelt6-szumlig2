@@ -6,6 +6,7 @@ import {
   DocumentTextIcon,
   BellIcon,
   UsersIcon,
+  ClipboardDocumentListIcon,
   QuestionMarkCircleIcon,
 } from '@heroicons/react/24/outline';
 import { useHubTab, type HubTab } from '../../lib/HubTabContext';
@@ -15,6 +16,7 @@ const items: { key: HubTab; icon: typeof DocumentTextIcon; label: string }[] = [
   { key: 'sources', icon: DocumentTextIcon, label: 'Sources' },
   { key: 'members', icon: UsersIcon, label: 'Members' },
   { key: 'reminders', icon: BellIcon, label: 'Reminders' },
+  { key: 'guides', icon: ClipboardDocumentListIcon, label: 'Guides' },
   { key: 'faq', icon: QuestionMarkCircleIcon, label: 'FAQs' },
 ];
 

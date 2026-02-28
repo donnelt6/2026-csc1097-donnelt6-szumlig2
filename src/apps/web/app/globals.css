@@ -1831,6 +1831,67 @@ textarea {
   transform: rotate(45deg);
 }
 
+.guide-checkbox {
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  flex: 0 0 16px;
+  cursor: pointer;
+  appearance: none;
+  background: var(--input-bg);
+  border: 1px solid var(--input-border);
+  border-radius: 3px;
+  position: relative;
+  transition: all var(--transition-fast);
+}
+
+.guide-checkbox:hover {
+  border-color: var(--border-hover);
+}
+
+.guide-checkbox:checked {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.guide-checkbox:checked::after {
+  content: '';
+  position: absolute;
+  left: 5px;
+  top: 1px;
+  width: 4px;
+  height: 9px;
+  border: solid white;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+.drag-handle {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  border: 1px solid var(--input-border);
+  background: var(--input-bg);
+  color: var(--muted);
+  cursor: grab;
+  font-size: 0.9rem;
+  line-height: 1;
+  padding: 0;
+  transition: all var(--transition-fast);
+}
+
+.drag-handle:hover {
+  border-color: var(--border-hover);
+  color: var(--text);
+}
+
+.drag-handle:active {
+  cursor: grabbing;
+}
+
 .range-inputs {
   display: flex;
   align-items: center;

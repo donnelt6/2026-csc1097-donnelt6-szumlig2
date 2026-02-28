@@ -5,6 +5,8 @@ import type {
   Hub,
   HubMember,
   FaqEntry,
+  GuideEntry,
+  GuideStep,
   NotificationEvent,
   PendingInvite,
   Reminder,
@@ -213,6 +215,107 @@ export async function updateFaq(
 
 export async function archiveFaq(faqId: string): Promise<void> {
   const res = await authedFetch(`${API_BASE}/faqs/${faqId}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) {
+    await handle(res);
+  }
+}
+
+export async function listGuides(hubId: string): Promise<GuideEntry[]> {
+  const res = await authedFetch(`${API_BASE}/guides?hub_id=${hubId}`, { cache: "no-store" });
+  return handle<GuideEntry[]>(res);
+}
+
+export async function generateGuide(data: {
+  hub_id: string;
+  source_ids: string[];
+  topic?: string;
+  step_count?: number;
+}): Promise<{ entry: GuideEntry | null }> {
+  const res = await authedFetch(`${API_BASE}/guides/generate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  return handle(res);
+}
+
+export async function updateGuide(
+  guideId: string,
+  data: {
+    title?: string;
+    topic?: string;
+    summary?: string;
+    archived?: boolean;
+  }
+): Promise<GuideEntry> {
+  const res = await authedFetch(`${API_BASE}/guides/${guideId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  return handle(res);
+}
+
+export async function updateGuideStep(
+  stepId: string,
+  data: {
+    title?: string;
+    instruction?: string;
+  }
+): Promise<GuideStep> {
+  const res = await authedFetch(`${API_BASE}/guides/steps/${stepId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  return handle(res);
+}
+
+export async function createGuideStep(
+  guideId: string,
+  data: {
+    title?: string;
+    instruction: string;
+  }
+): Promise<GuideStep> {
+  const res = await authedFetch(`${API_BASE}/guides/${guideId}/steps`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  return handle(res);
+}
+
+export async function reorderGuideSteps(
+  guideId: string,
+  ordered_step_ids: string[]
+): Promise<GuideStep[]> {
+  const res = await authedFetch(`${API_BASE}/guides/${guideId}/steps/reorder`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ordered_step_ids }),
+  });
+  return handle(res);
+}
+
+export async function updateGuideStepProgress(
+  stepId: string,
+  data: {
+    is_complete: boolean;
+  }
+): Promise<GuideStep> {
+  const res = await authedFetch(`${API_BASE}/guides/steps/${stepId}/progress`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  return handle(res);
+}
+
+export async function archiveGuide(guideId: string): Promise<void> {
+  const res = await authedFetch(`${API_BASE}/guides/${guideId}`, {
     method: "DELETE",
   });
   if (!res.ok) {

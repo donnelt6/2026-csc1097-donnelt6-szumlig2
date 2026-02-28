@@ -1,7 +1,7 @@
 import json
 import re
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import PurePath
 from urllib.parse import parse_qs, urlparse
 from typing import Any, Dict, List, Optional, Tuple
@@ -17,6 +17,12 @@ from ..schemas import (
     FaqEntry,
     FaqGenerateRequest,
     HistoryMessage,
+    GuideEntry,
+    GuideGenerateRequest,
+    GuideStep,
+    GuideStepCreateRequest,
+    GuideStepProgressUpdate,
+    GuideStepWithProgress,
     Hub,
     HubCreate,
     HubInviteRequest,
@@ -63,6 +69,10 @@ class SupabaseStore:
         self.faq_context_chunks_per_source = settings.faq_context_chunks_per_source
         self.faq_max_citations = settings.faq_max_citations
         self.faq_min_similarity = settings.faq_min_similarity
+        self.guide_default_steps = settings.guide_default_steps
+        self.guide_context_chunks_per_source = settings.guide_context_chunks_per_source
+        self.guide_max_citations = settings.guide_max_citations
+        self.guide_min_similarity = settings.guide_min_similarity
         self.service_client: Client = create_client(settings.supabase_url, settings.supabase_service_role_key)
         self.llm_client = OpenAI(api_key=settings.openai_api_key)
 
@@ -91,7 +101,7 @@ class SupabaseStore:
             .execute()
         )
         row = response.data[0]
-        now = datetime.utcnow().isoformat()
+        now = datetime.now(timezone.utc).isoformat()
         client.table("hub_members").insert(
             {
                 "hub_id": row["id"],
@@ -260,7 +270,7 @@ class SupabaseStore:
         new_path = _web_storage_path(source.hub_id, source.id)
         metadata = dict(source.ingestion_metadata or {})
         metadata["url"] = url
-        metadata["refresh_requested_at"] = datetime.utcnow().isoformat()
+        metadata["refresh_requested_at"] = datetime.now(timezone.utc).isoformat()
         response = (
             client.table("sources")
             .update(
@@ -300,7 +310,7 @@ class SupabaseStore:
                 "video_id": video_id,
                 "language": language,
                 "allow_auto_captions": allow_auto_captions,
-                "refresh_requested_at": datetime.utcnow().isoformat(),
+                "refresh_requested_at": datetime.now(timezone.utc).isoformat(),
             }
         )
         response = (
@@ -405,7 +415,7 @@ class SupabaseStore:
         return HubMember(**row)
 
     def accept_invite(self, client: Client, hub_id: str, user_id: str) -> HubMember:
-        now = datetime.utcnow().isoformat()
+        now = datetime.now(timezone.utc).isoformat()
         response = (
             client.table("hub_members")
             .update({"accepted_at": now, "last_accessed_at": now})
@@ -444,7 +454,7 @@ class SupabaseStore:
     def update_hub_access(self, client: Client, hub_id: str, user_id: str) -> None:
         response = (
             client.table("hub_members")
-            .update({"last_accessed_at": datetime.utcnow().isoformat()})
+            .update({"last_accessed_at": datetime.now(timezone.utc).isoformat()})
             .eq("hub_id", str(hub_id))
             .eq("user_id", str(user_id))
             .execute()
@@ -648,7 +658,7 @@ class SupabaseStore:
             return []
 
         entries_payload: List[dict] = []
-        now = datetime.utcnow().isoformat()
+        now = datetime.now(timezone.utc).isoformat()
         batch_id = str(uuid.uuid4())
 
         for question in questions:
@@ -713,7 +723,7 @@ class SupabaseStore:
         return FaqEntry(**response.data[0])
 
     def archive_faq(self, client: Client, faq_id: str, user_id: str) -> FaqEntry:
-        now = datetime.utcnow().isoformat()
+        now = datetime.now(timezone.utc).isoformat()
         response = (
             client.table("faq_entries")
             .update({"archived_at": now, "updated_at": now, "updated_by": user_id})
@@ -723,6 +733,289 @@ class SupabaseStore:
         if not response.data:
             raise KeyError("FAQ entry not found")
         return FaqEntry(**response.data[0])
+
+    def list_guides(self, client: Client, user_id: str, hub_id: str) -> List[GuideEntry]:
+        response = (
+            client.table("guide_entries")
+            .select("*")
+            .eq("hub_id", str(hub_id))
+            .is_("archived_at", "null")
+            .order("created_at", desc=True)
+            .execute()
+        )
+        guide_rows = response.data or []
+        if not guide_rows:
+            return []
+
+        guide_ids = [row.get("id") for row in guide_rows if row.get("id")]
+        steps_by_guide: dict[str, list[dict]] = {guide_id: [] for guide_id in guide_ids}
+        progress_by_guide: dict[str, dict[str, dict]] = {guide_id: {} for guide_id in guide_ids}
+
+        steps_response = (
+            client.table("guide_steps")
+            .select("*")
+            .in_("guide_id", guide_ids)
+            .execute()
+        )
+        for step_row in steps_response.data or []:
+            guide_id = step_row.get("guide_id")
+            if guide_id in steps_by_guide:
+                steps_by_guide[guide_id].append(step_row)
+
+        progress_response = (
+            client.table("guide_step_progress")
+            .select("guide_id, guide_step_id, is_complete, completed_at")
+            .in_("guide_id", guide_ids)
+            .eq("user_id", user_id)
+            .execute()
+        )
+        for progress_row in progress_response.data or []:
+            guide_id = progress_row.get("guide_id")
+            step_id = progress_row.get("guide_step_id")
+            if guide_id in progress_by_guide and step_id:
+                progress_by_guide[guide_id][step_id] = progress_row
+
+        guides: List[GuideEntry] = []
+        for row in guide_rows:
+            guide_id = row.get("id")
+            step_rows = sorted(
+                steps_by_guide.get(guide_id, []),
+                key=lambda step: step.get("step_index") or 0,
+            )
+            progress_map = progress_by_guide.get(guide_id, {})
+            steps: List[GuideStepWithProgress] = []
+            for step_row in step_rows:
+                progress = progress_map.get(step_row.get("id"), {})
+                steps.append(
+                    GuideStepWithProgress(
+                        **step_row,
+                        is_complete=bool(progress.get("is_complete", False)),
+                        completed_at=progress.get("completed_at"),
+                    )
+                )
+            guides.append(GuideEntry(**row, steps=steps))
+        return guides
+
+    def get_guide(self, client: Client, guide_id: str) -> GuideEntry:
+        response = client.table("guide_entries").select("*").eq("id", str(guide_id)).limit(1).execute()
+        if not response.data:
+            raise KeyError("Guide entry not found")
+        return GuideEntry(**response.data[0], steps=[])
+
+    def get_guide_step(self, client: Client, step_id: str) -> GuideStep:
+        response = client.table("guide_steps").select("*").eq("id", str(step_id)).limit(1).execute()
+        if not response.data:
+            raise KeyError("Guide step not found")
+        return GuideStep(**response.data[0])
+
+    def generate_guide(self, client: Client, user_id: str, payload: GuideGenerateRequest) -> Optional[GuideEntry]:
+        hub_id = str(payload.hub_id)
+        source_ids = [str(source_id) for source_id in payload.source_ids]
+        if not source_ids:
+            raise ValueError("Select at least one source to generate a guide.")
+
+        step_count = payload.step_count or self.guide_default_steps
+        step_count = max(1, min(int(step_count), 20))
+
+        context_chunks: List[dict] = []
+        for source_id in source_ids:
+            context_chunks.extend(
+                self._fetch_source_context(client, hub_id, source_id, self.guide_context_chunks_per_source)
+            )
+
+        if not context_chunks:
+            return None
+
+        context_blocks: List[str] = []
+        for chunk in context_chunks:
+            text = chunk.get("text") or ""
+            snippet = _trim_text(text, 900)
+            context_blocks.append(
+                f"Source {chunk.get('source_id')} [chunk {chunk.get('chunk_index')}]: {snippet}"
+            )
+
+        steps = self._generate_guide_steps(context_blocks, payload.topic, step_count)
+        if not steps:
+            return None
+
+        now = datetime.now(timezone.utc).isoformat()
+        batch_id = str(uuid.uuid4())
+        topic = (payload.topic or "").strip() or None
+        title = topic or "Onboarding Guide"
+
+        steps_payload: List[dict] = []
+        kept_index = 1
+        for step in steps:
+            instruction = (step.get("instruction") or "").strip()
+            if not instruction:
+                continue
+            step_title = (step.get("title") or "").strip() or None
+            query_text = f"{step_title}. {instruction}" if step_title else instruction
+            query_embedding = self._embed_query(query_text)
+            raw_matches = self._match_chunks(client, hub_id, query_embedding, self.top_k, source_ids)
+            matches = [match for match in raw_matches if (match.get("similarity") or 0) >= self.guide_min_similarity]
+            matches = matches[: self.guide_max_citations]
+            if not matches and raw_matches:
+                matches = raw_matches[: self.guide_max_citations]
+            if not matches:
+                continue
+
+            citations: List[Citation] = []
+            for match in matches:
+                snippet = match.get("text") or ""
+                trimmed = _trim_text(snippet, 600)
+                citations.append(
+                    Citation(source_id=match["source_id"], snippet=trimmed, chunk_index=match.get("chunk_index"))
+                )
+
+            confidence = _average_similarity(matches)
+            steps_payload.append(
+                {
+                    "step_index": kept_index,
+                    "title": step_title,
+                    "instruction": instruction,
+                    "citations": [citation.model_dump() for citation in citations],
+                    "confidence": confidence,
+                    "updated_at": now,
+                }
+            )
+            kept_index += 1
+
+        if not steps_payload:
+            return None
+
+        guide_row = (
+            client.table("guide_entries")
+            .insert(
+                {
+                    "hub_id": hub_id,
+                    "title": title,
+                    "topic": topic,
+                    "summary": None,
+                    "source_ids": source_ids,
+                    "created_by": user_id,
+                    "updated_by": user_id,
+                    "updated_at": now,
+                    "generation_batch_id": batch_id,
+                }
+            )
+            .execute()
+        )
+        if not guide_row.data:
+            return None
+        guide_id = guide_row.data[0]["id"]
+
+        for step in steps_payload:
+            step["guide_id"] = guide_id
+
+        steps_response = client.table("guide_steps").insert(steps_payload).execute()
+        steps_out = [GuideStepWithProgress(**row, is_complete=False, completed_at=None) for row in steps_response.data]
+        return GuideEntry(**guide_row.data[0], steps=steps_out)
+
+    def update_guide(self, client: Client, guide_id: str, payload: dict) -> GuideEntry:
+        response = client.table("guide_entries").update(payload).eq("id", str(guide_id)).execute()
+        if not response.data:
+            raise KeyError("Guide entry not found")
+        return GuideEntry(**response.data[0], steps=[])
+
+    def archive_guide(self, client: Client, guide_id: str, user_id: str) -> GuideEntry:
+        now = datetime.now(timezone.utc).isoformat()
+        response = (
+            client.table("guide_entries")
+            .update({"archived_at": now, "updated_at": now, "updated_by": user_id})
+            .eq("id", str(guide_id))
+            .execute()
+        )
+        if not response.data:
+            raise KeyError("Guide entry not found")
+        return GuideEntry(**response.data[0], steps=[])
+
+    def create_guide_step(self, client: Client, guide_id: str, payload: GuideStepCreateRequest) -> GuideStep:
+        last_step = (
+            client.table("guide_steps")
+            .select("step_index")
+            .eq("guide_id", str(guide_id))
+            .order("step_index", desc=True)
+            .limit(1)
+            .execute()
+        )
+        next_index = 1
+        if last_step.data:
+            next_index = int(last_step.data[0].get("step_index") or 0) + 1
+
+        row = (
+            client.table("guide_steps")
+            .insert(
+                {
+                    "guide_id": str(guide_id),
+                    "step_index": next_index,
+                    "title": payload.title,
+                    "instruction": payload.instruction,
+                    "citations": [],
+                    "confidence": 0,
+                }
+            )
+            .execute()
+        )
+        if not row.data:
+            raise KeyError("Guide step not found")
+        return GuideStep(**row.data[0])
+
+    def update_guide_step(self, client: Client, step_id: str, payload: dict) -> GuideStep:
+        response = client.table("guide_steps").update(payload).eq("id", str(step_id)).execute()
+        if not response.data:
+            raise KeyError("Guide step not found")
+        return GuideStep(**response.data[0])
+
+    def reorder_guide_steps(self, client: Client, guide_id: str, ordered_step_ids: List[str]) -> List[GuideStep]:
+        steps_response = (
+            client.table("guide_steps")
+            .select("id")
+            .eq("guide_id", str(guide_id))
+            .execute()
+        )
+        step_ids = [row.get("id") for row in steps_response.data]
+        if set(step_ids) != set(ordered_step_ids):
+            raise ValueError("Step list does not match current guide steps.")
+
+        now = datetime.now(timezone.utc).isoformat()
+        for index, step_id in enumerate(ordered_step_ids, start=1):
+            client.table("guide_steps").update({"step_index": index, "updated_at": now}).eq("id", step_id).execute()
+
+        updated = (
+            client.table("guide_steps")
+            .select("*")
+            .eq("guide_id", str(guide_id))
+            .order("step_index")
+            .execute()
+        )
+        return [GuideStep(**row) for row in updated.data]
+
+    def upsert_guide_step_progress(
+        self,
+        client: Client,
+        user_id: str,
+        guide_id: str,
+        step_id: str,
+        payload: GuideStepProgressUpdate,
+    ) -> dict:
+        now = datetime.now(timezone.utc).isoformat()
+        completed_at = now if payload.is_complete else None
+        progress_payload = {
+            "guide_step_id": step_id,
+            "guide_id": guide_id,
+            "user_id": user_id,
+            "is_complete": payload.is_complete,
+            "completed_at": completed_at,
+            "updated_at": now,
+        }
+        progress_payload["created_at"] = now
+        response = client.table("guide_step_progress").upsert(
+            progress_payload, on_conflict="guide_step_id,user_id"
+        ).execute()
+        if not response.data:
+            raise KeyError("Guide step progress not found")
+        return response.data[0]
 
     def list_reminders(
         self,
@@ -977,6 +1270,31 @@ class SupabaseStore:
         )
         return completion.choices[0].message.content or ""
 
+    def _generate_guide_steps(
+        self, context_blocks: List[str], topic: Optional[str], step_count: int
+    ) -> List[Dict[str, str]]:
+        system_prompt = (
+            "You are Caddie, an onboarding assistant. Generate a concise, ordered checklist from the context. "
+            "Return a JSON array of objects with keys: title (optional) and instruction. "
+            "Use only information grounded in the provided context."
+        )
+        context = "\n".join(context_blocks)
+        topic_text = f"Topic: {topic}\n" if topic else ""
+        user_prompt = (
+            f"{topic_text}Context:\n{context}\n\n"
+            f"Generate {step_count} checklist steps. Each step should be a clear instruction."
+        )
+        completion = self.llm_client.chat.completions.create(
+            model=self.chat_model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            temperature=0.2,
+        )
+        raw = completion.choices[0].message.content or ""
+        return _parse_steps_from_text(raw, step_count)
+
 
 store = SupabaseStore()
 
@@ -996,12 +1314,12 @@ def _sanitize_filename(name: str) -> str:
 
 
 def _web_storage_path(hub_id: str, source_id: str) -> str:
-    stamp = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     return f"{hub_id}/{source_id}/web-{stamp}.md"
 
 
 def _youtube_storage_path(hub_id: str, source_id: str) -> str:
-    stamp = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     return f"{hub_id}/{source_id}/youtube-{stamp}.md"
 
 
@@ -1113,6 +1431,66 @@ def _parse_questions_from_text(raw: str, max_count: int) -> List[str]:
             cleaned_lines.append(cleaned)
     _add(cleaned_lines)
     return candidates
+
+
+def _parse_steps_from_text(raw: str, max_count: int) -> List[Dict[str, str]]:
+    if not raw:
+        return []
+    text = raw.strip()
+    steps: List[Dict[str, str]] = []
+
+    def _clean(value: str) -> str:
+        cleaned = re.sub(r"^[\-\*\d\.\)\s]+", "", value or "").strip()
+        return cleaned
+
+    def _add_step(title: Optional[str], instruction: str) -> None:
+        if len(steps) >= max_count:
+            return
+        cleaned_instruction = _clean(instruction)
+        if not cleaned_instruction:
+            return
+        cleaned_title = _clean(title or "")
+        steps.append(
+            {
+                "title": cleaned_title if cleaned_title else "",
+                "instruction": cleaned_instruction,
+            }
+        )
+
+    def _load_json_array(value: str) -> Optional[List[Any]]:
+        try:
+            parsed = json.loads(value)
+        except json.JSONDecodeError:
+            return None
+        if isinstance(parsed, list):
+            return parsed
+        return None
+
+    parsed = _load_json_array(text)
+    if parsed is None:
+        start = text.find("[")
+        end = text.rfind("]")
+        if start != -1 and end != -1 and end > start:
+            parsed = _load_json_array(text[start : end + 1])
+
+    if parsed is not None:
+        for item in parsed:
+            if len(steps) >= max_count:
+                break
+            if isinstance(item, dict):
+                title = item.get("title") or item.get("name") or ""
+                instruction = item.get("instruction") or item.get("step") or item.get("text") or ""
+                _add_step(title, str(instruction))
+            else:
+                _add_step("", str(item))
+        return steps
+
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    for line in lines:
+        if len(steps) >= max_count:
+            break
+        _add_step("", line)
+    return steps
 
 
 def _answer_has_citation(answer: str, max_index: int) -> bool:
