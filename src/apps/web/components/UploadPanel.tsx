@@ -3,11 +3,13 @@
 import { useMutation } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  ChevronDownIcon,
   DocumentTextIcon,
   GlobeAltIcon,
   PlayCircleIcon,
   DocumentPlusIcon,
   MagnifyingGlassIcon,
+  XMarkIcon,
 } from "@heroicons/react/24/outline";
 import {
   createSource,
@@ -59,6 +61,8 @@ export function UploadPanel({
   const [retryFiles, setRetryFiles] = useState<Record<string, File>>({});
   const [searchQuery, setSearchQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState<"all" | "file" | "web" | "youtube">("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | "complete" | "incomplete">("all");
+  const [uploadOpen, setUploadOpen] = useState(true);
 
   useEffect(() => {
     if (!statusMessage) return;
@@ -243,12 +247,26 @@ export function UploadPanel({
     if (typeFilter !== "all") {
       result = result.filter((s) => s.type === typeFilter);
     }
+    if (statusFilter !== "all") {
+      result = result.filter((s) =>
+        statusFilter === "complete" ? s.status === "complete" : s.status !== "complete"
+      );
+    }
     if (searchQuery.trim()) {
       const q = searchQuery.trim().toLowerCase();
       result = result.filter((s) => s.original_name.toLowerCase().includes(q));
     }
     return result;
-  }, [sortedSources, typeFilter, searchQuery]);
+  }, [sortedSources, typeFilter, statusFilter, searchQuery]);
+  const typeCounts = useMemo(() => {
+    const counts = { all: sortedSources.length, file: 0, web: 0, youtube: 0, complete: 0, incomplete: 0 };
+    for (const s of sortedSources) {
+      if (s.type in counts) counts[s.type as "file" | "web" | "youtube"]++;
+      if (s.status === "complete") counts.complete++;
+      else counts.incomplete++;
+    }
+    return counts;
+  }, [sortedSources]);
   const selectableSources = useMemo(
     () => sortedSources.filter((source) => source.status === "complete"),
     [sortedSources]
@@ -268,70 +286,84 @@ export function UploadPanel({
         style={{ display: "none" }}
       />
 
-      <div className="sources__upload-card">
-        {/* File upload section */}
-        <div className="sources__section">
-          <div className="sources__section-header">
-            <DocumentTextIcon className="sources__section-icon sources__type-icon--file" />
-            <div>
-              <h3 className="sources__section-title">Upload a file</h3>
-              <p className="sources__section-desc">PDF, DOCX, TXT, or Markdown</p>
-            </div>
-          </div>
-          <div className="sources__file-row">
-            <button className="button--secondary button" type="button" onClick={() => fileInputRef.current?.click()} disabled={!canUpload}>
-              Choose file
-            </button>
-            <span className="sources__file-name">{file ? file.name : "No file chosen"}</span>
-            <button className="button button--primary" onClick={() => mutation.mutate()} disabled={!canUpload || mutation.isPending || !file}>
-              {mutation.isPending ? "Uploading..." : "Upload"}
-            </button>
-          </div>
-        </div>
+      {canUpload ? (
+        <div className="sources__upload-card">
+          <button
+            type="button"
+            className="sources__upload-toggle"
+            onClick={() => setUploadOpen((v) => !v)}
+            aria-expanded={uploadOpen}
+          >
+            <DocumentPlusIcon className="sources__section-icon" />
+            <span className="sources__upload-toggle-text">Add a source</span>
+            <ChevronDownIcon className={`sources__upload-chevron${uploadOpen ? " sources__upload-chevron--open" : ""}`} />
+          </button>
+          {uploadOpen && (
+            <div className="sources__upload-body">
+              {/* File upload section */}
+              <div className="sources__section">
+                <div className="sources__section-header">
+                  <DocumentTextIcon className="sources__section-icon sources__type-icon--file" />
+                  <div>
+                    <h3 className="sources__section-title">Upload a file</h3>
+                    <p className="sources__section-desc">PDF, DOCX, TXT, or Markdown</p>
+                  </div>
+                </div>
+                <div className="sources__file-row">
+                  <button className="button--secondary button" type="button" onClick={() => fileInputRef.current?.click()}>
+                    Choose file
+                  </button>
+                  <span className="sources__file-name">{file ? file.name : "No file chosen"}</span>
+                  <button className="button button--primary" onClick={() => mutation.mutate()} disabled={mutation.isPending || !file}>
+                    {mutation.isPending ? "Uploading..." : "Upload"}
+                  </button>
+                </div>
+              </div>
 
-        {/* Web URL section */}
-        <div className="sources__section">
-          <div className="sources__section-header">
-            <GlobeAltIcon className="sources__section-icon sources__type-icon--web" />
-            <div>
-              <h3 className="sources__section-title">Add a web page</h3>
-              <p className="sources__section-desc">Enter a URL to scrape and ingest</p>
-            </div>
-          </div>
-          <div className="sources__input-row">
-            <input type="url" placeholder="https://example.com/onboarding" value={url} onChange={(e) => setUrl(e.target.value)} disabled={!canUpload} />
-            <button className="button button--primary" onClick={handleSubmitUrl} disabled={!canUpload || isSubmittingUrl || !url.trim()}>
-              {isSubmittingUrl ? "Adding..." : "Add URL"}
-            </button>
-          </div>
-        </div>
+              {/* Web URL section */}
+              <div className="sources__section">
+                <div className="sources__section-header">
+                  <GlobeAltIcon className="sources__section-icon sources__type-icon--web" />
+                  <div>
+                    <h3 className="sources__section-title">Add a web page</h3>
+                    <p className="sources__section-desc">Enter a URL to scrape and ingest</p>
+                  </div>
+                </div>
+                <div className="sources__input-row">
+                  <input type="url" placeholder="https://example.com/onboarding" value={url} onChange={(e) => setUrl(e.target.value)} />
+                  <button className="button button--primary" onClick={handleSubmitUrl} disabled={isSubmittingUrl || !url.trim()}>
+                    {isSubmittingUrl ? "Adding..." : "Add URL"}
+                  </button>
+                </div>
+              </div>
 
-        {/* YouTube section */}
-        <div className="sources__section">
-          <div className="sources__section-header">
-            <PlayCircleIcon className="sources__section-icon sources__type-icon--youtube" />
-            <div>
-              <h3 className="sources__section-title">Add a YouTube video</h3>
-              <p className="sources__section-desc">Transcript will be extracted and ingested</p>
+              {/* YouTube section */}
+              <div className="sources__section">
+                <div className="sources__section-header">
+                  <PlayCircleIcon className="sources__section-icon sources__type-icon--youtube" />
+                  <div>
+                    <h3 className="sources__section-title">Add a YouTube video</h3>
+                    <p className="sources__section-desc">Transcript will be extracted and ingested</p>
+                  </div>
+                </div>
+                <div className="sources__input-row">
+                  <input type="url" placeholder="https://www.youtube.com/watch?v=..." value={youtubeUrl} onChange={(e) => setYouTubeUrl(e.target.value)} />
+                  <button className="button button--primary" onClick={handleSubmitYouTube} disabled={isSubmittingYouTube || !youtubeUrl.trim()}>
+                    {isSubmittingYouTube ? "Adding..." : "Add YouTube"}
+                  </button>
+                </div>
+                <div className="sources__youtube-options">
+                  <input type="text" placeholder="Language (optional, e.g. en)" value={youtubeLanguage} onChange={(e) => setYouTubeLanguage(e.target.value)} />
+                  <label className="checkbox-label">
+                    <input type="checkbox" checked={youtubeAutoCaptions} onChange={(e) => setYouTubeAutoCaptions(e.target.checked)} />
+                    <span>Allow auto-captions</span>
+                  </label>
+                </div>
+              </div>
             </div>
-          </div>
-          <div className="sources__input-row">
-            <input type="url" placeholder="https://www.youtube.com/watch?v=..." value={youtubeUrl} onChange={(e) => setYouTubeUrl(e.target.value)} disabled={!canUpload} />
-            <button className="button button--primary" onClick={handleSubmitYouTube} disabled={!canUpload || isSubmittingYouTube || !youtubeUrl.trim()}>
-              {isSubmittingYouTube ? "Adding..." : "Add YouTube"}
-            </button>
-          </div>
-          <div className="sources__youtube-options">
-            <input type="text" placeholder="Language (optional, e.g. en)" value={youtubeLanguage} onChange={(e) => setYouTubeLanguage(e.target.value)} disabled={!canUpload} />
-            <label className="checkbox-label">
-              <input type="checkbox" checked={youtubeAutoCaptions} onChange={(e) => setYouTubeAutoCaptions(e.target.checked)} disabled={!canUpload} />
-              <span>Allow auto-captions</span>
-            </label>
-          </div>
+          )}
         </div>
-      </div>
-
-      {!canUpload && (
+      ) : (
         <p className="sources__permission-notice">You only have view access. Ask the hub owner to grant edit permissions.</p>
       )}
       {statusMessage && <p className="sources__status">{statusMessage}</p>}
@@ -349,6 +381,11 @@ export function UploadPanel({
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />
+            {searchQuery && (
+              <button type="button" className="sources__search-clear" onClick={() => setSearchQuery("")} aria-label="Clear search">
+                <XMarkIcon className="sources__search-clear-icon" />
+              </button>
+            )}
           </div>
           <div className="sources__filter-pills">
             {(["all", "file", "web", "youtube"] as const).map((type) => (
@@ -358,7 +395,18 @@ export function UploadPanel({
                 className={`sources__filter-pill${typeFilter === type ? " sources__filter-pill--active" : ""}`}
                 onClick={() => setTypeFilter(type)}
               >
-                {type === "all" ? "All" : type === "file" ? "Files" : type === "web" ? "Web" : "YouTube"}
+                {type === "all" ? "All" : type === "file" ? "Files" : type === "web" ? "Web" : "YouTube"} ({typeCounts[type]})
+              </button>
+            ))}
+            <span className="sources__filter-divider" />
+            {(["all", "complete", "incomplete"] as const).map((status) => (
+              <button
+                key={status}
+                type="button"
+                className={`sources__filter-pill${statusFilter === status ? " sources__filter-pill--active" : ""}`}
+                onClick={() => setStatusFilter(status)}
+              >
+                {status === "all" ? "Any status" : status === "complete" ? "Complete" : "Incomplete"} ({typeCounts[status]})
               </button>
             ))}
           </div>
@@ -469,6 +517,9 @@ export function UploadPanel({
                   <StatusPill status={source.status} />
                 </div>
               </div>
+              {source.failure_reason && (
+                <p className="sources__card-error">Error: {source.failure_reason}</p>
+              )}
               {isRemoteSource && source.status !== "failed" && !snapshotReady && (
                 <p className="sources__card-note">Reprocess is available after the first successful ingest.</p>
               )}
