@@ -3,6 +3,8 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useState, useRef, useEffect, useMemo } from "react";
 import { ChevronDownIcon, PaperAirplaneIcon } from "@heroicons/react/24/outline";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { askQuestion, getChatHistory } from "../lib/api";
 import type { ChatResponse, Citation, HistoryMessage, Source } from "../lib/types";
 import { SourceSelector } from "./SourceSelector";
@@ -257,7 +259,11 @@ export function ChatPanel({ hubId, hubName, hubDescription, selectedSourceIds, h
                   )}
                   {msg.response && (
                     <>
-                      <p className="chat__answer">{msg.response.answer}</p>
+                      <div className="chat__answer">
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                          {msg.response.answer}
+                        </ReactMarkdown>
+                      </div>
                       {msg.response.citations.length === 0 && (
                         <p className="muted" style={{ marginTop: "8px", fontSize: "0.8rem" }}>
                           No sources matched. Try rephrasing or upload more documents.
