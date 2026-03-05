@@ -128,7 +128,7 @@ def test_chat_includes_citations_when_matches(monkeypatch) -> None:
     payload = ChatRequest(hub_id="11111111-1111-1111-1111-111111111111", question="What is this?")
     result = store.chat(fake_client, "user-1", payload)
 
-    assert result.answer == "Answer"
+    assert result.answer == "Answer [1]"
     assert len(result.citations) == 1
     assert result.citations[0].source_id == "src-1"
     assert len(fake_client.inserted.get("messages", [])) == 2
@@ -148,7 +148,7 @@ def test_chat_global_uses_web_search(monkeypatch) -> None:
     )
     result = store.chat(fake_client, "user-1", payload)
 
-    assert result.answer == "Global answer"
+    assert result.answer == "Global answer [1]"
     assert result.citations
     assert result.citations[0].source_id == "https://example.com"
 
