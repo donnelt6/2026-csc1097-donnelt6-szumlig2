@@ -99,15 +99,16 @@ class FakeLLMClientWithResponses:
 
 
 def test_chat_returns_fallback_when_no_matches(monkeypatch) -> None:
-    # Forces empty matches; expect fallback answer and no citations.
+    # Forces empty matches; expect an uncited conversational response.
     fake_client = FakeClient()
     monkeypatch.setattr(store, "_embed_query", lambda text: [0.1])
     monkeypatch.setattr(store, "_match_chunks", lambda client, hub_id, embedding, top_k, source_ids=None: [])
+    monkeypatch.setattr(store, "llm_client", FakeLLMClient("Hello! How can I help you today?"))
 
     payload = ChatRequest(hub_id="11111111-1111-1111-1111-111111111111", question="What is this?")
     result = store.chat(fake_client, "user-1", payload)
 
-    assert result.answer.startswith("I couldn't find")
+    assert result.answer == "Hello! How can I help you today?"
     assert result.citations == []
 
 
@@ -122,7 +123,7 @@ def test_chat_includes_citations_when_matches(monkeypatch) -> None:
             {"source_id": "src-1", "text": "Snippet", "chunk_index": 0, "similarity": 0.9}
         ],
     )
-    monkeypatch.setattr(store, "llm_client", FakeLLMClient("Answer"))
+    monkeypatch.setattr(store, "llm_client", FakeLLMClient("Answer [1]"))
 
     payload = ChatRequest(hub_id="11111111-1111-1111-1111-111111111111", question="What is this?")
     result = store.chat(fake_client, "user-1", payload)
@@ -137,7 +138,7 @@ def test_chat_global_uses_web_search(monkeypatch) -> None:
     fake_client = FakeClient()
     monkeypatch.setattr(store, "_embed_query", lambda text: [0.1])
     monkeypatch.setattr(store, "_match_chunks", lambda client, hub_id, embedding, top_k, source_ids=None: [])
-    response = FakeWebSearchResponse("Global answer")
+    response = FakeWebSearchResponse("Global answer [1]")
     monkeypatch.setattr(store, "llm_client", FakeLLMClientWithResponses(response))
 
     payload = ChatRequest(
@@ -162,6 +163,7 @@ def test_chat_filters_by_selected_sources(monkeypatch) -> None:
 
     monkeypatch.setattr(store, "_embed_query", lambda text: [0.1])
     monkeypatch.setattr(store, "_match_chunks", fake_match)
+    monkeypatch.setattr(store, "llm_client", FakeLLMClient("Hello!"))
 
     payload = ChatRequest(
         hub_id="11111111-1111-1111-1111-111111111111",

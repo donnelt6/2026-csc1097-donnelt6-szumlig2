@@ -541,7 +541,7 @@ class SupabaseStore:
         if payload.scope == HubScope.global_scope:
             answer, web_citations, usage = self._answer_with_web_search(payload.question, context_blocks)
             all_citations = citations + web_citations
-            has_citation = _answer_has_citation(answer, len(context_blocks))
+            has_citation = _answer_has_citation(answer, len(all_citations))
             if not has_citation:
                 all_citations = []
             assistant_row = (
