@@ -2660,6 +2660,28 @@ textarea {
   border-top: 1px solid var(--border);
 }
 
+.chat__answer table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.chat__answer th,
+.chat__answer td {
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  text-align: left;
+}
+
+.chat__answer th {
+  font-weight: var(--font-semibold);
+  background: var(--input-bg);
+}
+
+.chat__answer tr:hover td {
+  background: var(--accent-glow);
+}
+
 .chat__error { margin: 0; color: #ef4444; font-size: 0.875rem; }
 
 /* Citations */
