@@ -198,15 +198,15 @@ describe("UploadPanel", () => {
     expect(await screen.findByText(/Upload requeued/i)).toBeInTheDocument();
   });
 
-  it("disables uploads for viewers", () => {
-    // Expect inputs and upload button to be disabled for view-only users.
+  it("hides upload card for viewers", () => {
+    // Upload card is hidden entirely for view-only users; only permission notice shown.
     const { container } = renderWithQueryClient(
       <UploadPanel hubId="hub-1" sources={[]} onRefresh={() => undefined} canUpload={false} />
     );
 
     const input = container.querySelector("input[type='file']") as HTMLInputElement;
     expect(input.disabled).toBe(true);
-    expect(screen.getByRole("button", { name: "Upload" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Upload" })).not.toBeInTheDocument();
     expect(screen.getByText(/view access/i)).toBeInTheDocument();
   });
 
