@@ -541,6 +541,9 @@ class SupabaseStore:
         if payload.scope == HubScope.global_scope:
             answer, web_citations, usage = self._answer_with_web_search(payload.question, context_blocks)
             all_citations = citations + web_citations
+            has_citation = _answer_has_citation(answer, len(all_citations))
+            if not has_citation:
+                all_citations = []
             assistant_row = (
                 client.table("messages")
                 .insert(
@@ -559,14 +562,36 @@ class SupabaseStore:
         system_prompt = (
             "You are Caddie, an onboarding assistant. Answer using the provided context only. "
             "If the context is insufficient, say you don't have enough information. "
-            "Cite sources inline using [n] that matches the context list."
+            "Cite sources inline using [n] that matches the context list, and only include citations when you are "
+            "directly using the cited content. "
+            "If the user sends small talk or a greeting, respond politely and ask how you can help."
         )
         user_prompt = f"Question: {payload.question}\n\nContext:\n" + "\n".join(context_blocks)
 
         if not context_blocks:
-            answer = "I couldn't find relevant information in the uploaded sources."
+            system_prompt = (
+                "You are Caddie, a helpful assistant. The user is chatting or asking something that is not tied to the "
+                "hub's sources. Respond naturally and helpfully. Do not cite sources."
+            )
+            completion = self.llm_client.chat.completions.create(
+                model=self.chat_model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    *history_messages,
+                    {"role": "user", "content": payload.question},
+                ],
+                temperature=0.2,
+            )
+            answer = completion.choices[0].message.content or ""
+            usage = completion.usage.model_dump() if completion.usage else None
             assistant_row = client.table("messages").insert(
-                {"session_id": session_id, "role": "assistant", "content": answer, "citations": []}
+                {
+                    "session_id": session_id,
+                    "role": "assistant",
+                    "content": answer,
+                    "citations": [],
+                    "token_usage": usage,
+                }
             ).execute()
             return ChatResponse(answer=answer, citations=[], message_id=assistant_row.data[0]["id"])
 
@@ -582,6 +607,9 @@ class SupabaseStore:
         answer = completion.choices[0].message.content or ""
         usage = completion.usage.model_dump() if completion.usage else None
 
+        has_citation = _answer_has_citation(answer, len(context_blocks))
+        final_citations = citations if has_citation else []
+
         assistant_row = (
             client.table("messages")
             .insert(
@@ -589,13 +617,13 @@ class SupabaseStore:
                     "session_id": session_id,
                     "role": "assistant",
                     "content": answer,
-                    "citations": [c.model_dump() for c in citations],
+                    "citations": [c.model_dump() for c in final_citations],
                     "token_usage": usage,
                 }
             )
             .execute()
         )
-        return ChatResponse(answer=answer, citations=citations, message_id=assistant_row.data[0]["id"])
+        return ChatResponse(answer=answer, citations=final_citations, message_id=assistant_row.data[0]["id"])
 
     def chat_history(self, client: Client, user_id: str, hub_id: str) -> List[HistoryMessage]:
         rows = self._fetch_recent_messages(client, user_id, hub_id, 5, "role, content, citations, created_at")
@@ -1152,7 +1180,9 @@ class SupabaseStore:
     ) -> tuple[str, List[Citation], Optional[dict]]:
         system_prompt = (
             "You are Caddie, an onboarding assistant. Use hub context and web search results. "
-            "If hub context is relevant, cite it with [n] matching the context list."
+            "If hub context is relevant, cite it with [n] matching the context list. "
+            "Only include citations when you are directly using the cited content. "
+            "If the user sends small talk or a greeting, respond politely and ask how you can help."
         )
         hub_context = "\n".join(context_blocks) if context_blocks else "None."
         user_prompt = f"Question: {question}\n\nHub context:\n{hub_context}"
@@ -1346,6 +1376,7 @@ def _build_youtube_source_name(url: str, video_id: str) -> str:
 _YOUTUBE_ID_RE = re.compile(r"^[A-Za-z0-9_-]{11}$")
 
 
+
 def _extract_youtube_video_id(url: str) -> Optional[str]:
     parsed = urlparse(url)
     host = (parsed.netloc or "").lower()
@@ -1371,6 +1402,8 @@ def _normalize_youtube_id(value: str) -> Optional[str]:
     if not _YOUTUBE_ID_RE.fullmatch(candidate):
         return None
     return candidate
+
+
 
 
 def _trim_text(text: str, max_chars: int) -> str:
