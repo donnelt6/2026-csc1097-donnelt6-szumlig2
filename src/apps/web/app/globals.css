@@ -3105,6 +3105,31 @@ textarea {
   color: white;
 }
 
+.sources__pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 0;
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+}
+
+.sources__pagination-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sources__pagination-page {
+  min-width: 80px;
+  text-align: center;
+}
+
+.sources__pagination-sizes {
+  display: flex;
+  gap: 4px;
+}
+
 .sources__status {
   font-size: 0.875rem;
   color: var(--accent);

@@ -63,6 +63,8 @@ export function UploadPanel({
   const [typeFilter, setTypeFilter] = useState<"all" | "file" | "web" | "youtube">("all");
   const [statusFilter, setStatusFilter] = useState<"all" | "complete" | "incomplete">("all");
   const [uploadOpen, setUploadOpen] = useState(true);
+  const [pageSize, setPageSize] = useState(10);
+  const [page, setPage] = useState(0);
 
   useEffect(() => {
     if (!statusMessage) return;
@@ -274,6 +276,8 @@ export function UploadPanel({
   const selectedSourceSet = useMemo(() => new Set(selectedSourceIds), [selectedSourceIds]);
   const selectedCount = selectableSources.filter((source) => selectedSourceSet.has(source.id)).length;
   const selectableCount = selectableSources.length;
+  const totalPages = Math.max(1, Math.ceil(filteredSources.length / pageSize));
+  const pagedSources = filteredSources.slice(page * pageSize, (page + 1) * pageSize);
 
   return (
     <div className="sources">
@@ -379,7 +383,7 @@ export function UploadPanel({
               className="sources__search-input"
               placeholder="Search sources..."
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(e) => { setSearchQuery(e.target.value); setPage(0); }}
             />
             {searchQuery && (
               <button type="button" className="sources__search-clear" onClick={() => setSearchQuery("")} aria-label="Clear search">
@@ -391,7 +395,7 @@ export function UploadPanel({
             <button
               type="button"
               className={`sources__filter-pill${statusFilter === "all" && typeFilter === "all" ? " sources__filter-pill--active" : ""}`}
-              onClick={() => { setStatusFilter("all"); setTypeFilter("all"); }}
+              onClick={() => { setStatusFilter("all"); setTypeFilter("all"); setPage(0); }}
             >
               All ({typeCounts.all})
             </button>
@@ -400,7 +404,7 @@ export function UploadPanel({
                 key={status}
                 type="button"
                 className={`sources__filter-pill${statusFilter === status ? " sources__filter-pill--active" : ""}`}
-                onClick={() => setStatusFilter(statusFilter === status ? "all" : status)}
+                onClick={() => { setStatusFilter(statusFilter === status ? "all" : status); setPage(0); }}
               >
                 {status === "complete" ? "Complete" : "Incomplete"} ({typeCounts[status]})
               </button>
@@ -411,7 +415,7 @@ export function UploadPanel({
                 key={type}
                 type="button"
                 className={`sources__filter-pill${typeFilter === type ? " sources__filter-pill--active" : ""}`}
-                onClick={() => setTypeFilter(typeFilter === type ? "all" : type)}
+                onClick={() => { setTypeFilter(typeFilter === type ? "all" : type); setPage(0); }}
               >
                 {type === "file" ? "Files" : type === "web" ? "Web" : "YouTube"} ({typeCounts[type]})
               </button>
@@ -434,8 +438,19 @@ export function UploadPanel({
         </div>
       )}
 
+      {filteredSources.length > 0 && (
+        <PaginationBar
+          page={page}
+          totalPages={totalPages}
+          pageSize={pageSize}
+          totalItems={filteredSources.length}
+          onPageChange={setPage}
+          onPageSizeChange={(size) => { setPageSize(size); setPage(0); }}
+        />
+      )}
+
       <div className="sources__list">
-        {filteredSources.map((source) => {
+        {pagedSources.map((source) => {
           const isSelectable = source.status === "complete";
           const isSelected = isSelectable && selectedSourceSet.has(source.id);
           const webSnapshotReady =
@@ -547,6 +562,17 @@ export function UploadPanel({
           </div>
         )}
       </div>
+
+      {filteredSources.length > 0 && (
+        <PaginationBar
+          page={page}
+          totalPages={totalPages}
+          pageSize={pageSize}
+          totalItems={filteredSources.length}
+          onPageChange={setPage}
+          onPageSizeChange={(size) => { setPageSize(size); setPage(0); }}
+        />
+      )}
     </div>
   );
 }
@@ -556,6 +582,51 @@ function StatusPill({ status }: { status: Source["status"] }) {
     <span className={`sources__pill sources__pill--${status}`}>
       {status.charAt(0).toUpperCase() + status.slice(1)}
     </span>
+  );
+}
+
+function PaginationBar({
+  page,
+  totalPages,
+  pageSize,
+  totalItems,
+  onPageChange,
+  onPageSizeChange,
+}: {
+  page: number;
+  totalPages: number;
+  pageSize: number;
+  totalItems: number;
+  onPageChange: (page: number) => void;
+  onPageSizeChange: (size: number) => void;
+}) {
+  return (
+    <div className="sources__pagination">
+      <div className="sources__pagination-info">
+        Showing {page * pageSize + 1}–{Math.min((page + 1) * pageSize, totalItems)} of {totalItems}
+      </div>
+      <div className="sources__pagination-controls">
+        <button type="button" className="button--small" disabled={page === 0} onClick={() => onPageChange(page - 1)}>
+          Previous
+        </button>
+        <span className="sources__pagination-page">Page {page + 1} of {totalPages}</span>
+        <button type="button" className="button--small" disabled={page >= totalPages - 1} onClick={() => onPageChange(page + 1)}>
+          Next
+        </button>
+      </div>
+      <div className="sources__pagination-sizes">
+        {[10, 25, 50].map((size) => (
+          <button
+            key={size}
+            type="button"
+            className={`sources__filter-pill${pageSize === size ? " sources__filter-pill--active" : ""}`}
+            onClick={() => onPageSizeChange(size)}
+          >
+            {size}
+          </button>
+        ))}
+      </div>
+    </div>
   );
 }
 
