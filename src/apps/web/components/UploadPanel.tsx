@@ -388,25 +388,32 @@ export function UploadPanel({
             )}
           </div>
           <div className="sources__filter-pills">
-            {(["all", "file", "web", "youtube"] as const).map((type) => (
-              <button
-                key={type}
-                type="button"
-                className={`sources__filter-pill${typeFilter === type ? " sources__filter-pill--active" : ""}`}
-                onClick={() => setTypeFilter(type)}
-              >
-                {type === "all" ? "All" : type === "file" ? "Files" : type === "web" ? "Web" : "YouTube"} ({typeCounts[type]})
-              </button>
-            ))}
-            <span className="sources__filter-divider" />
-            {(["all", "complete", "incomplete"] as const).map((status) => (
+            <button
+              type="button"
+              className={`sources__filter-pill${statusFilter === "all" && typeFilter === "all" ? " sources__filter-pill--active" : ""}`}
+              onClick={() => { setStatusFilter("all"); setTypeFilter("all"); }}
+            >
+              All ({typeCounts.all})
+            </button>
+            {(["complete", "incomplete"] as const).map((status) => (
               <button
                 key={status}
                 type="button"
                 className={`sources__filter-pill${statusFilter === status ? " sources__filter-pill--active" : ""}`}
-                onClick={() => setStatusFilter(status)}
+                onClick={() => setStatusFilter(statusFilter === status ? "all" : status)}
               >
-                {status === "all" ? "Any status" : status === "complete" ? "Complete" : "Incomplete"} ({typeCounts[status]})
+                {status === "complete" ? "Complete" : "Incomplete"} ({typeCounts[status]})
+              </button>
+            ))}
+            <span className="sources__filter-divider" />
+            {(["file", "web", "youtube"] as const).map((type) => (
+              <button
+                key={type}
+                type="button"
+                className={`sources__filter-pill${typeFilter === type ? " sources__filter-pill--active" : ""}`}
+                onClick={() => setTypeFilter(typeFilter === type ? "all" : type)}
+              >
+                {type === "file" ? "Files" : type === "web" ? "Web" : "YouTube"} ({typeCounts[type]})
               </button>
             ))}
           </div>

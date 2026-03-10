@@ -3006,8 +3006,8 @@ textarea {
 
 .sources__filter-bar {
   display: flex;
-  align-items: center;
-  gap: 12px;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .sources__search {
@@ -3066,6 +3066,13 @@ textarea {
   border-color: var(--accent);
 }
 
+.sources__filter-divider {
+  width: 1px;
+  height: 20px;
+  background: var(--border);
+  margin: 0 4px;
+}
+
 .sources__filter-pills {
   display: flex;
   gap: 4px;
@@ -3074,12 +3081,6 @@ textarea {
   align-items: center;
 }
 
-.sources__filter-divider {
-  width: 1px;
-  height: 20px;
-  background: var(--border);
-  margin: 0 4px;
-}
 
 .sources__filter-pill {
   padding: 6px 12px;
