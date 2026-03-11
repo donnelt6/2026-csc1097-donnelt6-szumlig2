@@ -61,13 +61,27 @@ export function useSourceSelection(hubId: string, sources: Source[]) {
     [completeIdSet, excludedIds, persistExcluded]
   );
 
-  const selectAll = useCallback(() => {
-    persistExcluded(new Set());
-  }, [persistExcluded]);
+  const selectAll = useCallback((scope?: string[]) => {
+    if (!scope) {
+      persistExcluded(new Set());
+      return;
+    }
+    const next = new Set(excludedIds);
+    for (const id of scope) next.delete(id);
+    persistExcluded(next);
+  }, [excludedIds, persistExcluded]);
 
-  const clearAll = useCallback(() => {
-    persistExcluded(new Set(completeIds));
-  }, [completeIds, persistExcluded]);
+  const clearAll = useCallback((scope?: string[]) => {
+    if (!scope) {
+      persistExcluded(new Set(completeIds));
+      return;
+    }
+    const next = new Set(excludedIds);
+    for (const id of scope) {
+      if (completeIdSet.has(id)) next.add(id);
+    }
+    persistExcluded(next);
+  }, [completeIds, completeIdSet, excludedIds, persistExcluded]);
 
   const selectedIds = useMemo(
     () => completeIds.filter((id) => !excludedIds.has(id)),

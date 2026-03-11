@@ -30,8 +30,8 @@ interface Props {
   canUpload?: boolean;
   selectedSourceIds?: string[];
   onToggleSource?: (sourceId: string) => void;
-  onSelectAllSources?: () => void;
-  onClearSourceSelection?: () => void;
+  onSelectAllSources?: (scope?: string[]) => void;
+  onClearSourceSelection?: (scope?: string[]) => void;
 }
 
 export function UploadPanel({
@@ -50,7 +50,7 @@ export function UploadPanel({
   const [youtubeUrl, setYouTubeUrl] = useState("");
   const [youtubeLanguage, setYouTubeLanguage] = useState("");
   const [youtubeAutoCaptions, setYouTubeAutoCaptions] = useState(false);
-  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [statusMessage, setStatusMessage] = useState<{ text: string; type: "success" | "error" } | null>(null);
   const [retryingSourceId, setRetryingSourceId] = useState<string | null>(null);
   const [isRetrying, setIsRetrying] = useState(false);
   const [deletingSourceId, setDeletingSourceId] = useState<string | null>(null);
@@ -100,7 +100,7 @@ export function UploadPanel({
       return enqueue.source;
     },
     onSuccess: (source) => {
-      setStatusMessage("Upload enqueued. Processing will start shortly.");
+      setStatusMessage({ text: "Upload enqueued. Processing will start shortly.", type: "success" });
       setFile(null);
       setRetryFiles((prev) => {
         if (!source?.id || !(source.id in prev)) return prev;
@@ -110,14 +110,14 @@ export function UploadPanel({
       onRefresh();
     },
     onError: (err) => {
-      setStatusMessage((err as Error).message);
+      setStatusMessage({ text: (err as Error).message, type: "error" });
     },
   });
 
   const handleRetryUpload = async (sourceId: string) => {
     const retryFile = retryFiles[sourceId];
     if (!retryFile) {
-      setStatusMessage("Retry unavailable after refresh.");
+      setStatusMessage({ text: "Retry unavailable after refresh.", type: "error" });
       return;
     }
     setIsRetrying(true);
@@ -135,13 +135,13 @@ export function UploadPanel({
         throw new Error(detail || `Upload failed with status ${uploadResp.status}`);
       }
       await enqueueSource(sourceId);
-      setStatusMessage("Upload requeued. Processing will start shortly.");
+      setStatusMessage({ text: "Upload requeued. Processing will start shortly.", type: "success" });
       onRefresh();
     } catch (err) {
       const reason = clampFailureReason(err);
       await failSource(sourceId, reason).catch(() => undefined);
       onRefresh();
-      setStatusMessage(reason);
+      setStatusMessage({ text: reason, type: "error" });
     } finally {
       setIsRetrying(false);
       setRetryingSourceId(null);
@@ -163,10 +163,10 @@ export function UploadPanel({
         const { [sourceId]: _unused, ...rest } = prev;
         return rest;
       });
-      setStatusMessage("Source deleted.");
+      setStatusMessage({ text: "Source deleted.", type: "success" });
       onRefresh();
     } catch (err) {
-      setStatusMessage((err as Error).message);
+      setStatusMessage({ text: (err as Error).message, type: "error" });
     } finally {
       setDeletingSourceId(null);
     }
@@ -189,10 +189,10 @@ export function UploadPanel({
         for (const s of failed) delete next[s.id];
         return next;
       });
-      setStatusMessage(`${failed.length} failed source${failed.length === 1 ? "" : "s"} deleted.`);
+      setStatusMessage({ text: `${failed.length} failed source${failed.length === 1 ? "" : "s"} deleted.`, type: "success" });
       onRefresh();
     } catch (err) {
-      setStatusMessage((err as Error).message);
+      setStatusMessage({ text: (err as Error).message, type: "error" });
       onRefresh();
     } finally {
       setIsDeletingFailed(false);
@@ -201,17 +201,17 @@ export function UploadPanel({
 
   const handleSubmitUrl = async () => {
     if (!url.trim()) {
-      setStatusMessage("Enter a URL to ingest.");
+      setStatusMessage({ text: "Enter a URL to ingest.", type: "error" });
       return;
     }
     setIsSubmittingUrl(true);
     try {
       await createWebSource({ hub_id: hubId, url: url.trim() });
-      setStatusMessage("URL enqueued. Processing will start shortly.");
+      setStatusMessage({ text: "URL enqueued. Processing will start shortly.", type: "success" });
       setUrl("");
       onRefresh();
     } catch (err) {
-      setStatusMessage((err as Error).message);
+      setStatusMessage({ text: (err as Error).message, type: "error" });
     } finally {
       setIsSubmittingUrl(false);
     }
@@ -219,7 +219,7 @@ export function UploadPanel({
 
   const handleSubmitYouTube = async () => {
     if (!youtubeUrl.trim()) {
-      setStatusMessage("Enter a YouTube URL to ingest.");
+      setStatusMessage({ text: "Enter a YouTube URL to ingest.", type: "error" });
       return;
     }
     setIsSubmittingYouTube(true);
@@ -230,13 +230,13 @@ export function UploadPanel({
         language: youtubeLanguage.trim() ? youtubeLanguage.trim() : null,
         allow_auto_captions: youtubeAutoCaptions,
       });
-      setStatusMessage("YouTube video enqueued. Processing will start shortly.");
+      setStatusMessage({ text: "YouTube video enqueued. Processing will start shortly.", type: "success" });
       setYouTubeUrl("");
       setYouTubeLanguage("");
       setYouTubeAutoCaptions(false);
       onRefresh();
     } catch (err) {
-      setStatusMessage((err as Error).message);
+      setStatusMessage({ text: (err as Error).message, type: "error" });
     } finally {
       setIsSubmittingYouTube(false);
     }
@@ -246,10 +246,10 @@ export function UploadPanel({
     setRefreshingSourceId(sourceId);
     try {
       await refreshSource(sourceId);
-      setStatusMessage("Refresh queued. Latest content will be ingested.");
+      setStatusMessage({ text: "Refresh queued. Latest content will be ingested.", type: "success" });
       onRefresh();
     } catch (err) {
-      setStatusMessage((err as Error).message);
+      setStatusMessage({ text: (err as Error).message, type: "error" });
     } finally {
       setRefreshingSourceId(null);
     }
@@ -259,10 +259,10 @@ export function UploadPanel({
     setReprocessingSourceId(sourceId);
     try {
       await enqueueSource(sourceId);
-      setStatusMessage("Reprocessing queued.");
+      setStatusMessage({ text: "Reprocessing queued.", type: "success" });
       onRefresh();
     } catch (err) {
-      setStatusMessage((err as Error).message);
+      setStatusMessage({ text: (err as Error).message, type: "error" });
     } finally {
       setReprocessingSourceId(null);
     }
@@ -297,13 +297,13 @@ export function UploadPanel({
     }
     return counts;
   }, [sortedSources]);
-  const selectableSources = useMemo(
-    () => sortedSources.filter((source) => source.status === "complete"),
-    [sortedSources]
+  const filteredSelectableIds = useMemo(
+    () => filteredSources.filter((s) => s.status === "complete").map((s) => s.id),
+    [filteredSources]
   );
   const selectedSourceSet = useMemo(() => new Set(selectedSourceIds), [selectedSourceIds]);
-  const selectedCount = selectableSources.filter((source) => selectedSourceSet.has(source.id)).length;
-  const selectableCount = selectableSources.length;
+  const selectedCount = filteredSelectableIds.filter((id) => selectedSourceSet.has(id)).length;
+  const selectableCount = filteredSelectableIds.length;
   const totalPages = Math.max(1, Math.ceil(filteredSources.length / pageSize));
   const pagedSources = filteredSources.slice(page * pageSize, (page + 1) * pageSize);
 
@@ -398,7 +398,7 @@ export function UploadPanel({
       ) : (
         <p className="sources__permission-notice">You only have view access. Ask the hub owner to grant edit permissions.</p>
       )}
-      {statusMessage && <p className="sources__status">{statusMessage}</p>}
+      {statusMessage && <p className={`sources__status sources__status--${statusMessage.type}`}>{statusMessage.text}</p>}
 
       <hr className="sources__divider" />
 
@@ -469,10 +469,10 @@ export function UploadPanel({
         <div className="sources__selection-bar">
           <p className="sources__selection-text">Sources used for answers: {selectedCount} of {selectableCount}</p>
           <div className="sources__selection-actions">
-            <button className="button--small" type="button" onClick={onSelectAllSources} disabled={selectedCount === selectableCount}>
+            <button className="button--small" type="button" onClick={() => onSelectAllSources(filteredSelectableIds)} disabled={selectedCount === selectableCount}>
               Select all
             </button>
-            <button className="button--small" type="button" onClick={onClearSourceSelection} disabled={selectedCount === 0}>
+            <button className="button--small" type="button" onClick={() => onClearSourceSelection(filteredSelectableIds)} disabled={selectedCount === 0}>
               Clear
             </button>
           </div>
@@ -509,19 +509,16 @@ export function UploadPanel({
           const isRefreshingThis = refreshingSourceId === source.id;
           const isReprocessingThis = reprocessingSourceId === source.id;
           return (
-            <div key={source.id} className="sources__card">
+            <div
+              key={source.id}
+              className={`sources__card${isSelectable ? " sources__card--selectable" : ""}${isSelected ? " sources__card--selected" : ""}`}
+              onClick={isSelectable ? (e) => {
+                if ((e.target as HTMLElement).closest("button, a, input")) return;
+                onToggleSource(source.id);
+              } : undefined}
+            >
               <div className="sources__card-top">
                 <div className="sources__card-info">
-                  <div className="sources__card-checkbox">
-                    <input
-                      type="checkbox"
-                      checked={isSelected}
-                      disabled={!isSelectable}
-                      onChange={() => onToggleSource(source.id)}
-                      aria-label={`Use ${source.original_name} for answers`}
-                      title={isSelectable ? "Use this source for answers." : "Available after processing."}
-                    />
-                  </div>
                   {source.type === "file" && <DocumentTextIcon className="sources__type-icon sources__type-icon--file" />}
                   {source.type === "web" && <GlobeAltIcon className="sources__type-icon sources__type-icon--web" />}
                   {source.type === "youtube" && <PlayCircleIcon className="sources__type-icon sources__type-icon--youtube" />}
