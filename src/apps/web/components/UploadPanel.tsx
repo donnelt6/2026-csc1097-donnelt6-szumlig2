@@ -158,6 +158,7 @@ export function UploadPanel({
     setDeletingSourceId(sourceId);
     try {
       await deleteSource(sourceId);
+      setPage(0);
       setRetryFiles((prev) => {
         if (!(sourceId in prev)) return prev;
         const { [sourceId]: _unused, ...rest } = prev;
@@ -183,16 +184,20 @@ export function UploadPanel({
     }
     setIsDeletingFailed(true);
     try {
-      await Promise.all(failed.map((s) => deleteSource(s.id)));
+      const results = await Promise.allSettled(failed.map((s) => deleteSource(s.id)));
+      const succeeded = results.filter((r) => r.status === "fulfilled").length;
+      const failedCount = results.filter((r) => r.status === "rejected").length;
       setRetryFiles((prev) => {
         const next = { ...prev };
         for (const s of failed) delete next[s.id];
         return next;
       });
-      setStatusMessage({ text: `${failed.length} failed source${failed.length === 1 ? "" : "s"} deleted.`, type: "success" });
-      onRefresh();
-    } catch (err) {
-      setStatusMessage({ text: (err as Error).message, type: "error" });
+      setPage(0);
+      if (failedCount === 0) {
+        setStatusMessage({ text: `${succeeded} failed source${succeeded === 1 ? "" : "s"} deleted.`, type: "success" });
+      } else {
+        setStatusMessage({ text: `${succeeded} deleted, ${failedCount} could not be removed.`, type: "error" });
+      }
       onRefresh();
     } finally {
       setIsDeletingFailed(false);
@@ -289,11 +294,12 @@ export function UploadPanel({
     return result;
   }, [sortedSources, typeFilter, statusFilter, searchQuery]);
   const typeCounts = useMemo(() => {
-    const counts = { all: sortedSources.length, file: 0, web: 0, youtube: 0, complete: 0, incomplete: 0 };
+    const counts = { all: sortedSources.length, file: 0, web: 0, youtube: 0, complete: 0, incomplete: 0, failed: 0 };
     for (const s of sortedSources) {
       if (s.type in counts) counts[s.type as "file" | "web" | "youtube"]++;
       if (s.status === "complete") counts.complete++;
       else counts.incomplete++;
+      if (s.status === "failed") counts.failed++;
     }
     return counts;
   }, [sortedSources]);
@@ -410,6 +416,7 @@ export function UploadPanel({
               type="text"
               className="sources__search-input"
               placeholder="Search sources..."
+              aria-label="Search sources"
               value={searchQuery}
               onChange={(e) => { setSearchQuery(e.target.value); setPage(0); }}
             />
@@ -448,7 +455,7 @@ export function UploadPanel({
                 {type === "file" ? "Files" : type === "web" ? "Web" : "YouTube"} ({typeCounts[type]})
               </button>
             ))}
-            {canUpload && typeCounts.incomplete > 0 && (
+            {canUpload && typeCounts.failed > 0 && (
               <>
                 <span className="sources__filter-divider" />
                 <button
@@ -457,7 +464,7 @@ export function UploadPanel({
                   onClick={handleDeleteAllFailed}
                   disabled={isDeletingFailed}
                 >
-                  {isDeletingFailed ? "Deleting..." : `Delete failed (${typeCounts.incomplete})`}
+                  {isDeletingFailed ? "Deleting..." : `Delete failed (${typeCounts.failed})`}
                 </button>
               </>
             )}
@@ -466,10 +473,10 @@ export function UploadPanel({
             <div className="sources__selection-row">
               <span className="sources__selection-text">{selectedCount} of {selectableCount} selected</span>
               <div className="sources__selection-actions">
-                <button className="button--small" type="button" onClick={() => onSelectAllSources(filteredSelectableIds)} disabled={selectedCount === selectableCount}>
+                <button className="button--small" type="button" onClick={() => onSelectAllSources?.(filteredSelectableIds)} disabled={selectedCount === selectableCount}>
                   Select all
                 </button>
-                <button className="button--small" type="button" onClick={() => onClearSourceSelection(filteredSelectableIds)} disabled={selectedCount === 0}>
+                <button className="button--small" type="button" onClick={() => onClearSourceSelection?.(filteredSelectableIds)} disabled={selectedCount === 0}>
                   Clear
                 </button>
               </div>
@@ -511,9 +518,19 @@ export function UploadPanel({
             <div
               key={source.id}
               className={`sources__card${isSelectable ? " sources__card--selectable" : ""}${isSelected ? " sources__card--selected" : ""}`}
+              role={isSelectable ? "button" : undefined}
+              tabIndex={isSelectable ? 0 : undefined}
+              aria-label={isSelectable ? `${isSelected ? "Deselect" : "Select"} ${source.original_name}` : undefined}
+              aria-pressed={isSelectable ? isSelected : undefined}
               onClick={isSelectable ? (e) => {
                 if ((e.target as HTMLElement).closest("button, a, input")) return;
-                onToggleSource(source.id);
+                onToggleSource?.(source.id);
+              } : undefined}
+              onKeyDown={isSelectable ? (e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  onToggleSource?.(source.id);
+                }
               } : undefined}
             >
               <div className="sources__card-top">
@@ -592,7 +609,7 @@ export function UploadPanel({
           );
         })}
         {sortedSources.length > 0 && filteredSources.length === 0 && (
-          <p className="muted" style={{ textAlign: "center", padding: "24px 0" }}>No sources match your search.</p>
+          <p className="sources__empty-message muted">No sources match your search.</p>
         )}
         {!sortedSources.length && (
           <div className="sources__empty">

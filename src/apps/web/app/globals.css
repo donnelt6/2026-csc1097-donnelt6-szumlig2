@@ -61,6 +61,13 @@
   --shadow-xl: 0 16px 48px rgba(0, 0, 0, 0.5);
   --shadow-glow: 0 0 24px var(--accent-glow);
 
+  --status-queued: #a1a1aa;
+  --status-processing: #fbbf24;
+  --status-failed: #f87171;
+  --status-complete: #34d399;
+  --brand-web: #3b82f6;
+  --brand-youtube: #ef4444;
+
   --overlay: rgba(0, 0, 0, 0.6);
 }
 
@@ -105,6 +112,13 @@
   --shadow-xl: 0 16px 48px rgba(0, 0, 0, 0.15);
   --shadow-glow: 0 0 24px var(--accent-glow);
 
+  --status-queued: #71717a;
+  --status-processing: #d97706;
+  --status-failed: #dc2626;
+  --status-complete: #059669;
+  --brand-web: #2563eb;
+  --brand-youtube: #dc2626;
+
   --overlay: rgba(0, 0, 0, 0.4);
 }
 
@@ -128,6 +142,7 @@ body {
   overflow-x: hidden;
 }
 
+* { scrollbar-width: thin; scrollbar-color: var(--border-hover) transparent; }
 *::-webkit-scrollbar { width: 6px; height: 6px; }
 *::-webkit-scrollbar-track { background: transparent; }
 *::-webkit-scrollbar-thumb { background: var(--border-hover); border-radius: 3px; }
@@ -2210,23 +2225,6 @@ textarea {
   overflow-y: auto;
 }
 
-.source-selector__list::-webkit-scrollbar {
-  width: 6px;
-}
-
-.source-selector__list::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.source-selector__list::-webkit-scrollbar-thumb {
-  background: var(--border-hover);
-  border-radius: 3px;
-}
-
-.source-selector__list::-webkit-scrollbar-thumb:hover {
-  background: var(--border-focus);
-}
-
 .source-selector__item {
   padding: 0;
 }
@@ -2316,7 +2314,7 @@ textarea {
 }
 
 .button--danger:hover:not(:disabled) {
-  color: #fff;
+  color: var(--bg);
   background: var(--danger);
   border-color: var(--danger);
 }
@@ -2511,11 +2509,6 @@ textarea {
   gap: 20px;
 }
 
-.chat__messages::-webkit-scrollbar { width: 6px; }
-.chat__messages::-webkit-scrollbar-track { background: transparent; }
-.chat__messages::-webkit-scrollbar-thumb { background: var(--border-hover); border-radius: 3px; }
-.chat__messages::-webkit-scrollbar-thumb:hover { background: var(--border-focus); }
-
 /* Empty state */
 
 .chat__empty {
@@ -2561,16 +2554,16 @@ textarea {
 }
 
 .chat__bubble--user {
-  background: rgba(139, 92, 246, 0.22);
-  color: #f5eeff;
-  border: 1px solid rgba(139, 92, 246, 0.35);
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  color: var(--text);
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
   border-bottom-right-radius: 4px;
 }
 
 [data-theme="light"] .chat__bubble--user {
-  background: #ede9fe;
-  color: #4c1d95;
-  border-color: rgba(124, 58, 237, 0.2);
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  color: var(--text);
+  border-color: color-mix(in srgb, var(--accent) 20%, transparent);
 }
 
 .chat__bubble--ai {
@@ -2581,7 +2574,7 @@ textarea {
 }
 
 [data-theme="light"] .chat__bubble--ai {
-  background: #ffffff;
+  background: var(--card);
 }
 
 /* Typing indicator */
@@ -2710,7 +2703,7 @@ textarea {
   background: var(--accent-glow);
 }
 
-.chat__error { margin: 0; color: #ef4444; font-size: 0.875rem; }
+.chat__error { margin: 0; color: var(--danger); font-size: 0.875rem; }
 
 /* Citations */
 
@@ -3186,7 +3179,7 @@ textarea {
 
 .sources__status--success {
   color: var(--accent);
-  border: 1px solid rgba(139, 92, 246, 0.2);
+  border: 1px solid color-mix(in srgb, var(--accent) 20%, transparent);
 }
 
 .sources__status--error {
@@ -3237,6 +3230,11 @@ textarea {
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+
+.sources__empty-message {
+  text-align: center;
+  padding: 24px 0;
 }
 
 .sources__card {
@@ -3316,8 +3314,8 @@ textarea {
 }
 
 .sources__type-icon--file { color: var(--accent); }
-.sources__type-icon--web { color: #3b82f6; }
-.sources__type-icon--youtube { color: #ef4444; }
+.sources__type-icon--web { color: var(--brand-web); }
+.sources__type-icon--youtube { color: var(--brand-youtube); }
 
 .sources__card-details {
   min-width: 0;
@@ -3359,7 +3357,7 @@ textarea {
 
 .sources__card-error {
   font-size: 0.8rem;
-  color: #f87171;
+  color: var(--danger);
   margin: 8px 0 0;
 }
 
@@ -3383,51 +3381,51 @@ textarea {
 }
 
 .sources__pill--queued {
-  background: rgba(161, 161, 170, 0.12);
-  color: #a1a1aa;
-  border-color: rgba(161, 161, 170, 0.2);
+  background: color-mix(in srgb, var(--status-queued) 12%, transparent);
+  color: var(--status-queued);
+  border-color: color-mix(in srgb, var(--status-queued) 20%, transparent);
 }
 
 .sources__pill--processing {
-  background: rgba(251, 191, 36, 0.12);
-  color: #fbbf24;
-  border-color: rgba(251, 191, 36, 0.2);
+  background: color-mix(in srgb, var(--status-processing) 12%, transparent);
+  color: var(--status-processing);
+  border-color: color-mix(in srgb, var(--status-processing) 20%, transparent);
 }
 
 .sources__pill--failed {
-  background: rgba(248, 113, 113, 0.12);
-  color: #f87171;
-  border-color: rgba(248, 113, 113, 0.2);
+  background: color-mix(in srgb, var(--status-failed) 12%, transparent);
+  color: var(--status-failed);
+  border-color: color-mix(in srgb, var(--status-failed) 20%, transparent);
 }
 
 .sources__pill--complete {
-  background: rgba(52, 211, 153, 0.12);
-  color: #34d399;
-  border-color: rgba(52, 211, 153, 0.2);
+  background: color-mix(in srgb, var(--status-complete) 12%, transparent);
+  color: var(--status-complete);
+  border-color: color-mix(in srgb, var(--status-complete) 20%, transparent);
 }
 
 [data-theme="light"] .sources__pill--queued {
-  background: rgba(100, 116, 139, 0.1);
-  color: #64748b;
-  border-color: rgba(100, 116, 139, 0.2);
+  background: color-mix(in srgb, var(--status-queued) 10%, transparent);
+  color: var(--status-queued);
+  border-color: color-mix(in srgb, var(--status-queued) 20%, transparent);
 }
 
 [data-theme="light"] .sources__pill--processing {
-  background: rgba(217, 119, 6, 0.1);
-  color: #b45309;
-  border-color: rgba(217, 119, 6, 0.2);
+  background: color-mix(in srgb, var(--status-processing) 10%, transparent);
+  color: var(--status-processing);
+  border-color: color-mix(in srgb, var(--status-processing) 20%, transparent);
 }
 
 [data-theme="light"] .sources__pill--failed {
-  background: rgba(239, 68, 68, 0.1);
-  color: #dc2626;
-  border-color: rgba(239, 68, 68, 0.2);
+  background: color-mix(in srgb, var(--status-failed) 10%, transparent);
+  color: var(--status-failed);
+  border-color: color-mix(in srgb, var(--status-failed) 20%, transparent);
 }
 
 [data-theme="light"] .sources__pill--complete {
-  background: rgba(16, 185, 129, 0.1);
-  color: #059669;
-  border-color: rgba(16, 185, 129, 0.2);
+  background: color-mix(in srgb, var(--status-complete) 10%, transparent);
+  color: var(--status-complete);
+  border-color: color-mix(in srgb, var(--status-complete) 20%, transparent);
 }
 
 .sources__empty {
