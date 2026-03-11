@@ -110,6 +110,8 @@ def ingest_web_source(self, source_id: str, hub_id: str, url: str, storage_path:
             "word_count": len(text.split()),
         }
         chunk_count = _ingest_text_for_source(client, source_id, hub_id, text, extra_metadata=extra_metadata)
+        if title:
+            client.table("sources").update({"original_name": title}).eq("id", source_id).execute()
         logger.info("Completed web ingestion for source %s", source_id)
         return {"source_id": source_id, "hub_id": hub_id, "chunks": chunk_count}
     except Exception as exc:
@@ -168,6 +170,9 @@ def ingest_youtube_source(
             "word_count": len(text.split()),
         }
         chunk_count = _ingest_text_for_source(client, source_id, hub_id, text, extra_metadata=extra_metadata)
+        video_title = info.get("title")
+        if video_title:
+            client.table("sources").update({"original_name": video_title}).eq("id", source_id).execute()
         logger.info("Completed YouTube ingestion for source %s", source_id)
         return {"source_id": source_id, "hub_id": hub_id, "chunks": chunk_count}
     except Exception as exc:

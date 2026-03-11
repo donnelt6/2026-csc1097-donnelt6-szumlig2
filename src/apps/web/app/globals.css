@@ -2310,6 +2310,17 @@ textarea {
   cursor: not-allowed;
 }
 
+.button--danger {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
+.button--danger:hover:not(:disabled) {
+  color: #fff;
+  background: var(--danger);
+  border-color: var(--danger);
+}
+
 /* Scope Selector */
 
 .scope-selector {
@@ -3204,24 +3215,21 @@ textarea {
   margin: 0;
 }
 
-.sources__selection-bar {
+.sources__selection-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: 12px;
-  padding: 12px 0;
 }
 
 .sources__selection-text {
   font-size: 0.875rem;
   color: var(--text-secondary);
-  margin: 0;
 }
 
 .sources__selection-actions {
   display: flex;
   gap: 8px;
-  flex-wrap: wrap;
   flex-shrink: 0;
 }
 
@@ -3327,6 +3335,19 @@ textarea {
   font-size: 0.8rem;
   color: var(--muted);
   margin: 4px 0 0;
+}
+
+.sources__auto-caption-badge {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 6px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--danger) 15%, transparent);
+  color: var(--danger);
+  vertical-align: middle;
+  cursor: help;
 }
 
 .sources__card-note {
@@ -3561,7 +3582,7 @@ textarea {
     overflow-y: auto;
   }
 
-  .sources__selection-bar {
+  .sources__selection-row {
     flex-direction: column;
     align-items: flex-start;
     gap: 8px;
