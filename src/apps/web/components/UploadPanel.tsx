@@ -65,6 +65,7 @@ export function UploadPanel({
   const [uploadOpen, setUploadOpen] = useState(true);
   const [pageSize, setPageSize] = useState(10);
   const [page, setPage] = useState(0);
+  const [isDeletingFailed, setIsDeletingFailed] = useState(false);
 
   useEffect(() => {
     if (!statusMessage) return;
@@ -168,6 +169,33 @@ export function UploadPanel({
       setStatusMessage((err as Error).message);
     } finally {
       setDeletingSourceId(null);
+    }
+  };
+
+  const handleDeleteAllFailed = async () => {
+    const failed = sources.filter((s) => s.status === "failed");
+    if (!failed.length) return;
+    if (typeof window !== "undefined") {
+      const confirmed = window.confirm(
+        `Delete ${failed.length} failed source${failed.length === 1 ? "" : "s"}? This cannot be undone.`
+      );
+      if (!confirmed) return;
+    }
+    setIsDeletingFailed(true);
+    try {
+      await Promise.all(failed.map((s) => deleteSource(s.id)));
+      setRetryFiles((prev) => {
+        const next = { ...prev };
+        for (const s of failed) delete next[s.id];
+        return next;
+      });
+      setStatusMessage(`${failed.length} failed source${failed.length === 1 ? "" : "s"} deleted.`);
+      onRefresh();
+    } catch (err) {
+      setStatusMessage((err as Error).message);
+      onRefresh();
+    } finally {
+      setIsDeletingFailed(false);
     }
   };
 
@@ -420,6 +448,19 @@ export function UploadPanel({
                 {type === "file" ? "Files" : type === "web" ? "Web" : "YouTube"} ({typeCounts[type]})
               </button>
             ))}
+            {canUpload && typeCounts.incomplete > 0 && (
+              <>
+                <span className="sources__filter-divider" />
+                <button
+                  type="button"
+                  className="sources__filter-pill sources__delete-failed"
+                  onClick={handleDeleteAllFailed}
+                  disabled={isDeletingFailed}
+                >
+                  {isDeletingFailed ? "Deleting..." : `Delete failed (${typeCounts.incomplete})`}
+                </button>
+              </>
+            )}
           </div>
         </div>
       )}

@@ -37,6 +37,7 @@
   --accent: #8b5cf6;
   --accent-hover: #7c3aed;
   --accent-glow: rgba(139, 92, 246, 0.25);
+  --danger: #ef4444;
 
   --text: #f8fafc;
   --text-secondary: #cbd5e1;
@@ -80,6 +81,7 @@
   --accent: #7c3aed;
   --accent-hover: #6d28d9;
   --accent-glow: rgba(124, 58, 237, 0.15);
+  --danger: #dc2626;
 
   --text: #0f172a;
   --text-secondary: #475569;
@@ -3102,6 +3104,17 @@ textarea {
 .sources__filter-pill--active {
   background: var(--accent);
   border-color: var(--accent);
+  color: white;
+}
+
+.sources__delete-failed {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.sources__delete-failed:hover:not(:disabled) {
+  background: var(--danger);
+  border-color: var(--danger);
   color: white;
 }
 

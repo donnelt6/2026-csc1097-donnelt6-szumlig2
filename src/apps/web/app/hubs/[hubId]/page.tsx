@@ -83,8 +83,8 @@ export default function HubDetail({ params }: { params: { hubId: string } }) {
         {activeTab !== 'chat' && (
           <header className="hub-header">
             <h2 className="hub-header__name">{hub?.name ?? "Hub"}</h2>
-            {(hub?.description ?? params.hubId) && (
-              <p className="hub-header__desc">{hub?.description ?? params.hubId}</p>
+            {hub?.description && (
+              <p className="hub-header__desc">{hub.description}</p>
             )}
           </header>
         )}
