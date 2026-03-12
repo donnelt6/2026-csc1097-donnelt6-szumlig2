@@ -24,10 +24,16 @@ async function handle<T>(res: Response): Promise<T> {
     try {
       const parsed = JSON.parse(detail);
       if (parsed?.detail) {
-        throw new Error(parsed.detail);
+        if (typeof parsed.detail === "string") {
+          throw new Error(parsed.detail);
+        }
+        if (Array.isArray(parsed.detail)) {
+          const msg = parsed.detail.map((e: { msg?: string }) => e.msg ?? "Unknown error").join(". ");
+          throw new Error(msg);
+        }
       }
-    } catch {
-      // Ignore JSON parse errors and fall back to raw text.
+    } catch (e) {
+      if (e instanceof Error && e.message !== detail) throw e;
     }
     throw new Error(detail || `Request failed with status ${res.status}`);
   }

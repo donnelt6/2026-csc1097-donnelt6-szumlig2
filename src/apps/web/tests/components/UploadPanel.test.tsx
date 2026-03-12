@@ -198,15 +198,15 @@ describe("UploadPanel", () => {
     expect(await screen.findByText(/Upload requeued/i)).toBeInTheDocument();
   });
 
-  it("disables uploads for viewers", () => {
-    // Expect inputs and upload button to be disabled for view-only users.
+  it("hides upload card for viewers", () => {
+    // Upload card is hidden entirely for view-only users; only permission notice shown.
     const { container } = renderWithQueryClient(
       <UploadPanel hubId="hub-1" sources={[]} onRefresh={() => undefined} canUpload={false} />
     );
 
     const input = container.querySelector("input[type='file']") as HTMLInputElement;
     expect(input.disabled).toBe(true);
-    expect(screen.getByRole("button", { name: "Upload" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Upload" })).not.toBeInTheDocument();
     expect(screen.getByText(/view access/i)).toBeInTheDocument();
   });
 
@@ -364,7 +364,7 @@ describe("UploadPanel", () => {
     expect(screen.getByText(/first successful ingest/i)).toBeInTheDocument();
   });
 
-  it("renders source selection checkboxes and disables incomplete sources", () => {
+  it("renders selectable cards for complete sources and not for incomplete", () => {
     const completeSource: Source = {
       id: "src-complete-1",
       hub_id: "hub-1",
@@ -391,16 +391,14 @@ describe("UploadPanel", () => {
       />
     );
 
-    const completeCheckbox = screen.getByRole("checkbox", { name: "Use done.pdf for answers" });
-    const processingCheckbox = screen.getByRole("checkbox", { name: "Use processing.pdf for answers" });
+    const completeCard = screen.getByRole("button", { name: /done\.pdf/ });
+    expect(completeCard).toHaveAttribute("aria-pressed", "true");
 
-    expect(completeCheckbox).toBeChecked();
-    expect(completeCheckbox).toBeEnabled();
-    expect(processingCheckbox).not.toBeChecked();
-    expect(processingCheckbox).toBeDisabled();
+    // Processing source should not have a button role (not selectable)
+    expect(screen.queryByRole("button", { name: /processing\.pdf/ })).not.toBeInTheDocument();
   });
 
-  it("calls selection callbacks from controls", async () => {
+  it("calls selection callbacks from card click and controls", async () => {
     const source: Source = {
       id: "src-select-1",
       hub_id: "hub-1",
@@ -417,7 +415,7 @@ describe("UploadPanel", () => {
     );
 
     const user = userEvent.setup();
-    await user.click(screen.getByRole("checkbox", { name: "Use select.txt for answers" }));
+    await user.click(screen.getByRole("button", { name: /select\.txt/ }));
     await user.click(screen.getByRole("button", { name: "Clear" }));
 
     expect(selectionProps.onToggleSource).toHaveBeenCalledWith("src-select-1");
