@@ -3453,8 +3453,10 @@ textarea {
 .sources__card-name {
   font-weight: var(--font-semibold);
   color: var(--text);
-  word-break: break-word;
   margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .sources__card-meta {
