@@ -410,6 +410,8 @@ def _select_caption_track(
         if selected:
             lang, url, ext = selected
             return "auto", lang, url, ext
+    if not allow_auto and (info.get("automatic_captions") or {}):
+        raise ValueError("No manual captions found. Try enabling auto-captions.")
     raise ValueError("No captions available for the requested language")
 
 
