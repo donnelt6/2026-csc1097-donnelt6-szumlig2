@@ -1854,13 +1854,13 @@ textarea {
 .checkbox-label input[type="checkbox"]:checked::after {
   content: '';
   position: absolute;
-  left: 5px;
-  top: 1px;
+  left: 50%;
+  top: 45%;
   width: 4px;
   height: 9px;
   border: solid white;
   border-width: 0 2px 2px 0;
-  transform: rotate(45deg);
+  transform: translate(-50%, -50%) rotate(45deg);
 }
 
 .guide-checkbox {
@@ -1889,13 +1889,13 @@ textarea {
 .guide-checkbox:checked::after {
   content: '';
   position: absolute;
-  left: 5px;
-  top: 1px;
+  left: 50%;
+  top: 45%;
   width: 4px;
   height: 9px;
   border: solid white;
   border-width: 0 2px 2px 0;
-  transform: rotate(45deg);
+  transform: translate(-50%, -50%) rotate(45deg);
 }
 
 .drag-handle {
@@ -2161,8 +2161,11 @@ textarea {
 .source-selector__toggle {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
-  padding: 8px 16px;
+  min-width: 190px;
+  padding: 10px 24px;
+  font-variant-numeric: tabular-nums;
   border-radius: 10px;
   border: 1px solid var(--border);
   background: var(--control-bg);
@@ -2198,10 +2201,11 @@ textarea {
 
 .source-selector__dropdown {
   position: absolute;
-  left: 0;
+  right: 0;
   top: calc(100% + 8px);
-  min-width: 280px;
+  width: 320px;
   max-height: 300px;
+  overflow: hidden;
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: 14px;
@@ -2233,50 +2237,33 @@ textarea {
   display: flex;
   align-items: center;
   gap: 10px;
+  width: 100%;
   padding: 8px 16px;
   font-size: 0.875rem;
-  color: var(--text);
+  font-family: var(--font-sans);
+  color: var(--text-secondary);
+  background: none;
+  border: none;
+  border-left: 3px solid transparent;
   cursor: pointer;
-  transition: background var(--transition-fast);
+  transition: all var(--transition-fast);
+  position: relative;
+  text-align: left;
 }
 
 .source-selector__label:hover {
   background: rgba(139, 92, 246, 0.08);
+  color: var(--text);
 }
 
-.source-selector__label input[type="checkbox"] {
-  width: 16px;
-  height: 16px;
-  min-width: 16px;
-  padding: 0;
-  cursor: pointer;
-  appearance: none;
-  background: var(--input-bg);
-  border: 1px solid var(--input-border);
-  border-radius: 3px;
-  position: relative;
-  transition: all var(--transition-fast);
+.source-selector__label--selected {
+  background: rgba(139, 92, 246, 0.1);
+  border-left-color: var(--accent);
+  color: var(--text);
 }
 
-.source-selector__label input[type="checkbox"]:hover {
-  border-color: var(--border-hover);
-}
-
-.source-selector__label input[type="checkbox"]:checked {
-  background: var(--accent);
-  border-color: var(--accent);
-}
-
-.source-selector__label input[type="checkbox"]:checked::after {
-  content: '';
-  position: absolute;
-  left: 5px;
-  top: 1px;
-  width: 4px;
-  height: 9px;
-  border: solid white;
-  border-width: 0 2px 2px 0;
-  transform: rotate(45deg);
+.source-selector__label--selected:hover {
+  background: rgba(139, 92, 246, 0.15);
 }
 
 .source-selector__name {
@@ -2329,8 +2316,10 @@ textarea {
 .scope-selector__toggle {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
-  padding: 8px 16px;
+  min-width: 170px;
+  padding: 10px 24px;
   border-radius: 10px;
   border: 1px solid var(--border);
   background: var(--control-bg);
@@ -3617,6 +3606,35 @@ textarea {
 
   .hubs-toolbar-left,
   .hubs-toolbar-right {
+    justify-content: space-between;
+  }
+
+  .source-selector__toggle {
+    min-width: unset;
+  }
+
+  .source-selector__dropdown {
+    position: fixed;
+    top: 140px;
+    left: 16px;
+    right: 16px;
+    width: auto;
+  }
+
+  .chat__controls {
+    flex-wrap: wrap;
+  }
+
+  .chat__controls-divider {
+    display: none;
+  }
+
+  .chat__hub-info {
+    width: 100%;
+  }
+
+  .chat__controls-right {
+    width: 100%;
     justify-content: space-between;
   }
 }

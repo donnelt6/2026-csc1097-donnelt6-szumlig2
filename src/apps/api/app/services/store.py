@@ -734,10 +734,10 @@ class SupabaseStore:
 
         (
             client.table("faq_entries")
+            .update({"archived_at": now, "updated_at": now, "updated_by": user_id})
             .eq("hub_id", hub_id)
             .is_("archived_at", "null")
             .eq("is_pinned", False)
-            .update({"archived_at": now, "updated_at": now, "updated_by": user_id})
             .execute()
         )
 
