@@ -16,6 +16,8 @@ class Settings(BaseSettings):
     top_k: int = 6
     min_similarity: float = 0.55
     max_citations: int = 3
+    chat_rewrite_enabled: bool = True
+    chat_rewrite_history_messages: int = 5
     rate_limit_chat_per_minute: int = 20
     rate_limit_sources_per_minute: int = 30
     rate_limit_read_per_minute: int = 120
