@@ -65,6 +65,8 @@ class SupabaseStore:
         self.top_k = settings.top_k
         self.min_similarity = settings.min_similarity
         self.max_citations = settings.max_citations
+        self.chat_rewrite_enabled = settings.chat_rewrite_enabled
+        self.chat_rewrite_history_messages = settings.chat_rewrite_history_messages
         self.faq_default_count = settings.faq_default_count
         self.faq_context_chunks_per_source = settings.faq_context_chunks_per_source
         self.faq_max_citations = settings.faq_max_citations
@@ -499,30 +501,94 @@ class SupabaseStore:
 
     def _recent_conversation(self, client: Client, user_id: str, hub_id: str) -> List[Dict[str, str]]:
         try:
-            rows = self._fetch_recent_messages(client, user_id, hub_id, 5, "role, content")
+            rows = self._fetch_recent_messages(
+                client,
+                user_id,
+                hub_id,
+                self.chat_rewrite_history_messages,
+                "role, content",
+            )
             return [{"role": m["role"], "content": m["content"]} for m in rows]
         except Exception:
             return []
 
-    def chat(self, client: Client, user_id: str, payload: ChatRequest) -> ChatResponse:
-        hub_id = str(payload.hub_id)
+    def _recent_retrieval_context(self, client: Client, user_id: str, hub_id: str) -> List[Dict[str, Any]]:
+        try:
+            rows = self._fetch_recent_messages(
+                client,
+                user_id,
+                hub_id,
+                self.chat_rewrite_history_messages,
+                "role, content, citations",
+            )
+            return [
+                {
+                    "role": m["role"],
+                    "content": m["content"],
+                    "citations": m.get("citations") or [],
+                }
+                for m in rows
+            ]
+        except Exception:
+            return []
 
-        # Fetch conversation history before creating the new session
-        history_messages = self._recent_conversation(client, user_id, hub_id)
+    def _rewrite_query_for_retrieval(self, question: str, history: List[Dict[str, Any]]) -> str:
+        conversation_lines: List[str] = []
+        cited_snippets: List[str] = []
+        for message in history[-self.chat_rewrite_history_messages :]:
+            role = str(message.get("role") or "user")
+            content = str(message.get("content") or "").strip()
+            if content:
+                conversation_lines.append(f"{role}: {content}")
+            if role != "assistant":
+                continue
+            for citation in message.get("citations") or []:
+                if isinstance(citation, dict):
+                    source_id = str(citation.get("source_id") or "").strip()
+                    snippet = str(citation.get("snippet") or "").strip()
+                else:
+                    source_id = str(getattr(citation, "source_id", "") or "").strip()
+                    snippet = str(getattr(citation, "snippet", "") or "").strip()
+                if not snippet:
+                    continue
+                cited_snippets.append(f"{source_id}: {snippet}" if source_id else snippet)
 
-        session_row = (
-            client.table("chat_sessions")
-            .insert({"hub_id": hub_id, "scope": payload.scope.value, "created_by": user_id})
-            .execute()
+        system_prompt = (
+            "Rewrite context-dependent follow-up questions into a single standalone retrieval query. "
+            "Use the recent conversation and cited snippets to resolve what the user means. "
+            "Return only the rewritten query as one plain-text line. Do not answer the question. "
+            "Do not include citations, markdown, labels, or commentary."
         )
-        session_id = session_row.data[0]["id"]
+        conversation_text = "\n".join(conversation_lines) if conversation_lines else "None."
+        citations_text = "\n".join(cited_snippets[-5:]) if cited_snippets else "None."
+        user_prompt = (
+            f"Current question:\n{question}\n\n"
+            f"Recent conversation:\n{conversation_text}\n\n"
+            f"Recent cited snippets:\n{citations_text}"
+        )
 
-        client.table("messages").insert(
-            {"session_id": session_id, "role": "user", "content": payload.question}
-        ).execute()
+        try:
+            completion = self.llm_client.chat.completions.create(
+                model=self.chat_model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                temperature=0,
+            )
+            rewritten = completion.choices[0].message.content or ""
+        except Exception:
+            return question
+        return _normalize_retrieval_query(question, rewritten)
 
-        query_embedding = self._embed_query(payload.question)
-        source_ids = None if payload.source_ids is None else [str(source_id) for source_id in payload.source_ids]
+    def _retrieve_chat_context(
+        self,
+        client: Client,
+        hub_id: str,
+        query_text: str,
+        source_ids: Optional[List[str]],
+    ) -> tuple[List[Dict[str, Any]], List[Citation], List[str]]:
+        query_embedding = self._embed_query(query_text)
         raw_matches = self._match_chunks(client, hub_id, query_embedding, self.top_k, source_ids)
         matches = [m for m in raw_matches if (m.get("similarity") or 0) >= self.min_similarity]
         matches = matches[: self.max_citations]
@@ -537,6 +603,59 @@ class SupabaseStore:
                 Citation(source_id=match["source_id"], snippet=snippet, chunk_index=match["chunk_index"])
             )
             context_blocks.append(f"[{idx}] {snippet}")
+        return raw_matches, citations, context_blocks
+
+    def chat(self, client: Client, user_id: str, payload: ChatRequest) -> ChatResponse:
+        hub_id = str(payload.hub_id)
+
+        # Fetch conversation history before creating the new session
+        history_messages = self._recent_conversation(client, user_id, hub_id)
+        retrieval_history = self._recent_retrieval_context(client, user_id, hub_id)
+
+        session_row = (
+            client.table("chat_sessions")
+            .insert({"hub_id": hub_id, "scope": payload.scope.value, "created_by": user_id})
+            .execute()
+        )
+        session_id = session_row.data[0]["id"]
+
+        client.table("messages").insert(
+            {"session_id": session_id, "role": "user", "content": payload.question}
+        ).execute()
+
+        source_ids = None if payload.source_ids is None else [str(source_id) for source_id in payload.source_ids]
+        retrieval_query = payload.question
+        rewrite_attempted = False
+        if (
+            self.chat_rewrite_enabled
+            and retrieval_history
+            and _is_vague_follow_up(payload.question)
+        ):
+            retrieval_query = self._rewrite_query_for_retrieval(payload.question, retrieval_history)
+            rewrite_attempted = True
+
+        raw_matches, citations, context_blocks = self._retrieve_chat_context(
+            client,
+            hub_id,
+            retrieval_query,
+            source_ids,
+        )
+
+        if (
+            self.chat_rewrite_enabled
+            and retrieval_history
+            and not raw_matches
+            and not rewrite_attempted
+        ):
+            rewritten_query = self._rewrite_query_for_retrieval(payload.question, retrieval_history)
+            rewrite_attempted = True
+            if rewritten_query != retrieval_query:
+                raw_matches, citations, context_blocks = self._retrieve_chat_context(
+                    client,
+                    hub_id,
+                    rewritten_query,
+                    source_ids,
+                )
 
         if payload.scope == HubScope.global_scope:
             answer, web_citations, usage = self._answer_with_web_search(payload.question, context_blocks)
@@ -626,7 +745,13 @@ class SupabaseStore:
         return ChatResponse(answer=answer, citations=final_citations, message_id=assistant_row.data[0]["id"])
 
     def chat_history(self, client: Client, user_id: str, hub_id: str) -> List[HistoryMessage]:
-        rows = self._fetch_recent_messages(client, user_id, hub_id, 5, "role, content, citations, created_at")
+        rows = self._fetch_recent_messages(
+            client,
+            user_id,
+            hub_id,
+            self.chat_rewrite_history_messages,
+            "role, content, citations, created_at",
+        )
         return [
             HistoryMessage(
                 role=m["role"],
@@ -1329,6 +1454,18 @@ class SupabaseStore:
 store = SupabaseStore()
 
 
+_VAGUE_FOLLOW_UP_PHRASES = {
+    "tell me more",
+    "more",
+    "go on",
+    "continue",
+    "explain that",
+    "expand on that",
+    "what about that",
+    "what about this",
+    "elaborate",
+}
+_DEICTIC_TOKENS = {"that", "this", "it", "those", "these"}
 _FILENAME_SAFE_RE = re.compile(r"[^A-Za-z0-9._ -]")
 
 
@@ -1537,6 +1674,34 @@ def _answer_has_citation(answer: str, max_index: int) -> bool:
         if 1 <= idx <= max_index:
             return True
     return False
+
+
+def _is_vague_follow_up(question: str) -> bool:
+    normalized = re.sub(r"\s+", " ", (question or "").strip().lower())
+    if not normalized:
+        return False
+    if normalized in _VAGUE_FOLLOW_UP_PHRASES:
+        return True
+    tokens = re.findall(r"\b[\w']+\b", normalized)
+    return len(tokens) <= 4 and any(token in _DEICTIC_TOKENS for token in tokens)
+
+
+def _normalize_retrieval_query(original_question: str, rewritten_query: str) -> str:
+    candidate = (rewritten_query or "").replace("\r", "\n").strip()
+    if not candidate:
+        return original_question
+
+    candidate = candidate.splitlines()[0].strip()
+    candidate = candidate.strip("`'\" ")
+    if ":" in candidate:
+        prefix, remainder = candidate.split(":", 1)
+        if prefix.strip().lower() in {"query", "rewritten query", "search query"}:
+            candidate = remainder.strip()
+    candidate = re.sub(r"\[\d+\]", "", candidate)
+    candidate = re.sub(r"\s+", " ", candidate).strip()
+    if not candidate or candidate.lower() in {"n/a", "none"}:
+        return original_question
+    return candidate
 
 
 def _average_similarity(matches: List[Dict[str, Any]]) -> float:
