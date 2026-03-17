@@ -14,10 +14,13 @@ class Settings(BaseSettings):
     embedding_model: str = "text-embedding-3-small"
     chat_model: str = "gpt-4o-mini"
     top_k: int = 6
-    min_similarity: float = 0.55
+    min_similarity: float = 0.50
     max_citations: int = 3
     chat_rewrite_enabled: bool = True
     chat_rewrite_history_messages: int = 5
+    retrieval_candidate_pool: int = 18
+    retrieval_mmr_lambda: float = 0.75
+    retrieval_same_source_penalty: float = 0.10
     rate_limit_chat_per_minute: int = 20
     rate_limit_sources_per_minute: int = 30
     rate_limit_read_per_minute: int = 120

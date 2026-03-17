@@ -1,4 +1,5 @@
 import json
+import math
 import re
 import uuid
 from datetime import datetime, timezone
@@ -45,7 +46,6 @@ from ..schemas import (
     YouTubeSourceCreate,
 )
 
-
 class SupabaseStore:
     """Supabase-backed store for hubs, sources, and chat."""
 
@@ -67,6 +67,9 @@ class SupabaseStore:
         self.max_citations = settings.max_citations
         self.chat_rewrite_enabled = settings.chat_rewrite_enabled
         self.chat_rewrite_history_messages = settings.chat_rewrite_history_messages
+        self.retrieval_candidate_pool = max(settings.top_k, settings.retrieval_candidate_pool)
+        self.retrieval_mmr_lambda = settings.retrieval_mmr_lambda
+        self.retrieval_same_source_penalty = settings.retrieval_same_source_penalty
         self.faq_default_count = settings.faq_default_count
         self.faq_context_chunks_per_source = settings.faq_context_chunks_per_source
         self.faq_max_citations = settings.faq_max_citations
@@ -532,6 +535,124 @@ class SupabaseStore:
         except Exception:
             return []
 
+    def _select_matches(
+        self,
+        raw_matches: List[Dict[str, Any]],
+        query_embedding: List[float],
+        min_similarity: float,
+        max_citations: int,
+        fallback_mode: str,
+    ) -> List[Dict[str, Any]]:
+        filtered_matches = [match for match in raw_matches if float(match.get("similarity") or 0) >= min_similarity]
+        if filtered_matches:
+            return self._rerank_matches(filtered_matches, query_embedding, max_citations)
+        if fallback_mode == "chat" and raw_matches:
+            return raw_matches[:1]
+        if fallback_mode == "guide" and raw_matches:
+            return raw_matches[:max_citations]
+        return []
+
+    def _rerank_matches(
+        self,
+        matches: List[Dict[str, Any]],
+        query_embedding: List[float],
+        max_citations: int,
+    ) -> List[Dict[str, Any]]:
+        normalized_query = _normalize_vector(query_embedding)
+        candidates: List[Dict[str, Any]] = []
+        for index, match in enumerate(matches):
+            candidate = dict(match)
+            normalized_embedding = _normalize_embedding_value(candidate.get("embedding"))
+            candidate["_rank"] = index
+            candidate["_normalized_embedding"] = normalized_embedding
+            if normalized_query is not None and normalized_embedding is not None:
+                candidate["_query_similarity"] = _cosine_similarity(normalized_query, normalized_embedding)
+            else:
+                candidate["_query_similarity"] = float(candidate.get("similarity") or 0)
+            candidates.append(candidate)
+
+        selected: List[Dict[str, Any]] = []
+        remaining = candidates.copy()
+        distinct_sources = {
+            str(candidate.get("source_id") or "").strip()
+            for candidate in candidates
+            if str(candidate.get("source_id") or "").strip()
+        }
+
+        if len(distinct_sources) >= 2:
+            while len(selected) < max_citations and remaining:
+                selected_sources = {
+                    str(candidate.get("source_id") or "").strip()
+                    for candidate in selected
+                    if str(candidate.get("source_id") or "").strip()
+                }
+                eligible = [
+                    candidate
+                    for candidate in remaining
+                    if str(candidate.get("source_id") or "").strip() not in selected_sources
+                ]
+                if not eligible:
+                    break
+                next_candidate = max(
+                    eligible,
+                    key=lambda candidate: self._mmr_score(candidate, selected, duplicate_penalty=0.0),
+                )
+                selected.append(next_candidate)
+                remaining.remove(next_candidate)
+
+        while len(selected) < max_citations and remaining:
+            next_candidate = max(
+                remaining,
+                key=lambda candidate: self._mmr_score(
+                    candidate,
+                    selected,
+                    duplicate_penalty=self.retrieval_same_source_penalty,
+                ),
+            )
+            selected.append(next_candidate)
+            remaining.remove(next_candidate)
+
+        cleaned: List[Dict[str, Any]] = []
+        for candidate in selected:
+            row = dict(candidate)
+            row.pop("_rank", None)
+            row.pop("_normalized_embedding", None)
+            row.pop("_query_similarity", None)
+            cleaned.append(row)
+        return cleaned
+
+    def _mmr_score(
+        self,
+        candidate: Dict[str, Any],
+        selected: List[Dict[str, Any]],
+        duplicate_penalty: float,
+    ) -> Tuple[float, float, int]:
+        query_similarity = float(candidate.get("_query_similarity") or 0)
+        max_redundancy = 0.0
+        candidate_embedding = candidate.get("_normalized_embedding")
+        if candidate_embedding is not None:
+            for selected_candidate in selected:
+                selected_embedding = selected_candidate.get("_normalized_embedding")
+                if selected_embedding is None:
+                    continue
+                max_redundancy = max(
+                    max_redundancy,
+                    _cosine_similarity(candidate_embedding, selected_embedding),
+                )
+        score = (self.retrieval_mmr_lambda * query_similarity) - (
+            (1 - self.retrieval_mmr_lambda) * max_redundancy
+        )
+        candidate_source_id = str(candidate.get("source_id") or "").strip()
+        if duplicate_penalty and candidate_source_id:
+            selected_sources = {
+                str(selected_candidate.get("source_id") or "").strip()
+                for selected_candidate in selected
+                if str(selected_candidate.get("source_id") or "").strip()
+            }
+            if candidate_source_id in selected_sources:
+                score -= duplicate_penalty
+        return score, query_similarity, -int(candidate.get("_rank", 0))
+
     def _rewrite_query_for_retrieval(self, question: str, history: List[Dict[str, Any]]) -> str:
         conversation_lines: List[str] = []
         cited_snippets: List[str] = []
@@ -556,6 +677,11 @@ class SupabaseStore:
         system_prompt = (
             "Rewrite context-dependent follow-up questions into a single standalone retrieval query. "
             "Use the recent conversation and cited snippets to resolve what the user means. "
+            "Preserve all active facets from recent turns instead of collapsing to only the strongest concept. "
+            "When the follow-up refers to 'that', 'there', 'it', or similar, keep both the concept being discussed "
+            "and the application, product, or workflow context from the recent conversation. "
+            "Prefer grounded terms that already appear in recent user turns and cited snippets. "
+            "Return a concise standalone retrieval query only. "
             "Return only the rewritten query as one plain-text line. Do not answer the question. "
             "Do not include citations, markdown, labels, or commentary."
         )
@@ -589,11 +715,14 @@ class SupabaseStore:
         source_ids: Optional[List[str]],
     ) -> tuple[List[Dict[str, Any]], List[Citation], List[str]]:
         query_embedding = self._embed_query(query_text)
-        raw_matches = self._match_chunks(client, hub_id, query_embedding, self.top_k, source_ids)
-        matches = [m for m in raw_matches if (m.get("similarity") or 0) >= self.min_similarity]
-        matches = matches[: self.max_citations]
-        if not matches and raw_matches:
-            matches = raw_matches[:1]
+        raw_matches = self._match_chunks(client, hub_id, query_embedding, self.retrieval_candidate_pool, source_ids)
+        matches = self._select_matches(
+            raw_matches,
+            query_embedding,
+            self.min_similarity,
+            self.max_citations,
+            fallback_mode="chat",
+        )
 
         citations: List[Citation] = []
         context_blocks: List[str] = []
@@ -626,10 +755,11 @@ class SupabaseStore:
         source_ids = None if payload.source_ids is None else [str(source_id) for source_id in payload.source_ids]
         retrieval_query = payload.question
         rewrite_attempted = False
+        is_vague_follow_up = _is_vague_follow_up(payload.question)
         if (
             self.chat_rewrite_enabled
             and retrieval_history
-            and _is_vague_follow_up(payload.question)
+            and is_vague_follow_up
         ):
             retrieval_query = self._rewrite_query_for_retrieval(payload.question, retrieval_history)
             rewrite_attempted = True
@@ -656,6 +786,31 @@ class SupabaseStore:
                     rewritten_query,
                     source_ids,
                 )
+
+        if (
+            self.chat_rewrite_enabled
+            and retrieval_history
+            and is_vague_follow_up
+            and _history_has_multi_source_grounding(retrieval_history)
+            and _count_distinct_citation_sources(citations) == 1
+        ):
+            anchor_turn = _most_recent_informative_user_turn(retrieval_history)
+            if anchor_turn:
+                anchored_suffix = retrieval_query if retrieval_query != payload.question else payload.question
+                anchored_query = _build_anchored_retrieval_query(anchor_turn, anchored_suffix)
+                if anchored_query != retrieval_query:
+                    fallback_raw_matches, fallback_citations, fallback_context_blocks = self._retrieve_chat_context(
+                        client,
+                        hub_id,
+                        anchored_query,
+                        source_ids,
+                    )
+                    fallback_distinct_sources = _count_distinct_citation_sources(fallback_citations)
+                    current_distinct_sources = _count_distinct_citation_sources(citations)
+                    if fallback_distinct_sources > current_distinct_sources:
+                        raw_matches = fallback_raw_matches
+                        citations = fallback_citations
+                        context_blocks = fallback_context_blocks
 
         if payload.scope == HubScope.global_scope:
             answer, web_citations, usage = self._answer_with_web_search(payload.question, context_blocks)
@@ -816,9 +971,14 @@ class SupabaseStore:
 
         for question in questions:
             query_embedding = self._embed_query(question)
-            raw_matches = self._match_chunks(client, hub_id, query_embedding, self.top_k, source_ids)
-            matches = [match for match in raw_matches if (match.get("similarity") or 0) >= self.faq_min_similarity]
-            matches = matches[: self.faq_max_citations]
+            raw_matches = self._match_chunks(client, hub_id, query_embedding, self.retrieval_candidate_pool, source_ids)
+            matches = self._select_matches(
+                raw_matches,
+                query_embedding,
+                self.faq_min_similarity,
+                self.faq_max_citations,
+                fallback_mode="faq",
+            )
             if not matches:
                 continue
 
@@ -859,10 +1019,10 @@ class SupabaseStore:
 
         (
             client.table("faq_entries")
+            .update({"archived_at": now, "updated_at": now, "updated_by": user_id})
             .eq("hub_id", hub_id)
             .is_("archived_at", "null")
             .eq("is_pinned", False)
-            .update({"archived_at": now, "updated_at": now, "updated_by": user_id})
             .execute()
         )
 
@@ -1005,11 +1165,14 @@ class SupabaseStore:
             step_title = (step.get("title") or "").strip() or None
             query_text = f"{step_title}. {instruction}" if step_title else instruction
             query_embedding = self._embed_query(query_text)
-            raw_matches = self._match_chunks(client, hub_id, query_embedding, self.top_k, source_ids)
-            matches = [match for match in raw_matches if (match.get("similarity") or 0) >= self.guide_min_similarity]
-            matches = matches[: self.guide_max_citations]
-            if not matches and raw_matches:
-                matches = raw_matches[: self.guide_max_citations]
+            raw_matches = self._match_chunks(client, hub_id, query_embedding, self.retrieval_candidate_pool, source_ids)
+            matches = self._select_matches(
+                raw_matches,
+                query_embedding,
+                self.guide_min_similarity,
+                self.guide_max_citations,
+                fallback_mode="guide",
+            )
             if not matches:
                 continue
 
@@ -1465,7 +1628,31 @@ _VAGUE_FOLLOW_UP_PHRASES = {
     "what about this",
     "elaborate",
 }
-_DEICTIC_TOKENS = {"that", "this", "it", "those", "these"}
+_DEICTIC_TOKENS = {"that", "this", "it", "those", "these", "there", "here"}
+_FOLLOW_UP_LEAD_TOKENS = {
+    "why",
+    "how",
+    "what",
+    "where",
+    "when",
+    "which",
+    "who",
+    "is",
+    "are",
+    "was",
+    "were",
+    "do",
+    "does",
+    "did",
+    "can",
+    "could",
+    "would",
+    "should",
+    "will",
+    "have",
+    "has",
+    "had",
+}
 _FILENAME_SAFE_RE = re.compile(r"[^A-Za-z0-9._ -]")
 
 
@@ -1683,7 +1870,74 @@ def _is_vague_follow_up(question: str) -> bool:
     if normalized in _VAGUE_FOLLOW_UP_PHRASES:
         return True
     tokens = re.findall(r"\b[\w']+\b", normalized)
-    return len(tokens) <= 4 and any(token in _DEICTIC_TOKENS for token in tokens)
+    if not tokens:
+        return False
+    if len(tokens) <= 4 and any(token in _DEICTIC_TOKENS for token in tokens):
+        return True
+    return tokens[0] in _FOLLOW_UP_LEAD_TOKENS and _has_context_reference(tokens)
+
+
+def _most_recent_informative_user_turn(history: List[Dict[str, Any]]) -> Optional[str]:
+    for message in reversed(history):
+        if str(message.get("role") or "") != "user":
+            continue
+        content = str(message.get("content") or "").strip()
+        if content and not _is_vague_follow_up(content):
+            return content
+    return None
+
+
+def _history_has_multi_source_grounding(history: List[Dict[str, Any]]) -> bool:
+    grounded_sources: set[str] = set()
+    for message in history:
+        if str(message.get("role") or "") != "assistant":
+            continue
+        for citation in message.get("citations") or []:
+            if isinstance(citation, dict):
+                source_id = str(citation.get("source_id") or "").strip()
+            else:
+                source_id = str(getattr(citation, "source_id", "") or "").strip()
+            if source_id:
+                grounded_sources.add(source_id)
+            if len(grounded_sources) >= 2:
+                return True
+    return False
+
+
+def _count_distinct_citation_sources(citations: List[Any]) -> int:
+    distinct_sources: set[str] = set()
+    for citation in citations:
+        if isinstance(citation, dict):
+            source_id = str(citation.get("source_id") or "").strip()
+        else:
+            source_id = str(getattr(citation, "source_id", "") or "").strip()
+        if source_id:
+            distinct_sources.add(source_id)
+    return len(distinct_sources)
+
+
+def _has_context_reference(tokens: List[str]) -> bool:
+    for index, token in enumerate(tokens):
+        if token in {"that", "it", "those", "these"}:
+            return True
+        if token in {"there", "here"} and index == len(tokens) - 1:
+            return True
+        if token == "this" and index == len(tokens) - 1:
+            return True
+    return False
+
+
+def _build_anchored_retrieval_query(anchor_turn: str, query_suffix: str) -> str:
+    anchor = (anchor_turn or "").strip()
+    suffix = (query_suffix or "").strip()
+    if not anchor:
+        return suffix
+    if not suffix:
+        return anchor
+    if anchor.lower() == suffix.lower():
+        return anchor
+    separator = "" if anchor.endswith((".", "?", "!")) else "."
+    return f"{anchor}{separator} {suffix}".strip()
 
 
 def _normalize_retrieval_query(original_question: str, rewritten_query: str) -> str:
@@ -1709,6 +1963,52 @@ def _average_similarity(matches: List[Dict[str, Any]]) -> float:
         return 0.0
     values = [float(match.get("similarity") or 0) for match in matches]
     return sum(values) / len(values)
+
+
+def _normalize_embedding_value(value: Any) -> Optional[List[float]]:
+    vector = _coerce_embedding_value(value)
+    if vector is None:
+        return None
+    return _normalize_vector(vector)
+
+
+def _coerce_embedding_value(value: Any) -> Optional[List[float]]:
+    if value is None:
+        return None
+    if isinstance(value, (list, tuple)):
+        try:
+            return [float(item) for item in value]
+        except (TypeError, ValueError):
+            return None
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return None
+        try:
+            parsed = json.loads(text)
+        except json.JSONDecodeError:
+            return None
+        if isinstance(parsed, list):
+            try:
+                return [float(item) for item in parsed]
+            except (TypeError, ValueError):
+                return None
+    return None
+
+
+def _normalize_vector(vector: Optional[List[float]]) -> Optional[List[float]]:
+    if not vector:
+        return None
+    magnitude = math.sqrt(sum(value * value for value in vector))
+    if magnitude <= 0:
+        return None
+    return [value / magnitude for value in vector]
+
+
+def _cosine_similarity(left: Optional[List[float]], right: Optional[List[float]]) -> float:
+    if left is None or right is None or len(left) != len(right):
+        return 0.0
+    return sum(left_value * right_value for left_value, right_value in zip(left, right))
 
 
 def _get_attr(obj: Any, name: str, default: Any = None) -> Any:
