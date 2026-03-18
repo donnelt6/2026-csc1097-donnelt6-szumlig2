@@ -1,13 +1,20 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from datetime import datetime, timezone
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from uuid import UUID
 from postgrest.exceptions import APIError
 from supabase import Client
 
 from ..schemas import (
+    MembershipRole,
     Source,
     SourceCreate,
     SourceEnqueueResponse,
     SourceFailureRequest,
+    SourceSuggestion,
+    SourceSuggestionDecision,
+    SourceSuggestionDecisionResponse,
+    SourceSuggestionStatus,
+    SourceSuggestionType,
     SourceStatus,
     SourceStatusResponse,
     SourceUploadUrlResponse,
@@ -104,6 +111,115 @@ def create_youtube_source(
         ],
     )
     return source
+
+
+@router.get(
+    "/suggestions",
+    response_model=list[SourceSuggestion],
+    dependencies=[Depends(rate_limit_user_ip("sources:read", "rate_limit_read_per_minute"))],
+)
+def list_source_suggestions(
+    hub_id: UUID,
+    status_filter: SourceSuggestionStatus = Query(default=SourceSuggestionStatus.pending, alias="status"),
+    client: Client = Depends(get_supabase_user_client),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> list[SourceSuggestion]:
+    _ = current_user
+    try:
+        return store.list_source_suggestions(client, hub_id=str(hub_id), status=status_filter.value if status_filter else None)
+    except APIError as exc:
+        raise_postgrest_error(exc)
+
+
+@router.patch(
+    "/suggestions/{suggestion_id}",
+    response_model=SourceSuggestionDecisionResponse,
+    dependencies=[Depends(rate_limit_user_ip("sources:write", "rate_limit_sources_per_minute"))],
+)
+def decide_source_suggestion(
+    suggestion_id: UUID,
+    decision: SourceSuggestionDecision,
+    client: Client = Depends(get_supabase_user_client),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> SourceSuggestionDecisionResponse:
+    try:
+        suggestion = store.get_source_suggestion(client, str(suggestion_id))
+    except KeyError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Suggestion not found") from exc
+    except APIError as exc:
+        raise_postgrest_error(exc)
+
+    if decision.action not in (SourceSuggestionStatus.accepted, SourceSuggestionStatus.declined):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid suggestion action.")
+    if suggestion.status != SourceSuggestionStatus.pending:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Suggestion already reviewed.")
+
+    try:
+        membership = store.get_member_role(client, suggestion.hub_id, current_user.id)
+    except KeyError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You do not have permission to review suggestions.") from exc
+    except APIError as exc:
+        raise_postgrest_error(exc)
+
+    if membership.accepted_at is None or membership.role not in {MembershipRole.owner, MembershipRole.editor}:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You do not have permission to review suggestions.")
+
+    now = datetime.now(timezone.utc).isoformat()
+    review_payload = {
+        "status": decision.action.value,
+        "reviewed_at": now,
+        "reviewed_by": current_user.id,
+        "accepted_source_id": None,
+    }
+
+    accepted_source: Source | None = None
+    try:
+        if decision.action == SourceSuggestionStatus.accepted:
+            accepted_source = store.find_existing_source_for_suggestion(client, suggestion)
+            if accepted_source is None:
+                if suggestion.type == SourceSuggestionType.web:
+                    accepted_source = store.create_web_source(
+                        client,
+                        WebSourceCreate(hub_id=UUID(suggestion.hub_id), url=suggestion.url),
+                    )
+                    if not accepted_source.storage_path:
+                        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Source storage path missing")
+                    celery_app.send_task(
+                        "ingest_web_source",
+                        args=[accepted_source.id, accepted_source.hub_id, suggestion.url, accepted_source.storage_path],
+                    )
+                elif suggestion.type == SourceSuggestionType.youtube:
+                    accepted_source = store.create_youtube_source(
+                        client,
+                        YouTubeSourceCreate(hub_id=UUID(suggestion.hub_id), url=suggestion.url),
+                    )
+                    if not accepted_source.storage_path:
+                        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Source storage path missing")
+                    video_id = None
+                    if isinstance(accepted_source.ingestion_metadata, dict):
+                        video_id = accepted_source.ingestion_metadata.get("video_id")
+                    celery_app.send_task(
+                        "ingest_youtube_source",
+                        args=[
+                            accepted_source.id,
+                            accepted_source.hub_id,
+                            suggestion.url,
+                            accepted_source.storage_path,
+                            None,
+                            False,
+                            video_id,
+                        ],
+                    )
+                else:
+                    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unsupported suggestion type")
+            review_payload["accepted_source_id"] = accepted_source.id
+        suggestion = store.update_source_suggestion(client, str(suggestion_id), review_payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except APIError as exc:
+        raise_postgrest_error(exc)
+
+    return SourceSuggestionDecisionResponse(suggestion=suggestion, source=accepted_source)
 
 
 @router.get(

@@ -4,7 +4,7 @@ import re
 import uuid
 from datetime import datetime, timezone
 from pathlib import PurePath
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, urlparse, urlunparse
 from typing import Any, Dict, List, Optional, Tuple
 
 from openai import OpenAI
@@ -39,6 +39,10 @@ from ..schemas import (
     ReminderSummary,
     Source,
     SourceCreate,
+    SourceSuggestion,
+    SourceSuggestionDecision,
+    SourceSuggestionStatus,
+    SourceSuggestionType,
     SourceStatus,
     SourceStatusResponse,
     SourceType,
@@ -353,6 +357,57 @@ class SupabaseStore:
         if not upload_url:
             raise RuntimeError("Failed to create signed upload URL")
         return upload_url
+
+    def list_source_suggestions(
+        self,
+        client: Client,
+        hub_id: Optional[str] = None,
+        status: Optional[str] = None,
+    ) -> List[SourceSuggestion]:
+        query = client.table("source_suggestions").select("*")
+        if hub_id:
+            query = query.eq("hub_id", str(hub_id))
+        if status:
+            query = query.eq("status", status)
+        response = query.order("created_at", desc=True).execute()
+        return [SourceSuggestion(**row) for row in response.data]
+
+    def get_source_suggestion(self, client: Client, suggestion_id: str) -> SourceSuggestion:
+        response = client.table("source_suggestions").select("*").eq("id", str(suggestion_id)).limit(1).execute()
+        if not response.data:
+            raise KeyError("Source suggestion not found")
+        return SourceSuggestion(**response.data[0])
+
+    def update_source_suggestion(self, client: Client, suggestion_id: str, payload: dict) -> SourceSuggestion:
+        response = client.table("source_suggestions").update(payload).eq("id", str(suggestion_id)).execute()
+        if not response.data:
+            raise KeyError("Source suggestion not found")
+        return SourceSuggestion(**response.data[0])
+
+    def find_existing_source_for_suggestion(self, client: Client, suggestion: SourceSuggestion) -> Optional[Source]:
+        sources = self.list_sources(client, suggestion.hub_id)
+        if suggestion.type == SourceSuggestionType.web:
+            if not suggestion.canonical_url:
+                return None
+            for source in sources:
+                if source.type != SourceType.web:
+                    continue
+                metadata = source.ingestion_metadata if isinstance(source.ingestion_metadata, dict) else {}
+                source_url = metadata.get("final_url") or metadata.get("url")
+                if _canonicalize_web_url(str(source_url or "")) == suggestion.canonical_url:
+                    return source
+            return None
+        if suggestion.type == SourceSuggestionType.youtube:
+            if not suggestion.video_id:
+                return None
+            for source in sources:
+                if source.type != SourceType.youtube:
+                    continue
+                metadata = source.ingestion_metadata if isinstance(source.ingestion_metadata, dict) else {}
+                source_video_id = metadata.get("video_id") or _extract_youtube_video_id(str(metadata.get("url") or ""))
+                if source_video_id == suggestion.video_id:
+                    return source
+        return None
 
     def get_member_role(self, client: Client, hub_id: str, user_id: str) -> HubMember:
         response = (
@@ -1726,6 +1781,40 @@ def _normalize_youtube_id(value: str) -> Optional[str]:
     if not _YOUTUBE_ID_RE.fullmatch(candidate):
         return None
     return candidate
+
+
+def _canonicalize_web_url(url: str) -> Optional[str]:
+    cleaned = (url or "").strip()
+    if not cleaned:
+        return None
+    parsed = urlparse(cleaned)
+    if parsed.scheme not in {"http", "https"}:
+        return None
+    host = (parsed.hostname or "").lower()
+    if not host:
+        return None
+    if host.startswith("www."):
+        host = host[4:]
+    port = parsed.port
+    if (parsed.scheme == "http" and port == 80) or (parsed.scheme == "https" and port == 443):
+        port = None
+    netloc = host if port is None else f"{host}:{port}"
+    path = parsed.path or "/"
+    path = re.sub(r"/{2,}", "/", path)
+    if path != "/" and path.endswith("/"):
+        path = path.rstrip("/")
+    query = parse_qs(parsed.query, keep_blank_values=False)
+    filtered_items: list[tuple[str, str]] = []
+    for key, values in sorted(query.items()):
+        normalized_key = key.lower()
+        if normalized_key.startswith("utm_") or normalized_key in {"fbclid", "gclid"}:
+            continue
+        for value in values:
+            filtered_items.append((key, value))
+    normalized_query = "&".join(
+        f"{key}={value}" for key, value in filtered_items if value is not None and value != ""
+    )
+    return urlunparse((parsed.scheme.lower(), netloc, path, "", normalized_query, ""))
 
 
 

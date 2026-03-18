@@ -1,9 +1,11 @@
 """Router tests for sources endpoints with mocked rate limits and store calls."""
 
+from datetime import datetime, timezone
+
 from app.dependencies import get_rate_limiter
 from app.main import app
 from app.routers import sources as sources_router
-from app.schemas import Source, SourceStatus, SourceType
+from app.schemas import HubMember, MembershipRole, Source, SourceStatus, SourceSuggestion, SourceSuggestionStatus, SourceSuggestionType, SourceType
 from app.services import rate_limit as rate_limit_module
 from app.services import store as store_module
 
@@ -363,3 +365,222 @@ def test_refresh_youtube_source_success(client, monkeypatch) -> None:
     assert sent["name"] == "ingest_youtube_source"
     assert sent["args"][0] == source_id
     assert sent["args"][-1] == "abc123def45"
+
+
+def test_list_source_suggestions_returns_pending_items(client, monkeypatch) -> None:
+    suggestion = SourceSuggestion(
+        id="11111111-1111-1111-1111-111111111111",
+        hub_id="aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+        type=SourceSuggestionType.web,
+        status=SourceSuggestionStatus.pending,
+        url="https://example.com/docs",
+        canonical_url="https://example.com/docs",
+        title="Example docs",
+        confidence=0.82,
+        created_at=datetime.now(timezone.utc),
+    )
+    monkeypatch.setattr(store_module.store, "list_source_suggestions", lambda _client, hub_id, status=None: [suggestion])
+
+    resp = client.get("/sources/suggestions?hub_id=aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
+    assert resp.status_code == 200
+    assert resp.json()[0]["id"] == suggestion.id
+
+
+def test_accept_web_source_suggestion_success(client, monkeypatch) -> None:
+    suggestion_id = "11111111-1111-1111-1111-111111111111"
+    hub_id = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+    pending = SourceSuggestion(
+        id=suggestion_id,
+        hub_id=hub_id,
+        type=SourceSuggestionType.web,
+        status=SourceSuggestionStatus.pending,
+        url="https://example.com/docs",
+        canonical_url="https://example.com/docs",
+        title="Example docs",
+        confidence=0.82,
+        created_at=datetime.now(timezone.utc),
+    )
+    accepted = pending.model_copy(update={"status": SourceSuggestionStatus.accepted, "accepted_source_id": "src-web-1"})
+    source = Source(
+        id="src-web-1",
+        hub_id=hub_id,
+        original_name="example.com/docs",
+        status=SourceStatus.queued,
+        storage_path=f"{hub_id}/src-web-1/web.md",
+        type=SourceType.web,
+    )
+
+    monkeypatch.setattr(store_module.store, "get_source_suggestion", lambda _client, _suggestion_id: pending)
+    monkeypatch.setattr(
+        store_module.store,
+        "get_member_role",
+        lambda _client, _hub_id, _user_id: HubMember(
+            hub_id=hub_id,
+            user_id="00000000-0000-0000-0000-000000000001",
+            role=MembershipRole.editor,
+            accepted_at=datetime.now(timezone.utc),
+        ),
+    )
+    monkeypatch.setattr(store_module.store, "find_existing_source_for_suggestion", lambda _client, _suggestion: None)
+    monkeypatch.setattr(store_module.store, "create_web_source", lambda _client, _payload: source)
+    monkeypatch.setattr(store_module.store, "update_source_suggestion", lambda _client, _suggestion_id, _payload: accepted)
+
+    sent = {}
+
+    def fake_send_task(name, args):
+        sent["name"] = name
+        sent["args"] = args
+
+    monkeypatch.setattr(sources_router.celery_app, "send_task", fake_send_task)
+
+    resp = client.patch(f"/sources/suggestions/{suggestion_id}", json={"action": "accepted"})
+    assert resp.status_code == 200
+    assert resp.json()["suggestion"]["status"] == "accepted"
+    assert sent["name"] == "ingest_web_source"
+    assert sent["args"][0] == source.id
+
+
+def test_accept_youtube_source_suggestion_success(client, monkeypatch) -> None:
+    suggestion_id = "22222222-2222-2222-2222-222222222222"
+    hub_id = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+    pending = SourceSuggestion(
+        id=suggestion_id,
+        hub_id=hub_id,
+        type=SourceSuggestionType.youtube,
+        status=SourceSuggestionStatus.pending,
+        url="https://www.youtube.com/watch?v=abc123def45",
+        video_id="abc123def45",
+        title="Demo video",
+        confidence=0.78,
+        created_at=datetime.now(timezone.utc),
+    )
+    accepted = pending.model_copy(update={"status": SourceSuggestionStatus.accepted, "accepted_source_id": "src-yt-1"})
+    source = Source(
+        id="src-yt-1",
+        hub_id=hub_id,
+        original_name="youtube.com/abc123def45",
+        status=SourceStatus.queued,
+        storage_path=f"{hub_id}/src-yt-1/youtube.md",
+        type=SourceType.youtube,
+        ingestion_metadata={"video_id": "abc123def45"},
+    )
+
+    monkeypatch.setattr(store_module.store, "get_source_suggestion", lambda _client, _suggestion_id: pending)
+    monkeypatch.setattr(
+        store_module.store,
+        "get_member_role",
+        lambda _client, _hub_id, _user_id: HubMember(
+            hub_id=hub_id,
+            user_id="00000000-0000-0000-0000-000000000001",
+            role=MembershipRole.owner,
+            accepted_at=datetime.now(timezone.utc),
+        ),
+    )
+    monkeypatch.setattr(store_module.store, "find_existing_source_for_suggestion", lambda _client, _suggestion: None)
+    monkeypatch.setattr(store_module.store, "create_youtube_source", lambda _client, _payload: source)
+    monkeypatch.setattr(store_module.store, "update_source_suggestion", lambda _client, _suggestion_id, _payload: accepted)
+
+    sent = {}
+
+    def fake_send_task(name, args):
+        sent["name"] = name
+        sent["args"] = args
+
+    monkeypatch.setattr(sources_router.celery_app, "send_task", fake_send_task)
+
+    resp = client.patch(f"/sources/suggestions/{suggestion_id}", json={"action": "accepted"})
+    assert resp.status_code == 200
+    assert resp.json()["suggestion"]["status"] == "accepted"
+    assert sent["name"] == "ingest_youtube_source"
+    assert sent["args"][-1] == "abc123def45"
+
+
+def test_decline_source_suggestion_success(client, monkeypatch) -> None:
+    suggestion_id = "33333333-3333-3333-3333-333333333333"
+    hub_id = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+    pending = SourceSuggestion(
+        id=suggestion_id,
+        hub_id=hub_id,
+        type=SourceSuggestionType.web,
+        status=SourceSuggestionStatus.pending,
+        url="https://example.com/decline",
+        canonical_url="https://example.com/decline",
+        title="Decline me",
+        confidence=0.51,
+        created_at=datetime.now(timezone.utc),
+    )
+    declined = pending.model_copy(update={"status": SourceSuggestionStatus.declined})
+
+    monkeypatch.setattr(store_module.store, "get_source_suggestion", lambda _client, _suggestion_id: pending)
+    monkeypatch.setattr(
+        store_module.store,
+        "get_member_role",
+        lambda _client, _hub_id, _user_id: HubMember(
+            hub_id=hub_id,
+            user_id="00000000-0000-0000-0000-000000000001",
+            role=MembershipRole.editor,
+            accepted_at=datetime.now(timezone.utc),
+        ),
+    )
+    monkeypatch.setattr(store_module.store, "update_source_suggestion", lambda _client, _suggestion_id, _payload: declined)
+
+    resp = client.patch(f"/sources/suggestions/{suggestion_id}", json={"action": "declined"})
+    assert resp.status_code == 200
+    assert resp.json()["suggestion"]["status"] == "declined"
+
+
+def test_source_suggestion_review_forbidden_for_viewer(client, monkeypatch) -> None:
+    suggestion = SourceSuggestion(
+        id="44444444-4444-4444-4444-444444444444",
+        hub_id="aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+        type=SourceSuggestionType.web,
+        status=SourceSuggestionStatus.pending,
+        url="https://example.com/docs",
+        canonical_url="https://example.com/docs",
+        title="Example docs",
+        confidence=0.82,
+        created_at=datetime.now(timezone.utc),
+    )
+    monkeypatch.setattr(store_module.store, "get_source_suggestion", lambda _client, _suggestion_id: suggestion)
+    monkeypatch.setattr(
+        store_module.store,
+        "get_member_role",
+        lambda _client, _hub_id, _user_id: HubMember(
+            hub_id=suggestion.hub_id,
+            user_id="00000000-0000-0000-0000-000000000001",
+            role=MembershipRole.viewer,
+            accepted_at=datetime.now(timezone.utc),
+        ),
+    )
+
+    resp = client.patch(f"/sources/suggestions/{suggestion.id}", json={"action": "accepted"})
+    assert resp.status_code == 403
+
+
+def test_source_suggestion_not_found(client, monkeypatch) -> None:
+    monkeypatch.setattr(
+        store_module.store,
+        "get_source_suggestion",
+        lambda _client, _suggestion_id: (_ for _ in ()).throw(KeyError("missing")),
+    )
+
+    resp = client.patch("/sources/suggestions/55555555-5555-5555-5555-555555555555", json={"action": "accepted"})
+    assert resp.status_code == 404
+
+
+def test_source_suggestion_conflict_when_already_reviewed(client, monkeypatch) -> None:
+    suggestion = SourceSuggestion(
+        id="66666666-6666-6666-6666-666666666666",
+        hub_id="aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+        type=SourceSuggestionType.web,
+        status=SourceSuggestionStatus.accepted,
+        url="https://example.com/docs",
+        canonical_url="https://example.com/docs",
+        title="Example docs",
+        confidence=0.82,
+        created_at=datetime.now(timezone.utc),
+    )
+    monkeypatch.setattr(store_module.store, "get_source_suggestion", lambda _client, _suggestion_id: suggestion)
+
+    resp = client.patch(f"/sources/suggestions/{suggestion.id}", json={"action": "accepted"})
+    assert resp.status_code == 409
