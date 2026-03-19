@@ -26,6 +26,15 @@ class Settings:
     youtube_default_language: str = os.getenv("YOUTUBE_DEFAULT_LANGUAGE", "en")
     youtube_allow_auto_captions: bool = os.getenv("YOUTUBE_ALLOW_AUTO_CAPTIONS", "true").lower() in {"1", "true", "yes"}
     youtube_max_bytes: int = int(os.getenv("YOUTUBE_MAX_BYTES", "2000000"))
+    suggested_sources_model: str = os.getenv("SUGGESTED_SOURCES_MODEL", "gpt-4o-mini")
+    suggested_sources_scan_interval_minutes: int = int(os.getenv("SUGGESTED_SOURCES_SCAN_INTERVAL_MINUTES", "10"))
+    suggested_sources_hub_cooldown_minutes: int = int(os.getenv("SUGGESTED_SOURCES_HUB_COOLDOWN_MINUTES", "60"))
+    suggested_sources_active_days: int = int(os.getenv("SUGGESTED_SOURCES_ACTIVE_DAYS", "30"))
+    suggested_sources_min_complete_sources: int = int(os.getenv("SUGGESTED_SOURCES_MIN_COMPLETE_SOURCES", "2"))
+    suggested_sources_context_limit: int = int(os.getenv("SUGGESTED_SOURCES_CONTEXT_LIMIT", "8"))
+    suggested_sources_chunks_per_source: int = int(os.getenv("SUGGESTED_SOURCES_CHUNKS_PER_SOURCE", "2"))
+    suggested_sources_batch_limit: int = int(os.getenv("SUGGESTED_SOURCES_BATCH_LIMIT", "3"))
+    suggested_sources_lock_ttl_seconds: int = int(os.getenv("SUGGESTED_SOURCES_LOCK_TTL_SECONDS", "540"))
 
 
 def get_settings() -> Settings:
