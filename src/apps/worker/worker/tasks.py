@@ -1562,7 +1562,8 @@ def _discover_source_suggestions(context_text: str) -> tuple[list[dict], dict]:
         "You find suggested sources for a study hub. Use web search to find public resources that complement the existing hub material. "
         "Return only a JSON array with up to 6 objects. Each object must include: "
         "type ('web' or 'youtube'), url, title, description, rationale, confidence. "
-        "Prefer authoritative pages and relevant YouTube videos. Avoid login pages, homepages with no clear relevance, PDFs, and duplicates."
+        "Prefer authoritative pages and relevant YouTube videos. When relevant, include at least 1 YouTube video in the returned set. "
+        "Avoid login pages, homepages with no clear relevance, PDFs, and duplicates."
     )
     user_prompt = f"Hub context:\n{context_text}"
 
@@ -1708,16 +1709,38 @@ def _filter_new_source_suggestions(
     existing_suggestion_targets: set[tuple[str, str]],
     limit: int,
 ) -> list[dict]:
-    accepted: list[dict] = []
+    deduped: list[dict] = []
     seen_targets = set(existing_source_targets) | set(existing_suggestion_targets)
     for candidate in candidates:
         key = _source_suggestion_target_key(candidate)
         if key is None or key in seen_targets:
             continue
         seen_targets.add(key)
-        accepted.append(candidate)
-        if len(accepted) >= max(1, limit):
-            break
+        deduped.append(candidate)
+
+    max_items = max(1, limit)
+    accepted = deduped[:max_items]
+    if not accepted:
+        return []
+
+    if any(str(candidate.get("type") or "").strip().lower() == "youtube" for candidate in accepted):
+        return accepted
+
+    youtube_candidate = next(
+        (candidate for candidate in deduped[max_items:] if str(candidate.get("type") or "").strip().lower() == "youtube"),
+        None,
+    )
+    if youtube_candidate is None:
+        return accepted
+
+    replacement_index = next(
+        (index for index in range(len(accepted) - 1, -1, -1) if str(accepted[index].get("type") or "").strip().lower() != "youtube"),
+        None,
+    )
+    if replacement_index is None:
+        return accepted
+
+    accepted[replacement_index] = youtube_candidate
     return accepted
 
 

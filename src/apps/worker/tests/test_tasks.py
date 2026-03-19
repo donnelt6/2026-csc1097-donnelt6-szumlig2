@@ -242,6 +242,28 @@ def test_filter_new_source_suggestions_dedupes_and_caps_batch() -> None:
     ]
 
 
+def test_filter_new_source_suggestions_reserves_one_youtube_slot() -> None:
+    candidates = [
+        {"type": "web", "canonical_url": "https://example.com/a"},
+        {"type": "web", "canonical_url": "https://example.com/b"},
+        {"type": "web", "canonical_url": "https://example.com/c"},
+        {"type": "youtube", "video_id": "abc123def45"},
+    ]
+
+    accepted = tasks._filter_new_source_suggestions(
+        candidates,
+        existing_source_targets=set(),
+        existing_suggestion_targets=set(),
+        limit=3,
+    )
+
+    assert accepted == [
+        {"type": "web", "canonical_url": "https://example.com/a"},
+        {"type": "web", "canonical_url": "https://example.com/b"},
+        {"type": "youtube", "video_id": "abc123def45"},
+    ]
+
+
 def test_normalize_source_suggestion_candidate_coerces_youtube_and_web(monkeypatch) -> None:
     monkeypatch.setattr(tasks, "_validate_public_url", lambda url: url)
 
@@ -291,6 +313,33 @@ def test_discover_source_suggestions_returns_empty_on_failure(monkeypatch) -> No
     candidates, metadata = tasks._discover_source_suggestions("Hub context")
     assert candidates == []
     assert metadata["error"] == "boom"
+
+
+def test_discover_source_suggestions_requests_youtube_when_relevant(monkeypatch) -> None:
+    monkeypatch.setattr(tasks.settings, "openai_api_key", "test-key")
+    captured: dict[str, object] = {}
+
+    class FakeResponses:
+        def create(self, **kwargs):
+            captured.update(kwargs)
+            return type("Response", (), {"output": [], "usage": None})()
+
+    class FakeOpenAI:
+        def __init__(self, api_key: str):
+            self.responses = FakeResponses()
+
+    monkeypatch.setattr(tasks, "OpenAI", FakeOpenAI)
+    monkeypatch.setattr(tasks, "_extract_response_text", lambda _response: "[]")
+    monkeypatch.setattr(tasks, "_parse_source_suggestion_candidates", lambda _raw: [])
+    monkeypatch.setattr(tasks, "_extract_web_search_results", lambda _response: [])
+
+    candidates, metadata = tasks._discover_source_suggestions("Hub context")
+
+    assert candidates == []
+    assert metadata["model"] == tasks.settings.suggested_sources_model
+    messages = captured["input"]
+    system_prompt = messages[0]["content"]
+    assert "include at least 1 YouTube video" in system_prompt
 
 
 def test_get_redis_client_normalizes_rediss_ssl_flags(monkeypatch) -> None:
