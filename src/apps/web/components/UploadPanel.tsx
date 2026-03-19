@@ -248,7 +248,7 @@ export function UploadPanel({
       setStatusMessage({ text: "YouTube video enqueued. Processing will start shortly.", type: "success" });
       setYouTubeUrl("");
       setYouTubeLanguage("");
-      setYouTubeAutoCaptions(false);
+      setYouTubeAutoCaptions(true);
       onRefresh();
     } catch (err) {
       setStatusMessage({ text: (err as Error).message, type: "error" });
