@@ -1,9 +1,9 @@
 'use client';
 
 import { useState, useRef, useEffect } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import { useIsFetching, useQueryClient, useMutation } from "@tanstack/react-query";
 import {
-  PlusIcon,
   XMarkIcon,
   RectangleStackIcon,
   BookOpenIcon,
@@ -12,7 +12,6 @@ import {
   BriefcaseIcon,
   BeakerIcon,
 } from "@heroicons/react/24/outline";
-import { PageHero } from "../components/PageHero";
 import { HubsList } from "../components/HubsList";
 import { HubsToolbar, type HubsFilterState } from "../components/HubsToolbar";
 import { createHub } from "../lib/api";
@@ -43,6 +42,8 @@ const LOADING_FADE_MS = 0;
 
 export default function HomePage() {
   const queryClient = useQueryClient();
+  const searchParams = useSearchParams();
+  const router = useRouter();
   const hubsFetching = useIsFetching({ queryKey: ["hubs"] });
   const [minDelayElapsed, setMinDelayElapsed] = useState(true);
   const delayTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -153,6 +154,13 @@ export default function HomePage() {
   }, [showLoadingScreen, overlayRendered]);
 
   useEffect(() => {
+    if (searchParams.get('create') === 'true') {
+      setCreateModalOpen(true);
+      router.replace('/', { scroll: false });
+    }
+  }, [searchParams, router]);
+
+  useEffect(() => {
     if (!createModalOpen) return;
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === "Escape") setCreateModalOpen(false);
@@ -177,33 +185,31 @@ export default function HomePage() {
         </div>
       )}
 
-      <PageHero
-        title="Your Hubs"
-        subtitle="Upload your onboarding docs, process them into embeddings, and chat with cited answers."
-        searchValue={searchQuery}
-        onSearchChange={setSearchQuery}
-        searchPlaceholder="Search hubs..."
-        toolbar={
-          <HubsToolbar
-            filters={filters}
-            onFiltersChange={setFilters}
-            hubCount={hubCount}
-          />
-        }
-        action={
-          <button className="create-hub-trigger" onClick={() => setCreateModalOpen(true)}>
-            <PlusIcon style={{ width: 18, height: 18 }} />
-            Create hub
-          </button>
-        }
-      />
+      <main className="page-content page-content--hubs">
+        <div className="content-inner hubs-page">
+          <div className="hubs-page-header">
+            <div className="hubs-page-title-row">
+              <div className="hubs-page-title-section">
+                <h2 className="hubs-page-title">Your Hubs</h2>
+                <p className="hubs-page-subtitle">
+                  Manage your documentation environments and onboarding resources.
+                </p>
+              </div>
+              <HubsToolbar
+                filters={filters}
+                onFiltersChange={setFilters}
+                hubCount={hubCount}
+                searchQuery={searchQuery}
+                onSearchChange={setSearchQuery}
+              />
+            </div>
+          </div>
 
-      <main className="page-content">
-        <div className="content-inner">
           <HubsList
             searchQuery={searchQuery}
             filters={filters}
             onHubCountChange={setHubCount}
+            onCreateHub={() => setCreateModalOpen(true)}
           />
         </div>
       </main>

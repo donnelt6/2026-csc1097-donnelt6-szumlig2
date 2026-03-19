@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef, useEffect } from 'react';
-import { FunnelIcon, Bars3BottomLeftIcon } from '@heroicons/react/24/outline';
+import { Bars3BottomLeftIcon, FunnelIcon, MagnifyingGlassIcon, ClockIcon, UserGroupIcon, DocumentIcon, ArrowDownIcon, ArrowUpIcon } from '@heroicons/react/24/outline';
 
 export interface HubsFilterState {
   sortField: string;
@@ -18,11 +18,13 @@ interface HubsToolbarProps {
   filters: HubsFilterState;
   onFiltersChange: (filters: HubsFilterState) => void;
   hubCount: number;
+  searchQuery: string;
+  onSearchChange: (value: string) => void;
 }
 
-export function HubsToolbar({ filters, onFiltersChange, hubCount }: HubsToolbarProps) {
-  const filterDetailsRef = useRef<HTMLDetailsElement>(null);
+export function HubsToolbar({ filters, onFiltersChange, searchQuery, onSearchChange }: HubsToolbarProps) {
   const sortDetailsRef = useRef<HTMLDetailsElement>(null);
+  const filterDetailsRef = useRef<HTMLDetailsElement>(null);
 
   const {
     sortField,
@@ -69,11 +71,11 @@ export function HubsToolbar({ filters, onFiltersChange, hubCount }: HubsToolbarP
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (filterDetailsRef.current && !filterDetailsRef.current.contains(event.target as Node)) {
-        filterDetailsRef.current.open = false;
-      }
       if (sortDetailsRef.current && !sortDetailsRef.current.contains(event.target as Node)) {
         sortDetailsRef.current.open = false;
+      }
+      if (filterDetailsRef.current && !filterDetailsRef.current.contains(event.target as Node)) {
+        filterDetailsRef.current.open = false;
       }
     };
 
@@ -92,66 +94,32 @@ export function HubsToolbar({ filters, onFiltersChange, hubCount }: HubsToolbarP
   return (
     <div className="hubs-toolbar">
       <div className="hubs-toolbar-left">
-        <details className="filter-menu" ref={sortDetailsRef}>
-          <summary className="toolbar-button">
-            <Bars3BottomLeftIcon className="toolbar-button-icon" />
-            Sort
-          </summary>
-          <div className="filter-dropdown">
-            <div className="filters-container" style={{ gridTemplateColumns: "1fr", padding: "16px" }}>
-              <div className="filter-group">
-                <label className="filter-label">Sort by</label>
-                <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (sortField === "accessed") {
-                        onFiltersChange({ ...filters, sortDirection: sortDirection === "desc" ? "asc" : "desc" });
-                      } else {
-                        onFiltersChange({ ...filters, sortField: "accessed", sortDirection: "desc" });
-                      }
-                    }}
-                    className={sortField === "accessed" ? "button button--primary" : "button button--secondary"}
-                    style={{ fontSize: "0.875rem", padding: "10px 12px", display: "flex", justifyContent: "space-between", alignItems: "center" }}
-                  >
-                    <span>Last accessed</span>
-                    <span>{sortField === "accessed" ? (sortDirection === "desc" ? "↓" : "↑") : ""}</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (sortField === "members") {
-                        onFiltersChange({ ...filters, sortDirection: sortDirection === "desc" ? "asc" : "desc" });
-                      } else {
-                        onFiltersChange({ ...filters, sortField: "members", sortDirection: "desc" });
-                      }
-                    }}
-                    className={sortField === "members" ? "button button--primary" : "button button--secondary"}
-                    style={{ fontSize: "0.875rem", padding: "10px 12px", display: "flex", justifyContent: "space-between", alignItems: "center" }}
-                  >
-                    <span>Members</span>
-                    <span>{sortField === "members" ? (sortDirection === "desc" ? "↓" : "↑") : ""}</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (sortField === "sources") {
-                        onFiltersChange({ ...filters, sortDirection: sortDirection === "desc" ? "asc" : "desc" });
-                      } else {
-                        onFiltersChange({ ...filters, sortField: "sources", sortDirection: "desc" });
-                      }
-                    }}
-                    className={sortField === "sources" ? "button button--primary" : "button button--secondary"}
-                    style={{ fontSize: "0.875rem", padding: "10px 12px", display: "flex", justifyContent: "space-between", alignItems: "center" }}
-                  >
-                    <span>Documents</span>
-                    <span>{sortField === "sources" ? (sortDirection === "desc" ? "↓" : "↑") : ""}</span>
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </details>
+        <div className="hubs-toolbar-search">
+          <MagnifyingGlassIcon className="hubs-toolbar-search-icon" />
+          <input
+            type="text"
+            placeholder="Search documentation hubs..."
+            value={searchQuery}
+            onChange={(e) => onSearchChange(e.target.value)}
+            className="hubs-toolbar-search-input"
+          />
+        </div>
+      </div>
+      <div className="hubs-toolbar-right">
+        <div className="hubs-toolbar-tabs">
+          <button
+            className={`hubs-tab ${!showOnlyFavourites ? 'hubs-tab--active' : ''}`}
+            onClick={() => onFiltersChange({ ...filters, showOnlyFavourites: false })}
+          >
+            All Hubs
+          </button>
+          <button
+            className={`hubs-tab ${showOnlyFavourites ? 'hubs-tab--active' : ''}`}
+            onClick={() => onFiltersChange({ ...filters, showOnlyFavourites: true })}
+          >
+            Pinned
+          </button>
+        </div>
         <details className="filter-menu" ref={filterDetailsRef}>
           <summary className="toolbar-button">
             <FunnelIcon className="toolbar-button-icon" />
@@ -218,16 +186,6 @@ export function HubsToolbar({ filters, onFiltersChange, hubCount }: HubsToolbarP
                 {sourcesError && <div className="filter-error-message">Min cannot be greater than max</div>}
               </div>
               <div className="filter-group">
-                <label className="checkbox-label">
-                  <input
-                    type="checkbox"
-                    checked={showOnlyFavourites}
-                    onChange={(e) => onFiltersChange({ ...filters, showOnlyFavourites: e.target.checked })}
-                  />
-                  <span>Favourites only</span>
-                </label>
-              </div>
-              <div className="filter-group">
                 <label className="filter-label">Role</label>
                 <div className="checkbox-group">
                   <label className="checkbox-label">
@@ -259,7 +217,44 @@ export function HubsToolbar({ filters, onFiltersChange, hubCount }: HubsToolbarP
             </div>
           </div>
         </details>
-        <span className="hubs-count">{hubCount} {hubCount === 1 ? 'hub' : 'hubs'}</span>
+        <details className="filter-menu" ref={sortDetailsRef}>
+          <summary className="toolbar-button">
+            <Bars3BottomLeftIcon className="toolbar-button-icon" />
+            Sort
+            {sortField === "accessed" ? <ClockIcon className="toolbar-button-icon" /> : sortField === "members" ? <UserGroupIcon className="toolbar-button-icon" /> : <DocumentIcon className="toolbar-button-icon" />}
+            {sortDirection === "desc" ? <ArrowDownIcon className="sort-dropdown-arrow-icon" /> : <ArrowUpIcon className="sort-dropdown-arrow-icon" />}
+          </summary>
+          <div className="filter-dropdown sort-dropdown">
+            <p className="sort-dropdown-header">Sorting options</p>
+            <ul className="sort-dropdown-list">
+              {[
+                { key: "accessed", label: "Last accessed", icon: ClockIcon },
+                { key: "members", label: "Members", icon: UserGroupIcon },
+                { key: "sources", label: "Documents count", icon: DocumentIcon },
+              ].map(({ key, label, icon: Icon }) => (
+                <li key={key}>
+                  <button
+                    type="button"
+                    className={`sort-dropdown-item ${sortField === key ? 'sort-dropdown-item--active' : ''}`}
+                    onClick={() => {
+                      if (sortField === key) {
+                        onFiltersChange({ ...filters, sortDirection: sortDirection === "desc" ? "asc" : "desc" });
+                      } else {
+                        onFiltersChange({ ...filters, sortField: key, sortDirection: "desc" });
+                      }
+                    }}
+                  >
+                    <span className="sort-dropdown-item-label">
+                      <Icon className="sort-dropdown-item-icon" />
+                      {label}
+                    </span>
+                    {sortField === key && (sortDirection === "desc" ? <ArrowDownIcon className="sort-dropdown-arrow-icon" /> : <ArrowUpIcon className="sort-dropdown-arrow-icon" />)}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </details>
       </div>
     </div>
   );

@@ -25,7 +25,7 @@ export function AppShell({ children }: AppShellProps) {
 
   useLayoutEffect(() => {
     const saved = localStorage.getItem('sidebar-state') as SidebarState | null;
-    if (saved && ['open', 'collapsed', 'hidden'].includes(saved)) {
+    if (saved && ['open', 'collapsed'].includes(saved)) {
       setSidebarState(saved);
     } else {
       setSidebarState('open');

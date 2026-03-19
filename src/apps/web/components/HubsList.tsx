@@ -1,9 +1,18 @@
 'use client';
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { UserIcon, UsersIcon, UserGroupIcon, DocumentIcon, StarIcon as StarOutline, RectangleStackIcon } from "@heroicons/react/24/outline";
+import {
+  DocumentIcon,
+  UserGroupIcon,
+  PlusCircleIcon,
+  StarIcon as StarOutline,
+  EllipsisVerticalIcon,
+  RectangleStackIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
+} from "@heroicons/react/24/outline";
 import { StarIcon as StarSolid } from "@heroicons/react/24/solid";
 import { listHubs, toggleHubFavourite } from "../lib/api";
 import type { Hub } from "../lib/types";
@@ -32,9 +41,10 @@ interface HubsListProps {
   searchQuery: string;
   filters: HubsFilterState;
   onHubCountChange?: (count: number) => void;
+  onCreateHub?: () => void;
 }
 
-export function HubsList({ searchQuery, filters, onHubCountChange }: HubsListProps) {
+export function HubsList({ searchQuery, filters, onHubCountChange, onCreateHub }: HubsListProps) {
   const queryClient = useQueryClient();
   const { data, isLoading, error } = useQuery({
     queryKey: ["hubs"],
@@ -135,29 +145,48 @@ export function HubsList({ searchQuery, filters, onHubCountChange }: HubsListPro
   }
 
   const hubCount = filteredHubs?.length ?? 0;
+  const [currentPage, setCurrentPage] = useState(1);
+  const gridSlots = 6;
+  const firstPageHubs = gridSlots - 1; // 5 hubs + create card on page 1
+  const totalPages = hubCount <= firstPageHubs ? 1 : 1 + Math.ceil((hubCount - firstPageHubs) / gridSlots);
 
-  // Notify parent of hub count changes
+  // Reset to page 1 when filters/search change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, filters.showOnlyFavourites, filters.sortField, filters.sortDirection]);
+
+  const paginatedHubs = currentPage === 1
+    ? filteredHubs?.slice(0, firstPageHubs)
+    : filteredHubs?.slice(firstPageHubs + (currentPage - 2) * gridSlots, firstPageHubs + (currentPage - 1) * gridSlots);
+
   useEffect(() => {
     onHubCountChange?.(hubCount);
   }, [hubCount, onHubCountChange]);
 
   return (
-    <div>
+    <div className="hubs-list-container">
       {isLoading && <p className="muted">Loading hubs...</p>}
       {error && <p className="muted">Failed to load hubs: {(error as Error).message}</p>}
 
       <div className="hubs-grid">
-        {filteredHubs?.map((hub: Hub) => (
+        {/* Create New Hub card — only on page 1 */}
+        {currentPage === 1 && (
+          <button className="hub-card hub-card--create" onClick={onCreateHub} type="button">
+            <div className="hub-card-create-icon">
+              <PlusCircleIcon />
+            </div>
+            <h3 className="hub-card-create-title">Create New Hub</h3>
+            <p className="hub-card-create-desc">Initialize a new secure documentation environment</p>
+          </button>
+        )}
+
+        {paginatedHubs?.map((hub: Hub) => (
           <Link key={hub.id} href={`/hubs/${hub.id}`} className="hub-card">
-            <div className="hub-card-header">
+            <div className="hub-card-top">
               <div className="hub-card-icon">
                 <RectangleStackIcon />
               </div>
-              <div className="hub-card-title-row">
-                <div>
-                  <h3 className="hub-card-title">{hub.name}</h3>
-                  <p className="hub-card-description">{hub.description || "No description"}</p>
-                </div>
+              <div className="hub-card-actions">
                 <button
                   onClick={(e) => toggleFavourite(hub.id, hub.is_favourite ?? false, e)}
                   className="hub-favourite-button"
@@ -169,28 +198,42 @@ export function HubsList({ searchQuery, filters, onHubCountChange }: HubsListPro
                     <StarOutline className="hub-favourite-icon" />
                   )}
                 </button>
+                <button
+                  className="hub-menu-button"
+                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                  aria-label="Hub options"
+                >
+                  <EllipsisVerticalIcon className="hub-menu-icon" />
+                </button>
               </div>
             </div>
+
+            <h3 className="hub-card-title">{hub.name}</h3>
+            <p className="hub-card-description">{hub.description || "No description"}</p>
+
             <div className="hub-card-footer">
               <div className="hub-card-stats">
-                <span className="hub-stat" aria-label={`${hub.members_count ?? 0} members`}>
-                  {(hub.members_count ?? 0) === 1 ? (
-                    <UserIcon className="hub-stat-icon" aria-hidden="true" />
-                  ) : (hub.members_count ?? 0) <= 4 ? (
-                    <UsersIcon className="hub-stat-icon" aria-hidden="true" />
-                  ) : (
-                    <UserGroupIcon className="hub-stat-icon" aria-hidden="true" />
-                  )}
-                  <span className="hub-stat-value">{hub.members_count ?? 0}</span>
-                </span>
-                <span className="hub-stat" aria-label={`${hub.sources_count ?? 0} sources`}>
+                <span className="hub-stat">
                   <DocumentIcon className="hub-stat-icon" aria-hidden="true" />
-                  <span className="hub-stat-value">{hub.sources_count ?? 0}</span>
+                  <span className="hub-stat-value">{hub.sources_count ?? 0} {(hub.sources_count ?? 0) === 1 ? 'Doc' : 'Docs'}</span>
+                </span>
+                <span className="hub-stat">
+                  <UserGroupIcon className="hub-stat-icon" aria-hidden="true" />
+                  <span className="hub-stat-value">{hub.members_count ?? 0} {(hub.members_count ?? 0) === 1 ? 'Member' : 'Members'}</span>
                 </span>
               </div>
-              <span className="hub-card-time" aria-label={`Last accessed ${formatRelativeTime(hub.last_accessed_at)}`}>
-                {formatRelativeTime(hub.last_accessed_at)}
-              </span>
+              <div className="hub-card-footer-bottom">
+                <span className="hub-card-time">
+                  Modified {formatRelativeTime(hub.last_accessed_at)}
+                </span>
+                {(hub.members_count ?? 0) > 0 && (
+                  <div className="hub-card-avatars">
+                    <div className="hub-avatar">
+                      {(hub.members_count ?? 0) > 1 ? `+${(hub.members_count ?? 0) - 1}` : "1"}
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </Link>
         ))}
@@ -199,6 +242,39 @@ export function HubsList({ searchQuery, filters, onHubCountChange }: HubsListPro
       {!isLoading && filteredHubs?.length === 0 && (
         <div style={{ textAlign: 'center', padding: '48px 24px' }}>
           <p className="muted">No hubs found. Create your first hub to get started.</p>
+        </div>
+      )}
+
+      {totalPages > 1 && (
+        <div className="hubs-pagination">
+          <p className="hubs-pagination-info">
+            Showing {currentPage === 1 ? 1 : firstPageHubs + (currentPage - 2) * gridSlots + 1}–{Math.min(currentPage === 1 ? firstPageHubs : firstPageHubs + (currentPage - 1) * gridSlots, hubCount)} of {hubCount} Hubs
+          </p>
+          <div className="hubs-pagination-buttons">
+            <button
+              className="hubs-pagination-arrow"
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              disabled={currentPage === 1}
+            >
+              <ChevronLeftIcon className="hubs-pagination-arrow-icon" />
+            </button>
+            {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+              <button
+                key={page}
+                className={`hubs-pagination-page ${page === currentPage ? 'hubs-pagination-page--active' : ''}`}
+                onClick={() => setCurrentPage(page)}
+              >
+                {page}
+              </button>
+            ))}
+            <button
+              className="hubs-pagination-arrow"
+              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+              disabled={currentPage === totalPages}
+            >
+              <ChevronRightIcon className="hubs-pagination-arrow-icon" />
+            </button>
+          </div>
         </div>
       )}
     </div>
