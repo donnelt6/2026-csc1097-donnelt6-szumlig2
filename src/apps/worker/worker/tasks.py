@@ -410,6 +410,8 @@ def _select_caption_track(
         if selected:
             lang, url, ext = selected
             return "auto", lang, url, ext
+    if not allow_auto and (info.get("automatic_captions") or {}):
+        raise ValueError("No manual captions found. Try enabling auto-captions.")
     raise ValueError("No captions available for the requested language")
 
 
@@ -446,7 +448,7 @@ def _pick_caption_from_map(
 def _select_caption_format(lang: str, formats: list[dict]) -> Optional[tuple[str, str, str]]:
     if not formats or not isinstance(formats, list):
         return None
-    preferred_exts = ["vtt", "srt", "srv3", "srv2", "srv1", "ttml", "json3"]
+    preferred_exts = ["vtt", "srt", "json3", "srv1", "srv2", "srv3", "ttml"]
     for ext in preferred_exts:
         for item in formats:
             if item.get("ext") == ext and item.get("url"):

@@ -2,11 +2,41 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useIsFetching, useQueryClient, useMutation } from "@tanstack/react-query";
-import { PlusIcon } from "@heroicons/react/24/outline";
+import {
+  PlusIcon,
+  XMarkIcon,
+  RectangleStackIcon,
+  BookOpenIcon,
+  ChatBubbleLeftRightIcon,
+  AcademicCapIcon,
+  BriefcaseIcon,
+  BeakerIcon,
+} from "@heroicons/react/24/outline";
 import { PageHero } from "../components/PageHero";
 import { HubsList } from "../components/HubsList";
 import { HubsToolbar, type HubsFilterState } from "../components/HubsToolbar";
 import { createHub } from "../lib/api";
+
+const HUB_ICONS = [
+  RectangleStackIcon,
+  BookOpenIcon,
+  ChatBubbleLeftRightIcon,
+  AcademicCapIcon,
+  BriefcaseIcon,
+  BeakerIcon,
+];
+
+const HUB_COLORS = [
+  "#8b5cf6",
+  "#06b6d4",
+  "#3b82f6",
+  "#ef4444",
+  "#f97316",
+  "#eab308",
+];
+
+const NAME_MAX = 40;
+const DESC_MAX = 200;
 
 const MIN_HUBS_LOADING_MS = 1500;
 const LOADING_FADE_MS = 0;
@@ -25,7 +55,9 @@ export default function HomePage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const createMenuRef = useRef<HTMLDetailsElement>(null);
+  const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [selectedIcon, setSelectedIcon] = useState(0);
+  const [selectedColor, setSelectedColor] = useState(0);
   const [hubCount, setHubCount] = useState(0);
   const [filters, setFilters] = useState<HubsFilterState>({
     sortField: "accessed",
@@ -44,9 +76,9 @@ export default function HomePage() {
       queryClient.invalidateQueries({ queryKey: ["hubs"] });
       setName("");
       setDescription("");
-      if (createMenuRef.current) {
-        createMenuRef.current.open = false;
-      }
+      setSelectedIcon(0);
+      setSelectedColor(0);
+      setCreateModalOpen(false);
     },
   });
 
@@ -121,14 +153,13 @@ export default function HomePage() {
   }, [showLoadingScreen, overlayRendered]);
 
   useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (createMenuRef.current && !createMenuRef.current.contains(event.target as Node)) {
-        createMenuRef.current.open = false;
-      }
+    if (!createModalOpen) return;
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setCreateModalOpen(false);
     };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+    document.addEventListener("keydown", handleEscape);
+    return () => document.removeEventListener("keydown", handleEscape);
+  }, [createModalOpen]);
 
   return (
     <>
@@ -160,35 +191,10 @@ export default function HomePage() {
           />
         }
         action={
-          <details className="create-hub-menu" ref={createMenuRef}>
-            <summary className="create-hub-trigger">
-              <PlusIcon style={{ width: 18, height: 18 }} />
-              Create hub
-            </summary>
-            <div className="create-hub-dropdown">
-              <form onSubmit={onSubmit} className="grid">
-                <label>
-                  <span className="muted">Hub name</span>
-                  <input
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder="e.g. Onboarding hub"
-                  />
-                </label>
-                <label>
-                  <span className="muted">Description (optional)</span>
-                  <input
-                    value={description}
-                    onChange={(e) => setDescription(e.target.value)}
-                    placeholder="What is this hub for?"
-                  />
-                </label>
-                <button className="button button--primary" type="submit" disabled={createMutation.isPending}>
-                  {createMutation.isPending ? "Creating..." : "Create hub"}
-                </button>
-              </form>
-            </div>
-          </details>
+          <button className="create-hub-trigger" onClick={() => setCreateModalOpen(true)}>
+            <PlusIcon style={{ width: 18, height: 18 }} />
+            Create hub
+          </button>
         }
       />
 
@@ -201,6 +207,91 @@ export default function HomePage() {
           />
         </div>
       </main>
+
+      {createModalOpen && (() => {
+        const IconPreview = HUB_ICONS[selectedIcon];
+        return (
+          <div className="modal-backdrop" onClick={() => setCreateModalOpen(false)}>
+            <div className="modal" onClick={(e) => e.stopPropagation()}>
+              <div className="modal__header">
+                <div className="modal__icon-preview" style={{ background: HUB_COLORS[selectedColor] }}>
+                  <IconPreview style={{ width: 24, height: 24 }} />
+                </div>
+                <button className="modal__close" onClick={() => setCreateModalOpen(false)}>
+                  <XMarkIcon style={{ width: 20, height: 20 }} />
+                </button>
+              </div>
+
+              <h3 className="modal__title">Create a new hub</h3>
+              <p className="modal__subtitle">A space for your docs, embeddings, and AI chat.</p>
+
+              <div className="modal__pickers">
+                <div className="modal__picker-group">
+                  <span className="modal__picker-label">Icon</span>
+                  <div className="modal__picker-row">
+                    {HUB_ICONS.map((Icon, i) => (
+                      <button
+                        key={i}
+                        type="button"
+                        className={`modal__icon-option${i === selectedIcon ? " modal__icon-option--active" : ""}`}
+                        onClick={() => setSelectedIcon(i)}
+                      >
+                        <Icon style={{ width: 18, height: 18 }} />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="modal__picker-group">
+                  <span className="modal__picker-label">Color</span>
+                  <div className="modal__picker-row">
+                    {HUB_COLORS.map((color, i) => (
+                      <button
+                        key={i}
+                        type="button"
+                        className={`modal__color-option${i === selectedColor ? " modal__color-option--active" : ""}`}
+                        style={{ background: color }}
+                        onClick={() => setSelectedColor(i)}
+                      />
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <form onSubmit={onSubmit}>
+                <div className="modal__field">
+                  <span className="muted">Hub name</span>
+                  <span className="modal__char-count">{name.length}/{NAME_MAX}</span>
+                </div>
+                <input
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="e.g. Onboarding hub"
+                  maxLength={NAME_MAX}
+                  autoFocus
+                />
+
+                <div className="modal__field">
+                  <span className="muted">Description <span className="modal__optional">optional</span></span>
+                  <span className="modal__char-count">{description.length}/{DESC_MAX}</span>
+                </div>
+                <textarea
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="What is this hub for?"
+                  maxLength={DESC_MAX}
+                  rows={3}
+                />
+
+                <div className="modal__footer">
+                  <button className="button button--primary" type="submit" disabled={createMutation.isPending}>
+                    {createMutation.isPending ? "Creating..." : "Create hub"}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        );
+      })()}
     </>
   );
 }

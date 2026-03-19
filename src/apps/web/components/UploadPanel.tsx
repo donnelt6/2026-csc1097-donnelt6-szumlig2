@@ -3,7 +3,6 @@
 import { useMutation } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  ChevronDownIcon,
   DocumentTextIcon,
   GlobeAltIcon,
   PlayCircleIcon,
@@ -49,7 +48,7 @@ export function UploadPanel({
   const [url, setUrl] = useState("");
   const [youtubeUrl, setYouTubeUrl] = useState("");
   const [youtubeLanguage, setYouTubeLanguage] = useState("");
-  const [youtubeAutoCaptions, setYouTubeAutoCaptions] = useState(false);
+  const [youtubeAutoCaptions, setYouTubeAutoCaptions] = useState(true);
   const [statusMessage, setStatusMessage] = useState<{ text: string; type: "success" | "error" } | null>(null);
   const [retryingSourceId, setRetryingSourceId] = useState<string | null>(null);
   const [isRetrying, setIsRetrying] = useState(false);
@@ -62,7 +61,6 @@ export function UploadPanel({
   const [searchQuery, setSearchQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState<"all" | "file" | "web" | "youtube">("all");
   const [statusFilter, setStatusFilter] = useState<"all" | "complete" | "incomplete">("all");
-  const [uploadOpen, setUploadOpen] = useState(true);
   const [pageSize, setPageSize] = useState(10);
   const [page, setPage] = useState(0);
   const [isDeletingFailed, setIsDeletingFailed] = useState(false);
@@ -72,6 +70,7 @@ export function UploadPanel({
     const timeout = window.setTimeout(() => setStatusMessage(null), 5000);
     return () => window.clearTimeout(timeout);
   }, [statusMessage]);
+
 
   const mutation = useMutation({
     mutationFn: async () => {
@@ -209,9 +208,13 @@ export function UploadPanel({
       setStatusMessage({ text: "Enter a URL to ingest.", type: "error" });
       return;
     }
+    let finalUrl = url.trim();
+    if (!/^https?:\/\//i.test(finalUrl)) {
+      finalUrl = `https://${finalUrl}`;
+    }
     setIsSubmittingUrl(true);
     try {
-      await createWebSource({ hub_id: hubId, url: url.trim() });
+      await createWebSource({ hub_id: hubId, url: finalUrl });
       setStatusMessage({ text: "URL enqueued. Processing will start shortly.", type: "success" });
       setUrl("");
       onRefresh();
@@ -227,11 +230,15 @@ export function UploadPanel({
       setStatusMessage({ text: "Enter a YouTube URL to ingest.", type: "error" });
       return;
     }
+    let finalYtUrl = youtubeUrl.trim();
+    if (!/^https?:\/\//i.test(finalYtUrl)) {
+      finalYtUrl = `https://${finalYtUrl}`;
+    }
     setIsSubmittingYouTube(true);
     try {
       await createYouTubeSource({
         hub_id: hubId,
-        url: youtubeUrl.trim(),
+        url: finalYtUrl,
         language: youtubeLanguage.trim() ? youtubeLanguage.trim() : null,
         allow_auto_captions: youtubeAutoCaptions,
       });
@@ -325,81 +332,53 @@ export function UploadPanel({
       />
 
       {canUpload ? (
-        <div className="sources__upload-card">
-          <button
-            type="button"
-            className="sources__upload-toggle"
-            onClick={() => setUploadOpen((v) => !v)}
-            aria-expanded={uploadOpen}
-          >
-            <DocumentPlusIcon className="sources__section-icon" />
-            <span className="sources__upload-toggle-text">Add a source</span>
-            <ChevronDownIcon className={`sources__upload-chevron${uploadOpen ? " sources__upload-chevron--open" : ""}`} />
-          </button>
-          {uploadOpen && (
-            <div className="sources__upload-body">
-              {/* File upload section */}
-              <div className="sources__section">
-                <div className="sources__section-header">
-                  <DocumentTextIcon className="sources__section-icon sources__type-icon--file" />
-                  <div>
-                    <h3 className="sources__section-title">Upload a file</h3>
-                    <p className="sources__section-desc">PDF, DOCX, TXT, or Markdown</p>
-                  </div>
-                </div>
-                <div className="sources__file-row">
-                  <button className="button--secondary button" type="button" onClick={() => fileInputRef.current?.click()}>
-                    Choose file
-                  </button>
-                  <span className="sources__file-name">{file ? file.name : "No file chosen"}</span>
-                  <button className="button button--primary" onClick={() => mutation.mutate()} disabled={mutation.isPending || !file}>
-                    {mutation.isPending ? "Uploading..." : "Upload"}
-                  </button>
-                </div>
-              </div>
-
-              {/* Web URL section */}
-              <div className="sources__section">
-                <div className="sources__section-header">
-                  <GlobeAltIcon className="sources__section-icon sources__type-icon--web" />
-                  <div>
-                    <h3 className="sources__section-title">Add a web page</h3>
-                    <p className="sources__section-desc">Enter a URL to scrape and ingest</p>
-                  </div>
-                </div>
-                <div className="sources__input-row">
-                  <input type="url" placeholder="https://example.com/onboarding" value={url} onChange={(e) => setUrl(e.target.value)} />
-                  <button className="button button--primary" onClick={handleSubmitUrl} disabled={isSubmittingUrl || !url.trim()}>
-                    {isSubmittingUrl ? "Adding..." : "Add URL"}
-                  </button>
-                </div>
-              </div>
-
-              {/* YouTube section */}
-              <div className="sources__section">
-                <div className="sources__section-header">
-                  <PlayCircleIcon className="sources__section-icon sources__type-icon--youtube" />
-                  <div>
-                    <h3 className="sources__section-title">Add a YouTube video</h3>
-                    <p className="sources__section-desc">Transcript will be extracted and ingested</p>
-                  </div>
-                </div>
-                <div className="sources__input-row">
-                  <input type="url" placeholder="https://www.youtube.com/watch?v=..." value={youtubeUrl} onChange={(e) => setYouTubeUrl(e.target.value)} />
-                  <button className="button button--primary" onClick={handleSubmitYouTube} disabled={isSubmittingYouTube || !youtubeUrl.trim()}>
-                    {isSubmittingYouTube ? "Adding..." : "Add YouTube"}
-                  </button>
-                </div>
-                <div className="sources__youtube-options">
-                  <input type="text" placeholder="Language (optional, e.g. en)" value={youtubeLanguage} onChange={(e) => setYouTubeLanguage(e.target.value)} />
-                  <label className="checkbox-label">
-                    <input type="checkbox" checked={youtubeAutoCaptions} onChange={(e) => setYouTubeAutoCaptions(e.target.checked)} />
-                    <span>Allow auto-captions</span>
-                  </label>
-                </div>
-              </div>
+        <div className="sources__add-row">
+          {/* File upload */}
+          <div className="sources__add-col">
+            <DocumentTextIcon className="sources__add-icon sources__type-icon--file" />
+            <h4 className="sources__add-title">Upload file</h4>
+            <p className="sources__add-desc">PDF, DOCX, TXT, MD</p>
+            <div className="sources__add-inputs">
+              <button className="button--secondary button" type="button" onClick={() => fileInputRef.current?.click()}>
+                Choose file
+              </button>
+              <span className="sources__file-name">{file ? file.name : "No file chosen"}</span>
             </div>
-          )}
+            <button className="button button--primary sources__add-submit" onClick={() => mutation.mutate()} disabled={mutation.isPending || !file}>
+              {mutation.isPending ? "Uploading..." : "Upload"}
+            </button>
+          </div>
+
+          {/* Web URL */}
+          <div className="sources__add-col">
+            <GlobeAltIcon className="sources__add-icon sources__type-icon--web" />
+            <h4 className="sources__add-title">Web page</h4>
+            <p className="sources__add-desc">Scrape &amp; ingest URL</p>
+            <div className="sources__add-inputs">
+              <input type="url" placeholder="https://example.com/..." value={url} onChange={(e) => setUrl(e.target.value)} />
+            </div>
+            <button className="button button--primary sources__add-submit" onClick={handleSubmitUrl} disabled={isSubmittingUrl || !url.trim()}>
+              {isSubmittingUrl ? "Adding..." : "Add URL"}
+            </button>
+          </div>
+
+          {/* YouTube */}
+          <div className="sources__add-col">
+            <PlayCircleIcon className="sources__add-icon sources__type-icon--youtube" />
+            <h4 className="sources__add-title">YouTube</h4>
+            <p className="sources__add-desc">Extract transcript</p>
+            <div className="sources__add-inputs">
+              <input type="url" placeholder="https://youtube.com/watch?v=..." value={youtubeUrl} onChange={(e) => setYouTubeUrl(e.target.value)} />
+              <input type="text" placeholder="Language (optional)" value={youtubeLanguage} onChange={(e) => setYouTubeLanguage(e.target.value)} />
+              <label className="checkbox-label">
+                <input type="checkbox" checked={youtubeAutoCaptions} onChange={(e) => setYouTubeAutoCaptions(e.target.checked)} />
+                <span>Auto-captions</span>
+              </label>
+            </div>
+            <button className="button button--primary sources__add-submit" onClick={handleSubmitYouTube} disabled={isSubmittingYouTube || !youtubeUrl.trim()}>
+              {isSubmittingYouTube ? "Adding..." : "Add YouTube"}
+            </button>
+          </div>
         </div>
       ) : (
         <p className="sources__permission-notice">You only have view access. Ask the hub owner to grant edit permissions.</p>

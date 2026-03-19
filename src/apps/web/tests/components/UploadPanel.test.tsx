@@ -224,7 +224,7 @@ describe("UploadPanel", () => {
     renderWithQueryClient(<UploadPanel hubId="hub-1" sources={[]} onRefresh={onRefresh} />);
 
     const user = userEvent.setup();
-    await user.type(screen.getByPlaceholderText("https://example.com/onboarding"), "https://example.com");
+    await user.type(screen.getByPlaceholderText("https://example.com/..."), "https://example.com");
     await user.click(screen.getByRole("button", { name: "Add URL" }));
 
     await waitFor(() =>
@@ -249,7 +249,7 @@ describe("UploadPanel", () => {
 
     const user = userEvent.setup();
     await user.type(
-      screen.getByPlaceholderText("https://www.youtube.com/watch?v=..."),
+      screen.getByPlaceholderText("https://youtube.com/watch?v=..."),
       "https://www.youtube.com/watch?v=abc123def45"
     );
     await user.click(screen.getByRole("button", { name: "Add YouTube" }));
@@ -259,7 +259,7 @@ describe("UploadPanel", () => {
         hub_id: "hub-1",
         url: "https://www.youtube.com/watch?v=abc123def45",
         language: null,
-        allow_auto_captions: false,
+        allow_auto_captions: true,
       })
     );
     expect(onRefresh).toHaveBeenCalled();

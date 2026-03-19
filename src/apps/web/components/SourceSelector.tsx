@@ -99,18 +99,20 @@ export function SourceSelector({
             </button>
           </div>
           <ul className="source-selector__list">
-            {completeSources.map((source) => (
-              <li key={source.id} className="source-selector__item">
-                <label className="source-selector__label">
-                  <input
-                    type="checkbox"
-                    checked={selectedSourceIds.includes(source.id)}
-                    onChange={() => onToggleSource(source.id)}
-                  />
-                  <span className="source-selector__name">{source.original_name}</span>
-                </label>
-              </li>
-            ))}
+            {completeSources.map((source) => {
+              const isSelected = selectedSourceIds.includes(source.id);
+              return (
+                <li key={source.id} className="source-selector__item">
+                  <button
+                    type="button"
+                    className={`source-selector__label${isSelected ? ' source-selector__label--selected' : ''}`}
+                    onClick={() => onToggleSource(source.id)}
+                  >
+                    <span className="source-selector__name">{source.original_name}</span>
+                  </button>
+                </li>
+              );
+            })}
           </ul>
         </div>
       )}

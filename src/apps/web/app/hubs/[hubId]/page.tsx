@@ -1,6 +1,5 @@
 'use client';
 
-import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { ChatPanel } from "../../../components/ChatPanel";
@@ -77,9 +76,6 @@ export default function HubDetail({ params }: { params: { hubId: string } }) {
   return (
     <main className={`page-content page-content--no-hero${activeTab === 'chat' ? ' page-content--fullscreen' : ''}`}>
       <div className="content-inner">
-        <Link href="/" className="muted" style={{ display: "block", marginBottom: "20px" }}>
-          &larr; Back to hubs
-        </Link>
         {activeTab !== 'chat' && (
           <header className="hub-header">
             <h2 className="hub-header__name">{hub?.name ?? "Hub"}</h2>
