@@ -208,9 +208,13 @@ export function UploadPanel({
       setStatusMessage({ text: "Enter a URL to ingest.", type: "error" });
       return;
     }
+    let finalUrl = url.trim();
+    if (!/^https?:\/\//i.test(finalUrl)) {
+      finalUrl = `https://${finalUrl}`;
+    }
     setIsSubmittingUrl(true);
     try {
-      await createWebSource({ hub_id: hubId, url: url.trim() });
+      await createWebSource({ hub_id: hubId, url: finalUrl });
       setStatusMessage({ text: "URL enqueued. Processing will start shortly.", type: "success" });
       setUrl("");
       onRefresh();
@@ -226,11 +230,15 @@ export function UploadPanel({
       setStatusMessage({ text: "Enter a YouTube URL to ingest.", type: "error" });
       return;
     }
+    let finalYtUrl = youtubeUrl.trim();
+    if (!/^https?:\/\//i.test(finalYtUrl)) {
+      finalYtUrl = `https://${finalYtUrl}`;
+    }
     setIsSubmittingYouTube(true);
     try {
       await createYouTubeSource({
         hub_id: hubId,
-        url: youtubeUrl.trim(),
+        url: finalYtUrl,
         language: youtubeLanguage.trim() ? youtubeLanguage.trim() : null,
         allow_auto_captions: youtubeAutoCaptions,
       });
