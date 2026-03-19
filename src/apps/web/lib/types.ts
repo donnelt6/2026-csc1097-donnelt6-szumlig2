@@ -26,6 +26,29 @@ export interface Source {
   created_at: string;
 }
 
+export type SourceSuggestionType = "web" | "youtube";
+export type SourceSuggestionStatus = "pending" | "accepted" | "declined";
+
+export interface SourceSuggestion {
+  id: string;
+  hub_id: string;
+  type: SourceSuggestionType;
+  status: SourceSuggestionStatus;
+  url: string;
+  canonical_url?: string | null;
+  video_id?: string | null;
+  title?: string | null;
+  description?: string | null;
+  rationale?: string | null;
+  confidence: number;
+  seed_source_ids: string[];
+  search_metadata?: Record<string, unknown> | null;
+  created_at: string;
+  reviewed_at?: string | null;
+  reviewed_by?: string | null;
+  accepted_source_id?: string | null;
+}
+
 export interface ChatResponse {
   answer: string;
   citations: Citation[];

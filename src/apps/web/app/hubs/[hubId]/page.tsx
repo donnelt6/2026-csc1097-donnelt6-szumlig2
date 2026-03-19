@@ -106,6 +106,7 @@ export default function HubDetail({ params }: { params: { hubId: string } }) {
               sources={sources ?? []}
               onRefresh={() => refetchSources()}
               canUpload={canUpload}
+              canReviewSuggestions={canUpload}
               selectedSourceIds={sourceSelection.selectedIds}
               onToggleSource={sourceSelection.toggleSource}
               onSelectAllSources={sourceSelection.selectAll}

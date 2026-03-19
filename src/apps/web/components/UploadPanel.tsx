@@ -20,6 +20,7 @@ import {
   failSource,
   refreshSource,
 } from "../lib/api";
+import { SuggestedSourcesPanel } from "./SuggestedSourcesPanel";
 import type { Source } from "../lib/types";
 
 interface Props {
@@ -27,6 +28,7 @@ interface Props {
   sources: Source[];
   onRefresh: () => void;
   canUpload?: boolean;
+  canReviewSuggestions?: boolean;
   selectedSourceIds?: string[];
   onToggleSource?: (sourceId: string) => void;
   onSelectAllSources?: (scope?: string[]) => void;
@@ -38,6 +40,7 @@ export function UploadPanel({
   sources,
   onRefresh,
   canUpload = true,
+  canReviewSuggestions = false,
   selectedSourceIds = [],
   onToggleSource = () => undefined,
   onSelectAllSources = () => undefined,
@@ -384,6 +387,7 @@ export function UploadPanel({
         <p className="sources__permission-notice">You only have view access. Ask the hub owner to grant edit permissions.</p>
       )}
       {statusMessage && <p className={`sources__status sources__status--${statusMessage.type}`}>{statusMessage.text}</p>}
+      <SuggestedSourcesPanel hubId={hubId} canReview={canReviewSuggestions} onAccepted={onRefresh} />
 
       <hr className="sources__divider" />
 
