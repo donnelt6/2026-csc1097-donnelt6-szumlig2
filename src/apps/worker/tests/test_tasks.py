@@ -9,6 +9,10 @@ def test_normalize_text_collapses_whitespace() -> None:
     assert tasks._normalize_text(raw) == "Line one Line two Line three"
 
 
+def test_trim_text_truncates_long_content() -> None:
+    assert tasks._trim_text("alpha beta gamma", 10) == "alpha beta..."
+
+
 def test_chunk_text_returns_empty_for_blank_input() -> None:
     # Calls chunking on empty input; expect no chunks.
     assert tasks._chunk_text("", chunk_size=4, overlap=2) == []
@@ -185,3 +189,172 @@ def test_ingest_youtube_source_success(monkeypatch) -> None:
     assert result["chunks"] == 3
     assert updates[0]["status"] == "processing"
     assert updates[-1]["status"] == "complete"
+
+
+def test_filter_eligible_source_suggestion_hubs_applies_pending_activity_and_cooldown(monkeypatch) -> None:
+    monkeypatch.setattr(tasks.settings, "suggested_sources_hub_cooldown_minutes", 60)
+    monkeypatch.setattr(tasks.settings, "suggested_sources_min_complete_sources", 2)
+    now = tasks.datetime(2026, 3, 17, 12, 0, tzinfo=tasks.timezone.utc)
+    hubs = [
+        {"id": "hub-active", "last_source_suggestion_scan_at": None},
+        {"id": "hub-pending", "last_source_suggestion_scan_at": None},
+        {"id": "hub-cooldown", "last_source_suggestion_scan_at": "2026-03-17T11:30:00+00:00"},
+        {"id": "hub-inactive", "last_source_suggestion_scan_at": None},
+        {"id": "hub-few-sources", "last_source_suggestion_scan_at": None},
+    ]
+
+    eligible = tasks._filter_eligible_source_suggestion_hubs(
+        hubs,
+        complete_source_counts={
+            "hub-active": 3,
+            "hub-pending": 3,
+            "hub-cooldown": 3,
+            "hub-inactive": 3,
+            "hub-few-sources": 1,
+        },
+        active_hub_ids={"hub-active", "hub-pending", "hub-cooldown", "hub-few-sources"},
+        pending_hub_ids={"hub-pending"},
+        now=now,
+    )
+
+    assert [hub["id"] for hub in eligible] == ["hub-active"]
+
+
+def test_filter_new_source_suggestions_dedupes_and_caps_batch() -> None:
+    candidates = [
+        {"type": "web", "canonical_url": "https://example.com/a"},
+        {"type": "web", "canonical_url": "https://example.com/b"},
+        {"type": "youtube", "video_id": "abc123def45"},
+        {"type": "web", "canonical_url": "https://example.com/a"},
+        {"type": "youtube", "video_id": "zyx987uvw65"},
+    ]
+
+    accepted = tasks._filter_new_source_suggestions(
+        candidates,
+        existing_source_targets={("web", "https://example.com/b")},
+        existing_suggestion_targets={("youtube", "abc123def45")},
+        limit=3,
+    )
+
+    assert accepted == [
+        {"type": "web", "canonical_url": "https://example.com/a"},
+        {"type": "youtube", "video_id": "zyx987uvw65"},
+    ]
+
+
+def test_filter_new_source_suggestions_reserves_one_youtube_slot() -> None:
+    candidates = [
+        {"type": "web", "canonical_url": "https://example.com/a"},
+        {"type": "web", "canonical_url": "https://example.com/b"},
+        {"type": "web", "canonical_url": "https://example.com/c"},
+        {"type": "youtube", "video_id": "abc123def45"},
+    ]
+
+    accepted = tasks._filter_new_source_suggestions(
+        candidates,
+        existing_source_targets=set(),
+        existing_suggestion_targets=set(),
+        limit=3,
+    )
+
+    assert accepted == [
+        {"type": "web", "canonical_url": "https://example.com/a"},
+        {"type": "web", "canonical_url": "https://example.com/b"},
+        {"type": "youtube", "video_id": "abc123def45"},
+    ]
+
+
+def test_normalize_source_suggestion_candidate_coerces_youtube_and_web(monkeypatch) -> None:
+    monkeypatch.setattr(tasks, "_validate_public_url", lambda url: url)
+
+    youtube = tasks._normalize_source_suggestion_candidate(
+        {
+            "type": "web",
+            "url": "https://www.youtube.com/watch?v=abc123def45",
+            "title": "Demo",
+            "confidence": 0.9,
+        },
+        hub_id="hub-1",
+        seed_source_ids=["src-1"],
+        search_metadata={"model": "test"},
+    )
+    web = tasks._normalize_source_suggestion_candidate(
+        {
+            "type": "web",
+            "url": "https://www.example.com/docs/?utm_source=test",
+            "title": "Docs",
+            "confidence": 0.8,
+        },
+        hub_id="hub-1",
+        seed_source_ids=["src-1"],
+        search_metadata={"model": "test"},
+    )
+
+    assert youtube is not None
+    assert youtube["type"] == "youtube"
+    assert youtube["video_id"] == "abc123def45"
+    assert web is not None
+    assert web["canonical_url"] == "https://example.com/docs"
+
+
+def test_discover_source_suggestions_returns_empty_on_failure(monkeypatch) -> None:
+    monkeypatch.setattr(tasks.settings, "openai_api_key", "test-key")
+
+    class FakeResponses:
+        def create(self, **_kwargs):
+            raise RuntimeError("boom")
+
+    class FakeOpenAI:
+        def __init__(self, api_key: str):
+            self.responses = FakeResponses()
+
+    monkeypatch.setattr(tasks, "OpenAI", FakeOpenAI)
+
+    candidates, metadata = tasks._discover_source_suggestions("Hub context")
+    assert candidates == []
+    assert metadata["error"] == "boom"
+
+
+def test_discover_source_suggestions_requests_youtube_when_relevant(monkeypatch) -> None:
+    monkeypatch.setattr(tasks.settings, "openai_api_key", "test-key")
+    captured: dict[str, object] = {}
+
+    class FakeResponses:
+        def create(self, **kwargs):
+            captured.update(kwargs)
+            return type("Response", (), {"output": [], "usage": None})()
+
+    class FakeOpenAI:
+        def __init__(self, api_key: str):
+            self.responses = FakeResponses()
+
+    monkeypatch.setattr(tasks, "OpenAI", FakeOpenAI)
+    monkeypatch.setattr(tasks, "_extract_response_text", lambda _response: "[]")
+    monkeypatch.setattr(tasks, "_parse_source_suggestion_candidates", lambda _raw: [])
+    monkeypatch.setattr(tasks, "_extract_web_search_results", lambda _response: [])
+
+    candidates, metadata = tasks._discover_source_suggestions("Hub context")
+
+    assert candidates == []
+    assert metadata["model"] == tasks.settings.suggested_sources_model
+    messages = captured["input"]
+    system_prompt = messages[0]["content"]
+    assert "include at least 1 YouTube video" in system_prompt
+
+
+def test_get_redis_client_normalizes_rediss_ssl_flags(monkeypatch) -> None:
+    captured = {}
+
+    def fake_from_url(url: str, **kwargs):
+        captured["url"] = url
+        captured["kwargs"] = kwargs
+        return object()
+
+    monkeypatch.setattr(tasks.settings, "redis_url", "rediss://user:pass@example.upstash.io:6379/0?ssl_cert_reqs=CERT_NONE")
+    monkeypatch.setattr(tasks.redis.Redis, "from_url", fake_from_url)
+
+    tasks._get_redis_client()
+
+    assert captured["url"] == "rediss://user:pass@example.upstash.io:6379/0"
+    assert captured["kwargs"]["ssl_cert_reqs"] == tasks.ssl.CERT_NONE
+    assert captured["kwargs"]["ssl_check_hostname"] is False

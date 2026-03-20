@@ -22,6 +22,8 @@ vi.mock("../../lib/api", () => ({
   createSourceUploadUrl: vi.fn(),
   createWebSource: vi.fn(),
   createYouTubeSource: vi.fn(),
+  listSourceSuggestions: vi.fn().mockResolvedValue([]),
+  decideSourceSuggestion: vi.fn(),
   deleteSource: vi.fn(),
   enqueueSource: vi.fn(),
   failSource: vi.fn(),

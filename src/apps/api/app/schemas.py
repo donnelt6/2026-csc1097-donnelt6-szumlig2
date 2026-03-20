@@ -95,6 +95,17 @@ class SourceType(str, Enum):
     youtube = "youtube"
 
 
+class SourceSuggestionType(str, Enum):
+    web = "web"
+    youtube = "youtube"
+
+
+class SourceSuggestionStatus(str, Enum):
+    pending = "pending"
+    accepted = "accepted"
+    declined = "declined"
+
+
 class Source(BaseModel):
     id: str
     hub_id: str
@@ -184,6 +195,35 @@ class SourceStatusResponse(BaseModel):
 
 class SourceFailureRequest(StrictModel):
     failure_reason: str = Field(..., min_length=1, max_length=500)
+
+
+class SourceSuggestion(BaseModel):
+    id: str
+    hub_id: str
+    type: SourceSuggestionType
+    status: SourceSuggestionStatus
+    url: str
+    canonical_url: Optional[str] = None
+    video_id: Optional[str] = None
+    title: Optional[str] = None
+    description: Optional[str] = None
+    rationale: Optional[str] = None
+    confidence: float
+    seed_source_ids: List[str] = Field(default_factory=list)
+    search_metadata: Optional[dict] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    reviewed_at: Optional[datetime] = None
+    reviewed_by: Optional[str] = None
+    accepted_source_id: Optional[str] = None
+
+
+class SourceSuggestionDecision(StrictModel):
+    action: SourceSuggestionStatus
+
+
+class SourceSuggestionDecisionResponse(BaseModel):
+    suggestion: SourceSuggestion
+    source: Optional[Source] = None
 
 
 class Citation(BaseModel):

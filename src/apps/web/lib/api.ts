@@ -14,6 +14,8 @@ import type {
   ReminderCandidateStatus,
   ReminderUpdateAction,
   Source,
+  SourceSuggestion,
+  SourceSuggestionStatus,
 } from "./types";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
@@ -163,6 +165,29 @@ export async function deleteSource(sourceId: string): Promise<void> {
   if (!res.ok) {
     await handle(res);
   }
+}
+
+export async function listSourceSuggestions(params: {
+  hubId: string;
+  status?: SourceSuggestionStatus;
+}): Promise<SourceSuggestion[]> {
+  const search = new URLSearchParams();
+  search.set("hub_id", params.hubId);
+  if (params.status) search.set("status", params.status);
+  const res = await authedFetch(`${API_BASE}/sources/suggestions?${search}`, { cache: "no-store" });
+  return handle<SourceSuggestion[]>(res);
+}
+
+export async function decideSourceSuggestion(
+  suggestionId: string,
+  data: { action: SourceSuggestionStatus }
+): Promise<{ suggestion: SourceSuggestion; source?: Source }> {
+  const res = await authedFetch(`${API_BASE}/sources/suggestions/${suggestionId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  return handle(res);
 }
 
 export async function getChatHistory(hubId: string): Promise<HistoryMessage[]> {
