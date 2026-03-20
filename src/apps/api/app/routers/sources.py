@@ -23,7 +23,7 @@ from ..schemas import (
 )
 from ..dependencies import CurrentUser, get_current_user, get_supabase_user_client, rate_limit_user_ip
 from ..services.queue import celery_app
-from ..services.store import store
+from ..services.store import ConflictError, store
 from .errors import raise_postgrest_error
 
 router = APIRouter(prefix="/sources", tags=["sources"])
@@ -172,48 +172,65 @@ def decide_source_suggestion(
         "accepted_source_id": None,
     }
 
-    accepted_source: Source | None = None
     try:
-        if decision.action == SourceSuggestionStatus.accepted:
-            accepted_source = store.find_existing_source_for_suggestion(client, suggestion)
-            if accepted_source is None:
-                if suggestion.type == SourceSuggestionType.web:
-                    accepted_source = store.create_web_source(
-                        client,
-                        WebSourceCreate(hub_id=UUID(suggestion.hub_id), url=suggestion.url),
-                    )
-                    if not accepted_source.storage_path:
-                        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Source storage path missing")
-                    celery_app.send_task(
-                        "ingest_web_source",
-                        args=[accepted_source.id, accepted_source.hub_id, suggestion.url, accepted_source.storage_path],
-                    )
-                elif suggestion.type == SourceSuggestionType.youtube:
-                    accepted_source = store.create_youtube_source(
-                        client,
-                        YouTubeSourceCreate(hub_id=UUID(suggestion.hub_id), url=suggestion.url),
-                    )
-                    if not accepted_source.storage_path:
-                        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Source storage path missing")
-                    video_id = None
-                    if isinstance(accepted_source.ingestion_metadata, dict):
-                        video_id = accepted_source.ingestion_metadata.get("video_id")
-                    celery_app.send_task(
-                        "ingest_youtube_source",
-                        args=[
-                            accepted_source.id,
-                            accepted_source.hub_id,
-                            suggestion.url,
-                            accepted_source.storage_path,
-                            None,
-                            False,
-                            video_id,
-                        ],
-                    )
-                else:
-                    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unsupported suggestion type")
-            review_payload["accepted_source_id"] = accepted_source.id
-        suggestion = store.update_source_suggestion(client, str(suggestion_id), review_payload)
+        suggestion = store.update_source_suggestion(
+            client,
+            str(suggestion_id),
+            review_payload,
+            expected_status=SourceSuggestionStatus.pending,
+        )
+    except ConflictError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Suggestion already reviewed.") from exc
+    except APIError as exc:
+        raise_postgrest_error(exc)
+
+    if decision.action == SourceSuggestionStatus.declined:
+        return SourceSuggestionDecisionResponse(suggestion=suggestion, source=None)
+
+    accepted_source: Source | None = None
+    task_name: str | None = None
+    task_args: list[object] | None = None
+    try:
+        accepted_source = store.find_existing_source_for_suggestion(client, suggestion)
+        if accepted_source is None:
+            if suggestion.type == SourceSuggestionType.web:
+                accepted_source = store.create_web_source(
+                    client,
+                    WebSourceCreate(hub_id=UUID(suggestion.hub_id), url=suggestion.url),
+                )
+                if not accepted_source.storage_path:
+                    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Source storage path missing")
+                task_name = "ingest_web_source"
+                task_args = [accepted_source.id, accepted_source.hub_id, suggestion.url, accepted_source.storage_path]
+            elif suggestion.type == SourceSuggestionType.youtube:
+                accepted_source = store.create_youtube_source(
+                    client,
+                    YouTubeSourceCreate(hub_id=UUID(suggestion.hub_id), url=suggestion.url),
+                )
+                if not accepted_source.storage_path:
+                    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Source storage path missing")
+                video_id = None
+                if isinstance(accepted_source.ingestion_metadata, dict):
+                    video_id = accepted_source.ingestion_metadata.get("video_id")
+                task_name = "ingest_youtube_source"
+                task_args = [
+                    accepted_source.id,
+                    accepted_source.hub_id,
+                    suggestion.url,
+                    accepted_source.storage_path,
+                    None,
+                    False,
+                    video_id,
+                ]
+            else:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unsupported suggestion type")
+        suggestion = store.update_source_suggestion(
+            client,
+            str(suggestion_id),
+            {"accepted_source_id": accepted_source.id},
+        )
+        if task_name is not None and task_args is not None:
+            celery_app.send_task(task_name, args=task_args)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     except APIError as exc:

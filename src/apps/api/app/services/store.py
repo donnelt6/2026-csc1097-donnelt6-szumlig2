@@ -50,6 +50,11 @@ from ..schemas import (
     YouTubeSourceCreate,
 )
 
+
+class ConflictError(RuntimeError):
+    """Raised when a conditional update loses a concurrency race."""
+
+
 class SupabaseStore:
     """Supabase-backed store for hubs, sources, and chat."""
 
@@ -378,9 +383,30 @@ class SupabaseStore:
             raise KeyError("Source suggestion not found")
         return SourceSuggestion(**response.data[0])
 
-    def update_source_suggestion(self, client: Client, suggestion_id: str, payload: dict) -> SourceSuggestion:
-        response = client.table("source_suggestions").update(payload).eq("id", str(suggestion_id)).execute()
+    def update_source_suggestion(
+        self,
+        client: Client,
+        suggestion_id: str,
+        payload: dict,
+        *,
+        expected_status: Optional[SourceSuggestionStatus | str] = None,
+    ) -> SourceSuggestion:
+        query = client.table("source_suggestions").update(payload).eq("id", str(suggestion_id))
+        if expected_status is not None:
+            status_value = expected_status.value if isinstance(expected_status, SourceSuggestionStatus) else str(expected_status)
+            query = query.eq("status", status_value)
+        response = query.execute()
         if not response.data:
+            if expected_status is not None:
+                existing = (
+                    client.table("source_suggestions")
+                    .select("id")
+                    .eq("id", str(suggestion_id))
+                    .limit(1)
+                    .execute()
+                )
+                if existing.data:
+                    raise ConflictError("Source suggestion no longer in expected state")
             raise KeyError("Source suggestion not found")
         return SourceSuggestion(**response.data[0])
 

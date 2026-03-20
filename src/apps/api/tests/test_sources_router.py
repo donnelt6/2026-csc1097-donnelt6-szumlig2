@@ -8,6 +8,7 @@ from app.routers import sources as sources_router
 from app.schemas import HubMember, MembershipRole, Source, SourceStatus, SourceSuggestion, SourceSuggestionStatus, SourceSuggestionType, SourceType
 from app.services import rate_limit as rate_limit_module
 from app.services import store as store_module
+from app.services.store import ConflictError
 
 
 class FixedRateLimiter:
@@ -423,7 +424,11 @@ def test_accept_web_source_suggestion_success(client, monkeypatch) -> None:
     )
     monkeypatch.setattr(store_module.store, "find_existing_source_for_suggestion", lambda _client, _suggestion: None)
     monkeypatch.setattr(store_module.store, "create_web_source", lambda _client, _payload: source)
-    monkeypatch.setattr(store_module.store, "update_source_suggestion", lambda _client, _suggestion_id, _payload: accepted)
+    monkeypatch.setattr(
+        store_module.store,
+        "update_source_suggestion",
+        lambda _client, _suggestion_id, _payload, **_kwargs: accepted,
+    )
 
     sent = {}
 
@@ -478,7 +483,11 @@ def test_accept_youtube_source_suggestion_success(client, monkeypatch) -> None:
     )
     monkeypatch.setattr(store_module.store, "find_existing_source_for_suggestion", lambda _client, _suggestion: None)
     monkeypatch.setattr(store_module.store, "create_youtube_source", lambda _client, _payload: source)
-    monkeypatch.setattr(store_module.store, "update_source_suggestion", lambda _client, _suggestion_id, _payload: accepted)
+    monkeypatch.setattr(
+        store_module.store,
+        "update_source_suggestion",
+        lambda _client, _suggestion_id, _payload, **_kwargs: accepted,
+    )
 
     sent = {}
 
@@ -522,7 +531,11 @@ def test_decline_source_suggestion_success(client, monkeypatch) -> None:
             accepted_at=datetime.now(timezone.utc),
         ),
     )
-    monkeypatch.setattr(store_module.store, "update_source_suggestion", lambda _client, _suggestion_id, _payload: declined)
+    monkeypatch.setattr(
+        store_module.store,
+        "update_source_suggestion",
+        lambda _client, _suggestion_id, _payload, **_kwargs: declined,
+    )
 
     resp = client.patch(f"/sources/suggestions/{suggestion_id}", json={"action": "declined"})
     assert resp.status_code == 200
@@ -581,6 +594,44 @@ def test_source_suggestion_conflict_when_already_reviewed(client, monkeypatch) -
         created_at=datetime.now(timezone.utc),
     )
     monkeypatch.setattr(store_module.store, "get_source_suggestion", lambda _client, _suggestion_id: suggestion)
+
+    resp = client.patch(f"/sources/suggestions/{suggestion.id}", json={"action": "accepted"})
+    assert resp.status_code == 409
+
+
+def test_source_suggestion_conflict_when_review_claim_is_lost(client, monkeypatch) -> None:
+    suggestion = SourceSuggestion(
+        id="77777777-7777-7777-7777-777777777777",
+        hub_id="aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+        type=SourceSuggestionType.web,
+        status=SourceSuggestionStatus.pending,
+        url="https://example.com/docs",
+        canonical_url="https://example.com/docs",
+        title="Example docs",
+        confidence=0.82,
+        created_at=datetime.now(timezone.utc),
+    )
+    monkeypatch.setattr(store_module.store, "get_source_suggestion", lambda _client, _suggestion_id: suggestion)
+    monkeypatch.setattr(
+        store_module.store,
+        "get_member_role",
+        lambda _client, _hub_id, _user_id: HubMember(
+            hub_id=suggestion.hub_id,
+            user_id="00000000-0000-0000-0000-000000000001",
+            role=MembershipRole.editor,
+            accepted_at=datetime.now(timezone.utc),
+        ),
+    )
+    monkeypatch.setattr(
+        store_module.store,
+        "update_source_suggestion",
+        lambda _client, _suggestion_id, _payload, **_kwargs: (_ for _ in ()).throw(ConflictError("lost race")),
+    )
+    monkeypatch.setattr(
+        store_module.store,
+        "create_web_source",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("create_web_source should not run after a lost claim")),
+    )
 
     resp = client.patch(f"/sources/suggestions/{suggestion.id}", json={"action": "accepted"})
     assert resp.status_code == 409
