@@ -1752,6 +1752,11 @@ a {
 .hub-card-avatars {
   display: flex;
   align-items: center;
+  flex-direction: row-reverse;
+}
+
+.hub-card-avatars > * + * {
+  margin-right: -8px;
 }
 
 /* Pagination */
@@ -1845,17 +1850,26 @@ a {
 /* Hub Card Avatars */
 
 .hub-avatar {
-  width: 24px;
-  height: 24px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
-  background: var(--bg-secondary);
   border: 2px solid var(--card);
-  font-size: 0.5rem;
+  font-size: 0.625rem;
   font-weight: var(--font-bold);
-  color: var(--text-secondary);
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+.hub-avatar--initials {
+  background: var(--accent);
+  color: #ffffff;
+}
+
+.hub-avatar--count {
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  font-size: 0.5rem;
 }
 
 /* Buttons */

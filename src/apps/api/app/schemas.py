@@ -33,6 +33,7 @@ class Hub(BaseModel):
     members_count: Optional[int] = None
     sources_count: Optional[int] = None
     is_favourite: Optional[bool] = None
+    member_emails: Optional[List[str]] = None
 
 
 class HubCreate(StrictModel):

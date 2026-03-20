@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   DocumentIcon,
-  UserGroupIcon,
+  UserIcon,
   PlusCircleIcon,
   StarIcon as StarOutline,
   EllipsisVerticalIcon,
@@ -169,17 +169,6 @@ export function HubsList({ searchQuery, filters, onHubCountChange, onCreateHub }
       {error && <p className="muted">Failed to load hubs: {(error as Error).message}</p>}
 
       <div className="hubs-grid">
-        {/* Create New Hub card — only on page 1 */}
-        {currentPage === 1 && (
-          <button className="hub-card hub-card--create" onClick={onCreateHub} type="button">
-            <div className="hub-card-create-icon">
-              <PlusCircleIcon />
-            </div>
-            <h3 className="hub-card-create-title">Create New Hub</h3>
-            <p className="hub-card-create-desc">Initialize a new secure documentation environment</p>
-          </button>
-        )}
-
         {paginatedHubs?.map((hub: Hub) => (
           <Link key={hub.id} href={`/hubs/${hub.id}`} className="hub-card">
             <div className="hub-card-top">
@@ -218,7 +207,7 @@ export function HubsList({ searchQuery, filters, onHubCountChange, onCreateHub }
                   <span className="hub-stat-value">{hub.sources_count ?? 0} {(hub.sources_count ?? 0) === 1 ? 'Doc' : 'Docs'}</span>
                 </span>
                 <span className="hub-stat">
-                  <UserGroupIcon className="hub-stat-icon" aria-hidden="true" />
+                  <UserIcon className="hub-stat-icon" aria-hidden="true" />
                   <span className="hub-stat-value">{hub.members_count ?? 0} {(hub.members_count ?? 0) === 1 ? 'Member' : 'Members'}</span>
                 </span>
               </div>
@@ -226,17 +215,34 @@ export function HubsList({ searchQuery, filters, onHubCountChange, onCreateHub }
                 <span className="hub-card-time">
                   Modified {formatRelativeTime(hub.last_accessed_at)}
                 </span>
-                {(hub.members_count ?? 0) > 0 && (
+                {(hub.member_emails?.length ?? 0) > 0 && (
                   <div className="hub-card-avatars">
-                    <div className="hub-avatar">
-                      {(hub.members_count ?? 0) > 1 ? `+${(hub.members_count ?? 0) - 1}` : "1"}
-                    </div>
+                    {hub.member_emails!.slice(0, 2).map((email, i) => (
+                      <div key={i} className="hub-avatar hub-avatar--initials" title={email}>
+                        {email.charAt(0).toUpperCase()}
+                      </div>
+                    ))}
+                    {hub.member_emails!.length > 2 && (
+                      <div className="hub-avatar hub-avatar--count">
+                        +{hub.member_emails!.length - 2}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
             </div>
           </Link>
         ))}
+
+        {currentPage === 1 && (
+          <button className="hub-card hub-card--create" onClick={onCreateHub} type="button">
+            <div className="hub-card-create-icon">
+              <PlusCircleIcon />
+            </div>
+            <h3 className="hub-card-create-title">Create New Hub</h3>
+            <p className="hub-card-create-desc">Initialize a new secure documentation environment</p>
+          </button>
+        )}
       </div>
 
       {!isLoading && filteredHubs?.length === 0 && (
