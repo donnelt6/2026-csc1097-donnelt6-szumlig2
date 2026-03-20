@@ -1385,7 +1385,6 @@ a {
   align-items: center;
   gap: 12px;
   flex: 1;
-  max-width: 480px;
 }
 
 .hubs-toolbar-right {
@@ -1399,6 +1398,7 @@ a {
 .hubs-toolbar-search {
   position: relative;
   flex: 1;
+  min-width: 200px;
 }
 
 .hubs-toolbar-search-icon {

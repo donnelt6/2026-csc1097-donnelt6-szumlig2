@@ -56,7 +56,6 @@ export function Sidebar({ state, onStateChange, mobileOpen, onMobileClose, onCre
     <aside className={sidebarClasses}>
       <div className="sidebar-header">
         <Link href="/" className="sidebar-brand" onClick={handleLinkClick}>
-          <span className="sidebar-brand-mark" aria-hidden="true" />
           <span className="sidebar-brand-text">Caddie</span>
         </Link>
         {isCollapsed ? (

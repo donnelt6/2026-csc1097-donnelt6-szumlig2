@@ -94,18 +94,6 @@ export function HubsToolbar({ filters, onFiltersChange, searchQuery, onSearchCha
   return (
     <div className="hubs-toolbar">
       <div className="hubs-toolbar-left">
-        <div className="hubs-toolbar-search">
-          <MagnifyingGlassIcon className="hubs-toolbar-search-icon" />
-          <input
-            type="text"
-            placeholder="Search documentation hubs..."
-            value={searchQuery}
-            onChange={(e) => onSearchChange(e.target.value)}
-            className="hubs-toolbar-search-input"
-          />
-        </div>
-      </div>
-      <div className="hubs-toolbar-right">
         <div className="hubs-toolbar-tabs">
           <button
             className={`hubs-tab ${!showOnlyFavourites ? 'hubs-tab--active' : ''}`}
@@ -255,6 +243,16 @@ export function HubsToolbar({ filters, onFiltersChange, searchQuery, onSearchCha
             </ul>
           </div>
         </details>
+        <div className="hubs-toolbar-search">
+          <MagnifyingGlassIcon className="hubs-toolbar-search-icon" />
+          <input
+            type="text"
+            placeholder="Search hubs..."
+            value={searchQuery}
+            onChange={(e) => onSearchChange(e.target.value)}
+            className="hubs-toolbar-search-input"
+          />
+        </div>
       </div>
     </div>
   );
