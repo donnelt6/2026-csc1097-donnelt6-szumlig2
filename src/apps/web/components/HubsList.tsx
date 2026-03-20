@@ -51,43 +51,24 @@ export function HubsList({ searchQuery, filters, onHubCountChange, onCreateHub }
     queryFn: listHubs,
   });
 
-  const {
-    sortField,
-    sortDirection,
-    selectedRoles,
-    minMembers,
-    maxMembers,
-    minSources,
-    maxSources,
-    showOnlyFavourites,
-  } = filters;
+  const { sortField, sortDirection, selectedRoles, typeTab, statusTab } = filters;
 
   const toggleFavourite = async (hubId: string, currentState: boolean, e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-
     const newState = !currentState;
-
     queryClient.setQueryData(["hubs"], (oldHubs: typeof data) => {
       if (!oldHubs) return oldHubs;
-      return oldHubs.map((h) =>
-        h.id === hubId ? { ...h, is_favourite: newState } : h
-      );
+      return oldHubs.map((h) => h.id === hubId ? { ...h, is_favourite: newState } : h);
     });
-
     try {
       await toggleHubFavourite(hubId, newState);
-    } catch (error) {
-      console.error("Failed to toggle favourite:", error);
+    } catch {
       queryClient.invalidateQueries({ queryKey: ["hubs"] });
     }
   };
 
   const normalizedQuery = searchQuery.trim().toLowerCase();
-  const minMembersNum = minMembers ? parseInt(minMembers, 10) : null;
-  const maxMembersNum = maxMembers ? parseInt(maxMembers, 10) : null;
-  const minSourcesNum = minSources ? parseInt(minSources, 10) : null;
-  const maxSourcesNum = maxSources ? parseInt(maxSources, 10) : null;
 
   let filteredHubs = data?.filter((hub: Hub) => {
     if (normalizedQuery) {
@@ -95,30 +76,17 @@ export function HubsList({ searchQuery, filters, onHubCountChange, onCreateHub }
       const matchesDescription = hub.description?.toLowerCase().includes(normalizedQuery) ?? false;
       if (!matchesName && !matchesDescription) return false;
     }
-
-    if (selectedRoles.size > 0 && hub.role && !selectedRoles.has(hub.role)) {
-      return false;
-    }
-
-    const memberCount = hub.members_count ?? 0;
-    if (minMembersNum !== null && memberCount < minMembersNum) return false;
-    if (maxMembersNum !== null && memberCount > maxMembersNum) return false;
-
-    const sourceCount = hub.sources_count ?? 0;
-    if (minSourcesNum !== null && sourceCount < minSourcesNum) return false;
-    if (maxSourcesNum !== null && sourceCount > maxSourcesNum) return false;
-
-    if (showOnlyFavourites && !hub.is_favourite) {
-      return false;
-    }
-
+    if (selectedRoles.size > 0 && hub.role && !selectedRoles.has(hub.role)) return false;
+    if (typeTab === "pinned" && !hub.is_favourite) return false;
+    if (typeTab === "shared" && hub.role === "owner") return false;
+    // "archived" status tab is placeholder — no hubs to show yet
+    if (statusTab === "archived") return false;
     return true;
   });
 
   if (filteredHubs) {
     filteredHubs = [...filteredHubs].sort((a, b) => {
       let comparison = 0;
-
       switch (sortField) {
         case "accessed": {
           const aTime = a.last_accessed_at ? new Date(a.last_accessed_at).getTime() : 0;
@@ -126,34 +94,32 @@ export function HubsList({ searchQuery, filters, onHubCountChange, onCreateHub }
           comparison = bTime - aTime;
           break;
         }
+        case "name": {
+          comparison = (a.name ?? "").localeCompare(b.name ?? "");
+          break;
+        }
         case "members": {
-          const aMembers = a.members_count ?? 0;
-          const bMembers = b.members_count ?? 0;
-          comparison = bMembers - aMembers;
+          comparison = (b.members_count ?? 0) - (a.members_count ?? 0);
           break;
         }
         case "sources": {
-          const aSources = a.sources_count ?? 0;
-          const bSources = b.sources_count ?? 0;
-          comparison = bSources - aSources;
+          comparison = (b.sources_count ?? 0) - (a.sources_count ?? 0);
           break;
         }
       }
-
       return sortDirection === "desc" ? comparison : -comparison;
     });
   }
 
   const hubCount = filteredHubs?.length ?? 0;
   const [currentPage, setCurrentPage] = useState(1);
-  const gridSlots = 6;
-  const firstPageHubs = gridSlots - 1; // 5 hubs + create card on page 1
+  const gridSlots = 8;
+  const firstPageHubs = gridSlots - 1;
   const totalPages = hubCount <= firstPageHubs ? 1 : 1 + Math.ceil((hubCount - firstPageHubs) / gridSlots);
 
-  // Reset to page 1 when filters/search change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, filters.showOnlyFavourites, filters.sortField, filters.sortDirection]);
+  }, [searchQuery, filters.typeTab, filters.statusTab, filters.sortField, filters.sortDirection]);
 
   const paginatedHubs = currentPage === 1
     ? filteredHubs?.slice(0, firstPageHubs)
@@ -168,7 +134,17 @@ export function HubsList({ searchQuery, filters, onHubCountChange, onCreateHub }
       {isLoading && <p className="muted">Loading hubs...</p>}
       {error && <p className="muted">Failed to load hubs: {(error as Error).message}</p>}
 
-      <div className="hubs-grid">
+      <div className="hubs-grid hubs-grid--4col">
+        {currentPage === 1 && (
+          <button className="hub-card hub-card--create" onClick={onCreateHub} type="button">
+            <div className="hub-card-create-icon">
+              <PlusCircleIcon />
+            </div>
+            <h3 className="hub-card-create-title">Create New Hub</h3>
+            <p className="hub-card-create-desc">Initialize a new secure documentation environment</p>
+          </button>
+        )}
+
         {paginatedHubs?.map((hub: Hub) => (
           <Link key={hub.id} href={`/hubs/${hub.id}`} className="hub-card">
             <div className="hub-card-top">
@@ -233,16 +209,6 @@ export function HubsList({ searchQuery, filters, onHubCountChange, onCreateHub }
             </div>
           </Link>
         ))}
-
-        {currentPage === 1 && (
-          <button className="hub-card hub-card--create" onClick={onCreateHub} type="button">
-            <div className="hub-card-create-icon">
-              <PlusCircleIcon />
-            </div>
-            <h3 className="hub-card-create-title">Create New Hub</h3>
-            <p className="hub-card-create-desc">Initialize a new secure documentation environment</p>
-          </button>
-        )}
       </div>
 
       {!isLoading && filteredHubs?.length === 0 && (
@@ -251,8 +217,7 @@ export function HubsList({ searchQuery, filters, onHubCountChange, onCreateHub }
         </div>
       )}
 
-      {totalPages > 1 && (
-        <div className="hubs-pagination">
+      <div className="hubs-pagination" style={totalPages <= 1 ? { visibility: 'hidden' } : undefined}>
           <p className="hubs-pagination-info">
             Showing {currentPage === 1 ? 1 : firstPageHubs + (currentPage - 2) * gridSlots + 1}–{Math.min(currentPage === 1 ? firstPageHubs : firstPageHubs + (currentPage - 1) * gridSlots, hubCount)} of {hubCount} Hubs
           </p>
@@ -281,8 +246,7 @@ export function HubsList({ searchQuery, filters, onHubCountChange, onCreateHub }
               <ChevronRightIcon className="hubs-pagination-arrow-icon" />
             </button>
           </div>
-        </div>
-      )}
+      </div>
     </div>
   );
 }

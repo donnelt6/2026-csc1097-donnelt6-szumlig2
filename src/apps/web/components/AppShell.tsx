@@ -2,11 +2,12 @@
 
 import { useState, useCallback, useLayoutEffect } from 'react';
 import { usePathname } from 'next/navigation';
-import { Bars3Icon } from '@heroicons/react/24/outline';
+import { Bars3Icon, MagnifyingGlassIcon } from '@heroicons/react/24/outline';
 import { Sidebar } from './navigation/Sidebar';
 import { ProfileMenu } from './navigation/ProfileMenu';
 import { NotificationsMenu } from './navigation/NotificationsMenu';
 import { useAuth } from './auth/AuthProvider';
+import { useSearch } from '../lib/SearchContext';
 
 type SidebarState = 'open' | 'collapsed' | 'hidden';
 
@@ -19,6 +20,7 @@ export function AppShell({ children }: AppShellProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const pathname = usePathname();
   const { user, loading } = useAuth();
+  const { searchQuery, setSearchQuery } = useSearch();
 
   const isAuthPage = pathname.startsWith('/auth');
   const showChrome = !isAuthPage && !loading && !!user;
@@ -82,9 +84,18 @@ export function AppShell({ children }: AppShellProps) {
               <Bars3Icon />
             </button>
             <a className="brand" href="/">
-              <span className="brand-mark" aria-hidden="true" />
               Caddie
             </a>
+          </div>
+          <div className="nav-search">
+            <MagnifyingGlassIcon className="nav-search-icon" />
+            <input
+              type="text"
+              placeholder="Search documentation hubs..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="nav-search-input"
+            />
           </div>
           <div className="nav-actions">
             <NotificationsMenu />

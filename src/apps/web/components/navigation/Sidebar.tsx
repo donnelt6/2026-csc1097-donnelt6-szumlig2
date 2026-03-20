@@ -11,7 +11,6 @@ import {
   ChevronRightIcon,
   XMarkIcon,
   PlusIcon,
-  QuestionMarkCircleIcon,
 } from '@heroicons/react/24/outline';
 import { ThemeToggle } from './ThemeToggle';
 import { HubPanels } from './HubPanels';
@@ -138,7 +137,7 @@ export function Sidebar({ state, onStateChange, mobileOpen, onMobileClose, onCre
 
       <div className="sidebar-footer">
         <button
-          className="sidebar-new-hub-button"
+          className="sidebar-item sidebar-new-hub-button"
           onClick={() => {
             if (onCreateHub) {
               onCreateHub();
@@ -149,20 +148,11 @@ export function Sidebar({ state, onStateChange, mobileOpen, onMobileClose, onCre
           }}
           title={isCollapsed ? 'New Hub' : undefined}
         >
-          <PlusIcon className="sidebar-new-hub-icon" />
+          <PlusIcon className="sidebar-item-icon" />
           <span className="sidebar-item-text">New Hub</span>
         </button>
         <div className="sidebar-footer-links">
           <ThemeToggle />
-          <Link
-            href="/help"
-            className="sidebar-item"
-            title={isCollapsed ? 'Help Center' : undefined}
-            onClick={handleLinkClick}
-          >
-            <QuestionMarkCircleIcon className="sidebar-item-icon" />
-            <span className="sidebar-item-text">Help Center</span>
-          </Link>
         </div>
       </div>
     </aside>

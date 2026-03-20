@@ -15,6 +15,7 @@ import {
 import { HubsList } from "../components/HubsList";
 import { HubsToolbar, type HubsFilterState } from "../components/HubsToolbar";
 import { createHub } from "../lib/api";
+import { useSearch } from "../lib/SearchContext";
 
 const HUB_ICONS = [
   RectangleStackIcon,
@@ -53,7 +54,7 @@ export default function HomePage() {
   const [overlayRendered, setOverlayRendered] = useState(false);
   const [overlayVisible, setOverlayVisible] = useState(false);
 
-  const [searchQuery, setSearchQuery] = useState("");
+  const { searchQuery } = useSearch();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [createModalOpen, setCreateModalOpen] = useState(false);
@@ -64,11 +65,8 @@ export default function HomePage() {
     sortField: "accessed",
     sortDirection: "desc",
     selectedRoles: new Set(),
-    minMembers: "",
-    maxMembers: "",
-    minSources: "",
-    maxSources: "",
-    showOnlyFavourites: false,
+    typeTab: "all",
+    statusTab: "all",
   });
 
   const createMutation = useMutation({
@@ -199,8 +197,6 @@ export default function HomePage() {
                 filters={filters}
                 onFiltersChange={setFilters}
                 hubCount={hubCount}
-                searchQuery={searchQuery}
-                onSearchChange={setSearchQuery}
               />
             </div>
           </div>
