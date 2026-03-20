@@ -14,6 +14,8 @@ from ..core.config import get_settings
 from ..schemas import (
     ChatRequest,
     ChatResponse,
+    ChatSessionDetail,
+    ChatSessionSummary,
     Citation,
     FaqEntry,
     FaqGenerateRequest,
@@ -48,6 +50,7 @@ from ..schemas import (
     SourceType,
     WebSourceCreate,
     YouTubeSourceCreate,
+    SessionMessage,
 )
 
 
@@ -586,62 +589,229 @@ class SupabaseStore:
         if not response.data:
             raise KeyError("Hub membership not found")
 
-    def _fetch_recent_messages(
-        self, client: Client, user_id: str, hub_id: str, limit: int, fields: str
-    ) -> List[Dict[str, Any]]:
-        sessions_resp = (
-            client.table("chat_sessions")
+    def _complete_source_ids_for_hub(self, client: Client, hub_id: str) -> List[str]:
+        response = (
+            client.table("sources")
             .select("id")
-            .eq("hub_id", hub_id)
-            .eq("created_by", user_id)
+            .eq("hub_id", str(hub_id))
+            .eq("status", SourceStatus.complete.value)
             .order("created_at", desc=True)
-            .limit(limit)
             .execute()
         )
-        if not sessions_resp.data:
+        return [str(row["id"]) for row in (response.data or [])]
+
+    def _normalize_source_ids_to_complete_order(
+        self,
+        requested_source_ids: Optional[List[str]],
+        complete_source_ids: List[str],
+    ) -> List[str]:
+        if requested_source_ids is None:
             return []
-        session_ids = [s["id"] for s in sessions_resp.data]
-        messages_resp = (
+        requested = {str(source_id) for source_id in requested_source_ids if str(source_id)}
+        return [source_id for source_id in complete_source_ids if source_id in requested]
+
+    def _normalize_chat_source_ids(
+        self,
+        client: Client,
+        hub_id: str,
+        requested_source_ids: Optional[List[str]],
+    ) -> tuple[List[str], Optional[List[str]]]:
+        complete_source_ids = self._complete_source_ids_for_hub(client, hub_id)
+        if requested_source_ids is None:
+            return complete_source_ids, None
+        normalized_source_ids = self._normalize_source_ids_to_complete_order(
+            requested_source_ids,
+            complete_source_ids,
+        )
+        return normalized_source_ids, normalized_source_ids
+
+    def _serialize_chat_session(
+        self,
+        row: Dict[str, Any],
+        complete_source_ids: List[str],
+    ) -> ChatSessionSummary:
+        source_ids = self._normalize_source_ids_to_complete_order(
+            [str(source_id) for source_id in (row.get("source_ids") or [])],
+            complete_source_ids,
+        )
+        return ChatSessionSummary(
+            id=str(row["id"]),
+            hub_id=str(row["hub_id"]),
+            title=str(row.get("title") or "New Chat"),
+            scope=row.get("scope") or HubScope.hub.value,
+            source_ids=source_ids,
+            created_at=row["created_at"],
+            last_message_at=row.get("last_message_at") or row["created_at"],
+        )
+
+    def _get_chat_session_row(
+        self,
+        client: Client,
+        session_id: str,
+        *,
+        include_deleted: bool = False,
+    ) -> Dict[str, Any]:
+        query = (
+            client.table("chat_sessions")
+            .select("id, hub_id, title, scope, source_ids, created_at, last_message_at, deleted_at")
+            .eq("id", str(session_id))
+            .limit(1)
+        )
+        if not include_deleted:
+            query = query.is_("deleted_at", "null")
+        response = query.execute()
+        if not response.data:
+            raise KeyError("Chat session not found")
+        return response.data[0]
+
+    def _list_session_messages(
+        self,
+        client: Client,
+        session_id: str,
+        fields: str = "id, role, content, citations, created_at",
+        limit: Optional[int] = None,
+    ) -> List[Dict[str, Any]]:
+        query = (
             client.table("messages")
             .select(fields)
-            .in_("session_id", session_ids)
+            .eq("session_id", str(session_id))
             .order("created_at", desc=False)
-            .execute()
         )
-        return messages_resp.data or []
+        if limit is not None:
+            query = query.limit(limit)
+        response = query.execute()
+        return response.data or []
 
-    def _recent_conversation(self, client: Client, user_id: str, hub_id: str) -> List[Dict[str, str]]:
+    def _recent_conversation(self, client: Client, session_id: str) -> List[Dict[str, str]]:
         try:
-            rows = self._fetch_recent_messages(
+            rows = self._list_session_messages(
                 client,
-                user_id,
-                hub_id,
-                self.chat_rewrite_history_messages,
-                "role, content",
-            )
-            return [{"role": m["role"], "content": m["content"]} for m in rows]
-        except Exception:
-            return []
-
-    def _recent_retrieval_context(self, client: Client, user_id: str, hub_id: str) -> List[Dict[str, Any]]:
-        try:
-            rows = self._fetch_recent_messages(
-                client,
-                user_id,
-                hub_id,
-                self.chat_rewrite_history_messages,
-                "role, content, citations",
+                session_id,
+                fields="role, content, created_at",
             )
             return [
-                {
-                    "role": m["role"],
-                    "content": m["content"],
-                    "citations": m.get("citations") or [],
-                }
-                for m in rows
+                {"role": row["role"], "content": row["content"]}
+                for row in rows[-self.chat_rewrite_history_messages :]
             ]
         except Exception:
             return []
+
+    def _recent_retrieval_context(self, client: Client, session_id: str) -> List[Dict[str, Any]]:
+        try:
+            rows = self._list_session_messages(
+                client,
+                session_id,
+                fields="role, content, citations, created_at",
+            )
+            return [
+                {
+                    "role": row["role"],
+                    "content": row["content"],
+                    "citations": row.get("citations") or [],
+                }
+                for row in rows[-self.chat_rewrite_history_messages :]
+            ]
+        except Exception:
+            return []
+
+    def _update_chat_session_state(
+        self,
+        session_id: str,
+        *,
+        scope: HubScope,
+        source_ids: List[str],
+        last_message_at: str,
+    ) -> None:
+        self.service_client.table("chat_sessions").update(
+            {
+                "scope": scope.value,
+                "source_ids": source_ids,
+                "last_message_at": last_message_at,
+            }
+        ).eq("id", str(session_id)).execute()
+
+    def _create_chat_session_with_messages(
+        self,
+        *,
+        hub_id: str,
+        user_id: str,
+        title: str,
+        scope: HubScope,
+        source_ids: List[str],
+        user_content: str,
+        assistant_content: str,
+        assistant_citations: List[Citation],
+        assistant_token_usage: Optional[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        response = self.service_client.rpc(
+            "create_chat_session_with_messages",
+            {
+                "p_hub_id": str(hub_id),
+                "p_created_by": str(user_id),
+                "p_title": title,
+                "p_scope": scope.value,
+                "p_source_ids": source_ids,
+                "p_user_content": user_content,
+                "p_assistant_content": assistant_content,
+                "p_assistant_citations": [citation.model_dump() for citation in assistant_citations],
+                "p_assistant_token_usage": assistant_token_usage,
+            },
+        ).execute()
+        data = response.data or []
+        if isinstance(data, dict):
+            return data
+        if not data:
+            raise RuntimeError("Failed to create chat session.")
+        return data[0]
+
+    def list_chat_sessions(self, client: Client, user_id: str, hub_id: str) -> List[ChatSessionSummary]:
+        response = (
+            client.table("chat_sessions")
+            .select("id, hub_id, title, scope, source_ids, created_at, last_message_at")
+            .eq("hub_id", str(hub_id))
+            .eq("created_by", str(user_id))
+            .is_("deleted_at", "null")
+            .order("last_message_at", desc=True)
+            .limit(50)
+            .execute()
+        )
+        complete_source_ids = self._complete_source_ids_for_hub(client, hub_id)
+        return [self._serialize_chat_session(row, complete_source_ids) for row in (response.data or [])]
+
+    def get_chat_session_with_messages(
+        self,
+        client: Client,
+        user_id: str,
+        hub_id: str,
+        session_id: str,
+    ) -> ChatSessionDetail:
+        row = self._get_chat_session_row(client, session_id)
+        if str(row["hub_id"]) != str(hub_id):
+            raise KeyError("Chat session not found")
+        complete_source_ids = self._complete_source_ids_for_hub(client, hub_id)
+        session = self._serialize_chat_session(row, complete_source_ids)
+        messages = self._list_session_messages(client, session_id)
+        return ChatSessionDetail(
+            session=session,
+            messages=[
+                SessionMessage(
+                    id=str(message["id"]),
+                    role=message["role"],
+                    content=message["content"],
+                    citations=[Citation(**citation) for citation in (message.get("citations") or [])],
+                    created_at=message["created_at"],
+                )
+                for message in messages
+            ],
+        )
+
+    def delete_chat_session(self, client: Client, user_id: str, session_id: str) -> None:
+        row = self._get_chat_session_row(client, session_id, include_deleted=True)
+        if str(row.get("deleted_at") or "").strip():
+            return
+        self.service_client.table("chat_sessions").update(
+            {"deleted_at": datetime.now(timezone.utc).isoformat()}
+        ).eq("id", str(session_id)).is_("deleted_at", "null").execute()
 
     def _select_matches(
         self,
@@ -815,6 +985,32 @@ class SupabaseStore:
             return question
         return _normalize_retrieval_query(question, rewritten)
 
+    def _generate_chat_session_title(self, first_message: str) -> str:
+        cleaned = " ".join((first_message or "").split()).strip()
+        if not cleaned:
+            return "New Chat"
+
+        system_prompt = (
+            "Write a very short chat title that summarizes the user's topic. "
+            "Return 2 to 5 words. Use title case. Do not use quotes, punctuation, markdown, or labels."
+        )
+        user_prompt = f"First user message:\n{cleaned}"
+
+        try:
+            completion = self.llm_client.chat.completions.create(
+                model=self.chat_model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                temperature=0.2,
+            )
+            content = completion.choices[0].message.content or ""
+        except Exception:
+            return _fallback_chat_session_title(cleaned)
+
+        return _normalize_chat_session_title(content) or _fallback_chat_session_title(cleaned)
+
     def _retrieve_chat_context(
         self,
         client: Client,
@@ -844,23 +1040,31 @@ class SupabaseStore:
 
     def chat(self, client: Client, user_id: str, payload: ChatRequest) -> ChatResponse:
         hub_id = str(payload.hub_id)
-
-        # Fetch conversation history before creating the new session
-        history_messages = self._recent_conversation(client, user_id, hub_id)
-        retrieval_history = self._recent_retrieval_context(client, user_id, hub_id)
-
-        session_row = (
-            client.table("chat_sessions")
-            .insert({"hub_id": hub_id, "scope": payload.scope.value, "created_by": user_id})
-            .execute()
+        requested_source_ids = None if payload.source_ids is None else [str(source_id) for source_id in payload.source_ids]
+        persisted_source_ids, retrieval_source_ids = self._normalize_chat_source_ids(
+            client,
+            hub_id,
+            requested_source_ids,
         )
-        session_id = session_row.data[0]["id"]
 
-        client.table("messages").insert(
-            {"session_id": session_id, "role": "user", "content": payload.question}
-        ).execute()
+        existing_session_id: Optional[str] = None
+        session_title: str
+        if payload.session_id is not None:
+            existing_session_id = str(payload.session_id)
+            session_row = self._get_chat_session_row(client, existing_session_id)
+            if str(session_row["hub_id"]) != hub_id:
+                raise KeyError("Chat session not found")
+            session_title = str(session_row.get("title") or "New Chat")
+            history_messages = self._recent_conversation(client, existing_session_id)
+            retrieval_history = self._recent_retrieval_context(client, existing_session_id)
+            client.table("messages").insert(
+                {"session_id": existing_session_id, "role": "user", "content": payload.question}
+            ).execute()
+        else:
+            session_title = self._generate_chat_session_title(payload.question)
+            history_messages = []
+            retrieval_history = []
 
-        source_ids = None if payload.source_ids is None else [str(source_id) for source_id in payload.source_ids]
         retrieval_query = payload.question
         rewrite_attempted = False
         is_vague_follow_up = _is_vague_follow_up(payload.question)
@@ -876,7 +1080,7 @@ class SupabaseStore:
             client,
             hub_id,
             retrieval_query,
-            source_ids,
+            retrieval_source_ids,
         )
 
         if (
@@ -892,7 +1096,7 @@ class SupabaseStore:
                     client,
                     hub_id,
                     rewritten_query,
-                    source_ids,
+                    retrieval_source_ids,
                 )
 
         if (
@@ -911,7 +1115,7 @@ class SupabaseStore:
                         client,
                         hub_id,
                         anchored_query,
-                        source_ids,
+                        retrieval_source_ids,
                     )
                     fallback_distinct_sources = _count_distinct_citation_sources(fallback_citations)
                     current_distinct_sources = _count_distinct_citation_sources(citations)
@@ -920,26 +1124,66 @@ class SupabaseStore:
                         citations = fallback_citations
                         context_blocks = fallback_context_blocks
 
+        def finalize_response(
+            answer: str,
+            response_citations: List[Citation],
+            usage: Optional[Dict[str, Any]],
+        ) -> ChatResponse:
+            if existing_session_id is None:
+                persisted = self._create_chat_session_with_messages(
+                    hub_id=hub_id,
+                    user_id=user_id,
+                    title=session_title,
+                    scope=payload.scope,
+                    source_ids=persisted_source_ids,
+                    user_content=payload.question,
+                    assistant_content=answer,
+                    assistant_citations=response_citations,
+                    assistant_token_usage=usage,
+                )
+                return ChatResponse(
+                    answer=answer,
+                    citations=response_citations,
+                    message_id=str(persisted["assistant_message_id"]),
+                    session_id=str(persisted["session_id"]),
+                    session_title=str(persisted.get("session_title") or session_title or "New Chat"),
+                )
+
+            assistant_row = (
+                client.table("messages")
+                .insert(
+                    {
+                        "session_id": existing_session_id,
+                        "role": "assistant",
+                        "content": answer,
+                        "citations": [citation.model_dump() for citation in response_citations],
+                        "token_usage": usage,
+                    }
+                )
+                .execute()
+            )
+            assistant_created_at = assistant_row.data[0].get("created_at") or datetime.now(timezone.utc).isoformat()
+            self._update_chat_session_state(
+                existing_session_id,
+                scope=payload.scope,
+                source_ids=persisted_source_ids,
+                last_message_at=assistant_created_at,
+            )
+            return ChatResponse(
+                answer=answer,
+                citations=response_citations,
+                message_id=assistant_row.data[0]["id"],
+                session_id=existing_session_id,
+                session_title=session_title,
+            )
+
         if payload.scope == HubScope.global_scope:
             answer, web_citations, usage = self._answer_with_web_search(payload.question, context_blocks)
             all_citations = citations + web_citations
             has_citation = _answer_has_citation(answer, len(all_citations))
             if not has_citation:
                 all_citations = []
-            assistant_row = (
-                client.table("messages")
-                .insert(
-                    {
-                        "session_id": session_id,
-                        "role": "assistant",
-                        "content": answer,
-                        "citations": [c.model_dump() for c in all_citations],
-                        "token_usage": usage,
-                    }
-                )
-                .execute()
-            )
-            return ChatResponse(answer=answer, citations=all_citations, message_id=assistant_row.data[0]["id"])
+            return finalize_response(answer, all_citations, usage)
 
         system_prompt = (
             "You are Caddie, an onboarding assistant. Answer using the provided context only. "
@@ -966,16 +1210,7 @@ class SupabaseStore:
             )
             answer = completion.choices[0].message.content or ""
             usage = completion.usage.model_dump() if completion.usage else None
-            assistant_row = client.table("messages").insert(
-                {
-                    "session_id": session_id,
-                    "role": "assistant",
-                    "content": answer,
-                    "citations": [],
-                    "token_usage": usage,
-                }
-            ).execute()
-            return ChatResponse(answer=answer, citations=[], message_id=assistant_row.data[0]["id"])
+            return finalize_response(answer, [], usage)
 
         completion = self.llm_client.chat.completions.create(
             model=self.chat_model,
@@ -991,29 +1226,25 @@ class SupabaseStore:
 
         has_citation = _answer_has_citation(answer, len(context_blocks))
         final_citations = citations if has_citation else []
-
-        assistant_row = (
-            client.table("messages")
-            .insert(
-                {
-                    "session_id": session_id,
-                    "role": "assistant",
-                    "content": answer,
-                    "citations": [c.model_dump() for c in final_citations],
-                    "token_usage": usage,
-                }
-            )
-            .execute()
-        )
-        return ChatResponse(answer=answer, citations=final_citations, message_id=assistant_row.data[0]["id"])
+        return finalize_response(answer, final_citations, usage)
 
     def chat_history(self, client: Client, user_id: str, hub_id: str) -> List[HistoryMessage]:
-        rows = self._fetch_recent_messages(
+        response = (
+            client.table("chat_sessions")
+            .select("id")
+            .eq("hub_id", str(hub_id))
+            .eq("created_by", str(user_id))
+            .is_("deleted_at", "null")
+            .order("last_message_at", desc=True)
+            .limit(1)
+            .execute()
+        )
+        if not response.data:
+            return []
+        rows = self._list_session_messages(
             client,
-            user_id,
-            hub_id,
-            self.chat_rewrite_history_messages,
-            "role, content, citations, created_at",
+            response.data[0]["id"],
+            fields="role, content, citations, created_at",
         )
         return [
             HistoryMessage(
@@ -1877,6 +2108,30 @@ def _trim_text(text: str, max_chars: int) -> str:
     if len(cleaned) <= max_chars:
         return cleaned
     return f"{cleaned[:max_chars].rstrip()}..."
+
+
+def _normalize_chat_session_title(text: str) -> str:
+    collapsed = " ".join((text or "").split()).strip().strip("\"'`")
+    collapsed = re.sub(r"^[Tt]itle\s*:\s*", "", collapsed)
+    collapsed = re.sub(r"[\r\n]+", " ", collapsed)
+    collapsed = re.sub(r"[^\w\s/&+-]", "", collapsed)
+    collapsed = re.sub(r"\s+", " ", collapsed).strip()
+    if not collapsed:
+        return ""
+    words = collapsed.split()
+    if len(words) > 5:
+        words = words[:5]
+    normalized = " ".join(words)
+    return normalized[:80].strip() or ""
+
+
+def _fallback_chat_session_title(text: str) -> str:
+    collapsed = " ".join((text or "").split()).strip()
+    if not collapsed:
+        return "New Chat"
+    words = collapsed.split()[:5]
+    normalized = " ".join(words)
+    return normalized[:80].strip() or "New Chat"
 
 
 def _parse_questions_from_text(raw: str, max_count: int) -> List[str]:

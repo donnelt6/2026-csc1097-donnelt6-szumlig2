@@ -2,8 +2,16 @@
 
 from types import SimpleNamespace
 
+import pytest
+
 from app.schemas import ChatRequest, Citation, HubScope
-from app.services.store import _is_vague_follow_up, _most_recent_informative_user_turn, store
+from app.services.store import (
+    _fallback_chat_session_title,
+    _normalize_chat_session_title,
+    _is_vague_follow_up,
+    _most_recent_informative_user_turn,
+    store,
+)
 
 
 class FakeResponse:
@@ -24,10 +32,17 @@ class FakeTable:
 
     def execute(self) -> FakeResponse:
         if self.name == "chat_sessions":
-            return FakeResponse([{"id": "session-1"}])
+            return FakeResponse([{"id": "session-1", "created_at": "2026-01-01T00:00:00Z"}])
         if self.name == "messages":
             self.client.message_count += 1
-            return FakeResponse([{"id": f"message-{self.client.message_count}"}])
+            return FakeResponse(
+                [
+                    {
+                        "id": f"message-{self.client.message_count}",
+                        "created_at": f"2026-01-01T00:00:0{self.client.message_count}Z",
+                    }
+                ]
+            )
         return FakeResponse([{}])
 
 
@@ -38,6 +53,47 @@ class FakeClient:
 
     def table(self, name: str) -> FakeTable:
         return FakeTable(self, name)
+
+
+@pytest.fixture(autouse=True)
+def stub_session_helpers(monkeypatch) -> None:
+    monkeypatch.setattr(
+        store,
+        "_normalize_chat_source_ids",
+        lambda client, hub_id, requested_source_ids: (
+            ["src-1", "src-2"] if requested_source_ids is None else requested_source_ids,
+            requested_source_ids,
+        ),
+    )
+    monkeypatch.setattr(
+        store,
+        "_create_chat_session_with_messages",
+        lambda **kwargs: {
+            "session_id": "session-1",
+            "session_title": kwargs["title"],
+            "session_created_at": "2026-01-01T00:00:00Z",
+            "assistant_message_id": "message-service-1",
+            "assistant_created_at": "2026-01-01T00:00:01Z",
+        },
+    )
+    monkeypatch.setattr(
+        store,
+        "_get_chat_session_row",
+        lambda client, session_id, include_deleted=False: {
+            "id": str(session_id),
+            "hub_id": "11111111-1111-1111-1111-111111111111",
+            "title": "Assignment Help",
+            "scope": "hub",
+            "source_ids": ["src-1", "src-2"],
+            "created_at": "2026-01-01T00:00:00Z",
+            "last_message_at": "2026-01-01T00:00:01Z",
+            "deleted_at": None,
+        },
+    )
+    monkeypatch.setattr(store, "_update_chat_session_state", lambda session_id, **kwargs: None)
+    monkeypatch.setattr(store, "_recent_conversation", lambda client, session_id: [])
+    monkeypatch.setattr(store, "_recent_retrieval_context", lambda client, session_id: [])
+    monkeypatch.setattr(store, "_generate_chat_session_title", lambda first_message: "Assignment Help")
 
 
 class FakeCompletion:
@@ -326,8 +382,8 @@ def test_chat_rewrites_vague_follow_up_using_recent_history_and_prior_citations(
     rewrite_calls: list[tuple[str, list[dict]]] = []
     embedded_queries: list[str] = []
 
-    monkeypatch.setattr(store, "_recent_conversation", lambda client, user_id, hub_id: retrieval_history)
-    monkeypatch.setattr(store, "_recent_retrieval_context", lambda client, user_id, hub_id: retrieval_history)
+    monkeypatch.setattr(store, "_recent_conversation", lambda client, session_id: retrieval_history)
+    monkeypatch.setattr(store, "_recent_retrieval_context", lambda client, session_id: retrieval_history)
 
     def fake_rewrite(question: str, history: list[dict]) -> str:
         rewrite_calls.append((question, history))
@@ -344,7 +400,11 @@ def test_chat_rewrites_vague_follow_up_using_recent_history_and_prior_citations(
     )
     monkeypatch.setattr(store, "llm_client", FakeLLMClient("More detail [1]"))
 
-    payload = ChatRequest(hub_id="11111111-1111-1111-1111-111111111111", question="tell me more")
+    payload = ChatRequest(
+        hub_id="11111111-1111-1111-1111-111111111111",
+        question="tell me more",
+        session_id="33333333-3333-3333-3333-333333333333",
+    )
     result = store.chat(fake_client, "user-1", payload)
 
     assert rewrite_calls == [("tell me more", retrieval_history)]
@@ -357,6 +417,94 @@ def test_detects_longer_deictic_follow_up_questions() -> None:
     assert _is_vague_follow_up("How could a Haskell palindrome example fit into that?")
     assert _is_vague_follow_up("Why would normalization be a good exercise there?")
     assert not _is_vague_follow_up("How does this function work in Haskell?")
+
+
+def test_chat_session_title_normalization_and_fallback() -> None:
+    assert _normalize_chat_session_title('Title: "Assignment Help"') == "Assignment Help"
+    assert _normalize_chat_session_title("How do I submit assignments for this module today") == "How do I submit assignments"
+    assert _fallback_chat_session_title("  How\n\n do   I submit assignments?  ") == "How do I submit assignments?"
+
+
+def test_normalized_source_ids_follow_complete_source_order() -> None:
+    assert store._normalize_source_ids_to_complete_order(
+        ["src-3", "src-1"],
+        ["src-1", "src-2", "src-3"],
+    ) == ["src-1", "src-3"]
+
+
+def test_normalize_chat_source_ids_uses_all_complete_sources_when_omitted(monkeypatch) -> None:
+    monkeypatch.setattr(store, "_complete_source_ids_for_hub", lambda client, hub_id: ["src-2", "src-1"])
+
+    persisted_source_ids, retrieval_source_ids = type(store)._normalize_chat_source_ids(
+        store,
+        FakeClient(),
+        "hub-1",
+        None,
+    )
+
+    assert persisted_source_ids == ["src-2", "src-1"]
+    assert retrieval_source_ids is None
+
+
+def test_normalize_chat_source_ids_preserves_explicit_empty_selection(monkeypatch) -> None:
+    monkeypatch.setattr(store, "_complete_source_ids_for_hub", lambda client, hub_id: ["src-2", "src-1"])
+
+    persisted_source_ids, retrieval_source_ids = type(store)._normalize_chat_source_ids(
+        store,
+        FakeClient(),
+        "hub-1",
+        [],
+    )
+
+    assert persisted_source_ids == []
+    assert retrieval_source_ids == []
+
+
+def test_chat_draft_failure_does_not_persist_session(monkeypatch) -> None:
+    fake_client = FakeClient()
+    helper_calls: list[dict] = []
+    monkeypatch.setattr(store, "_embed_query", lambda text: [1.0, 0.0])
+    monkeypatch.setattr(store, "_match_chunks", lambda client, hub_id, embedding, top_k, source_ids=None: [])
+    monkeypatch.setattr(store, "llm_client", SequenceLLMClient([RuntimeError("chat failed")]))
+    monkeypatch.setattr(store, "_create_chat_session_with_messages", lambda **kwargs: helper_calls.append(kwargs))
+
+    payload = ChatRequest(hub_id="11111111-1111-1111-1111-111111111111", question="What is this?")
+
+    with pytest.raises(RuntimeError, match="chat failed"):
+        store.chat(fake_client, "user-1", payload)
+
+    assert helper_calls == []
+    assert fake_client.inserted == {}
+
+
+def test_chat_persists_new_session_after_first_successful_send(monkeypatch) -> None:
+    fake_client = FakeClient()
+    persisted: dict[str, object] = {}
+    monkeypatch.setattr(store, "_embed_query", lambda text: [1.0, 0.0])
+    monkeypatch.setattr(store, "_match_chunks", lambda client, hub_id, embedding, top_k, source_ids=None: [])
+    monkeypatch.setattr(store, "llm_client", FakeLLMClient("Hello! How can I help you today?"))
+
+    def fake_create_chat_session_with_messages(**kwargs):
+        persisted.update(kwargs)
+        return {
+            "session_id": "session-42",
+            "session_title": kwargs["title"],
+            "session_created_at": "2026-01-01T00:00:00Z",
+            "assistant_message_id": "message-42",
+            "assistant_created_at": "2026-01-01T00:00:01Z",
+        }
+
+    monkeypatch.setattr(store, "_create_chat_session_with_messages", fake_create_chat_session_with_messages)
+
+    payload = ChatRequest(hub_id="11111111-1111-1111-1111-111111111111", question="What is this?")
+    result = store.chat(fake_client, "user-1", payload)
+
+    assert result.session_id == "session-42"
+    assert result.message_id == "message-42"
+    assert persisted["user_content"] == "What is this?"
+    assert persisted["assistant_content"] == "Hello! How can I help you today?"
+    assert persisted["source_ids"] == ["src-1", "src-2"]
+    assert fake_client.inserted == {}
 
 
 def test_anchor_selection_skips_context_dependent_turns() -> None:
@@ -372,8 +520,8 @@ def test_chat_rewrites_longer_deictic_follow_up_using_recent_history(monkeypatch
     rewrite_calls: list[tuple[str, list[dict]]] = []
     embedded_queries: list[str] = []
 
-    monkeypatch.setattr(store, "_recent_conversation", lambda client, user_id, hub_id: retrieval_history)
-    monkeypatch.setattr(store, "_recent_retrieval_context", lambda client, user_id, hub_id: retrieval_history)
+    monkeypatch.setattr(store, "_recent_conversation", lambda client, session_id: retrieval_history)
+    monkeypatch.setattr(store, "_recent_retrieval_context", lambda client, session_id: retrieval_history)
 
     def fake_rewrite(question: str, history: list[dict]) -> str:
         rewrite_calls.append((question, history))
@@ -393,6 +541,7 @@ def test_chat_rewrites_longer_deictic_follow_up_using_recent_history(monkeypatch
     payload = ChatRequest(
         hub_id="11111111-1111-1111-1111-111111111111",
         question="Why would normalization be a good exercise there?",
+        session_id="33333333-3333-3333-3333-333333333333",
     )
     result = store.chat(fake_client, "user-1", payload)
 
@@ -411,8 +560,8 @@ def test_chat_anchors_vague_follow_up_when_mixed_history_collapses_to_one_source
         "Why would incorporating normalization as an exercise in the Haskell palindrome example enhance the onboarding experience?"
     )
 
-    monkeypatch.setattr(store, "_recent_conversation", lambda client, user_id, hub_id: retrieval_history)
-    monkeypatch.setattr(store, "_recent_retrieval_context", lambda client, user_id, hub_id: retrieval_history)
+    monkeypatch.setattr(store, "_recent_conversation", lambda client, session_id: retrieval_history)
+    monkeypatch.setattr(store, "_recent_retrieval_context", lambda client, session_id: retrieval_history)
     monkeypatch.setattr(store, "_rewrite_query_for_retrieval", lambda question, history: rewritten_query)
     monkeypatch.setattr(store, "_embed_query", lambda text: embedded_queries.append(text) or [len(embedded_queries), 0.0])
 
@@ -434,7 +583,11 @@ def test_chat_anchors_vague_follow_up_when_mixed_history_collapses_to_one_source
     monkeypatch.setattr(store, "_match_chunks", fake_match_chunks)
     monkeypatch.setattr(store, "llm_client", FakeLLMClient("Answer [1] [2]"))
 
-    payload = ChatRequest(hub_id="11111111-1111-1111-1111-111111111111", question="tell me more")
+    payload = ChatRequest(
+        hub_id="11111111-1111-1111-1111-111111111111",
+        question="tell me more",
+        session_id="33333333-3333-3333-3333-333333333333",
+    )
     result = store.chat(fake_client, "user-1", payload)
 
     assert embedded_queries == [rewritten_query, anchored_query]
@@ -447,8 +600,8 @@ def test_chat_does_not_anchor_follow_up_when_recent_history_is_single_source(mon
     embedded_queries: list[str] = []
     rewritten_query = "Explain lexical analysis in more detail"
 
-    monkeypatch.setattr(store, "_recent_conversation", lambda client, user_id, hub_id: retrieval_history)
-    monkeypatch.setattr(store, "_recent_retrieval_context", lambda client, user_id, hub_id: retrieval_history)
+    monkeypatch.setattr(store, "_recent_conversation", lambda client, session_id: retrieval_history)
+    monkeypatch.setattr(store, "_recent_retrieval_context", lambda client, session_id: retrieval_history)
     monkeypatch.setattr(store, "_rewrite_query_for_retrieval", lambda question, history: rewritten_query)
     monkeypatch.setattr(store, "_embed_query", lambda text: embedded_queries.append(text) or [0.1])
     monkeypatch.setattr(
@@ -460,7 +613,11 @@ def test_chat_does_not_anchor_follow_up_when_recent_history_is_single_source(mon
     )
     monkeypatch.setattr(store, "llm_client", FakeLLMClient("Answer [1]"))
 
-    payload = ChatRequest(hub_id="11111111-1111-1111-1111-111111111111", question="tell me more")
+    payload = ChatRequest(
+        hub_id="11111111-1111-1111-1111-111111111111",
+        question="tell me more",
+        session_id="33333333-3333-3333-3333-333333333333",
+    )
     result = store.chat(fake_client, "user-1", payload)
 
     assert embedded_queries == [rewritten_query]
@@ -477,8 +634,8 @@ def test_chat_keeps_initial_retrieval_when_anchored_fallback_does_not_improve_di
         "Why would incorporating normalization as an exercise in the Haskell palindrome example enhance the onboarding experience?"
     )
 
-    monkeypatch.setattr(store, "_recent_conversation", lambda client, user_id, hub_id: retrieval_history)
-    monkeypatch.setattr(store, "_recent_retrieval_context", lambda client, user_id, hub_id: retrieval_history)
+    monkeypatch.setattr(store, "_recent_conversation", lambda client, session_id: retrieval_history)
+    monkeypatch.setattr(store, "_recent_retrieval_context", lambda client, session_id: retrieval_history)
     monkeypatch.setattr(store, "_rewrite_query_for_retrieval", lambda question, history: rewritten_query)
     monkeypatch.setattr(store, "_embed_query", lambda text: embedded_queries.append(text) or [len(embedded_queries), 0.0])
 
@@ -493,7 +650,11 @@ def test_chat_keeps_initial_retrieval_when_anchored_fallback_does_not_improve_di
     monkeypatch.setattr(store, "_match_chunks", fake_match_chunks)
     monkeypatch.setattr(store, "llm_client", FakeLLMClient("Answer [1]"))
 
-    payload = ChatRequest(hub_id="11111111-1111-1111-1111-111111111111", question="tell me more")
+    payload = ChatRequest(
+        hub_id="11111111-1111-1111-1111-111111111111",
+        question="tell me more",
+        session_id="33333333-3333-3333-3333-333333333333",
+    )
     result = store.chat(fake_client, "user-1", payload)
 
     assert embedded_queries == [rewritten_query, anchored_query]
@@ -506,8 +667,8 @@ def test_chat_does_not_rewrite_clear_standalone_question(monkeypatch) -> None:
     retrieval_history = _retrieval_history()
     question = "How many assignments are there in CSC1098?"
 
-    monkeypatch.setattr(store, "_recent_conversation", lambda client, user_id, hub_id: retrieval_history)
-    monkeypatch.setattr(store, "_recent_retrieval_context", lambda client, user_id, hub_id: retrieval_history)
+    monkeypatch.setattr(store, "_recent_conversation", lambda client, session_id: retrieval_history)
+    monkeypatch.setattr(store, "_recent_retrieval_context", lambda client, session_id: retrieval_history)
 
     def fake_rewrite(question_text: str, history: list[dict]) -> str:
         rewrite_calls.append(question_text)
@@ -522,7 +683,11 @@ def test_chat_does_not_rewrite_clear_standalone_question(monkeypatch) -> None:
     )
     monkeypatch.setattr(store, "llm_client", FakeLLMClient("Answer [1]"))
 
-    payload = ChatRequest(hub_id="11111111-1111-1111-1111-111111111111", question=question)
+    payload = ChatRequest(
+        hub_id="11111111-1111-1111-1111-111111111111",
+        question=question,
+        session_id="33333333-3333-3333-3333-333333333333",
+    )
     result = store.chat(fake_client, "user-1", payload)
 
     assert rewrite_calls == []
@@ -537,8 +702,8 @@ def test_chat_retries_with_rewrite_after_initial_no_match(monkeypatch) -> None:
     match_calls: list[str] = []
     rewrite_calls: list[str] = []
 
-    monkeypatch.setattr(store, "_recent_conversation", lambda client, user_id, hub_id: retrieval_history)
-    monkeypatch.setattr(store, "_recent_retrieval_context", lambda client, user_id, hub_id: retrieval_history)
+    monkeypatch.setattr(store, "_recent_conversation", lambda client, session_id: retrieval_history)
+    monkeypatch.setattr(store, "_recent_retrieval_context", lambda client, session_id: retrieval_history)
 
     def fake_rewrite(question: str, history: list[dict]) -> str:
         rewrite_calls.append(question)
@@ -558,6 +723,7 @@ def test_chat_retries_with_rewrite_after_initial_no_match(monkeypatch) -> None:
     payload = ChatRequest(
         hub_id="11111111-1111-1111-1111-111111111111",
         question="How many assignments are in the module?",
+        session_id="33333333-3333-3333-3333-333333333333",
     )
     result = store.chat(fake_client, "user-1", payload)
 
@@ -575,8 +741,8 @@ def test_chat_preserves_source_filters_when_rewriting(monkeypatch) -> None:
     retrieval_history = _retrieval_history()
     received_source_ids: list[list[str] | None] = []
 
-    monkeypatch.setattr(store, "_recent_conversation", lambda client, user_id, hub_id: retrieval_history)
-    monkeypatch.setattr(store, "_recent_retrieval_context", lambda client, user_id, hub_id: retrieval_history)
+    monkeypatch.setattr(store, "_recent_conversation", lambda client, session_id: retrieval_history)
+    monkeypatch.setattr(store, "_recent_retrieval_context", lambda client, session_id: retrieval_history)
     monkeypatch.setattr(
         store,
         "_rewrite_query_for_retrieval",
@@ -597,6 +763,7 @@ def test_chat_preserves_source_filters_when_rewriting(monkeypatch) -> None:
         hub_id="11111111-1111-1111-1111-111111111111",
         question="How many assignments are in the module?",
         source_ids=["22222222-2222-2222-2222-222222222222"],
+        session_id="33333333-3333-3333-3333-333333333333",
     )
     store.chat(fake_client, "user-1", payload)
 
@@ -612,13 +779,17 @@ def test_chat_falls_back_cleanly_when_rewrite_fails(monkeypatch) -> None:
     embedded_queries: list[str] = []
     llm_client = SequenceLLMClient([RuntimeError("rewrite failed"), "Hello! How can I help you today?"])
 
-    monkeypatch.setattr(store, "_recent_conversation", lambda client, user_id, hub_id: retrieval_history)
-    monkeypatch.setattr(store, "_recent_retrieval_context", lambda client, user_id, hub_id: retrieval_history)
+    monkeypatch.setattr(store, "_recent_conversation", lambda client, session_id: retrieval_history)
+    monkeypatch.setattr(store, "_recent_retrieval_context", lambda client, session_id: retrieval_history)
     monkeypatch.setattr(store, "_embed_query", lambda text: embedded_queries.append(text) or [0.1])
     monkeypatch.setattr(store, "_match_chunks", lambda client, hub_id, embedding, top_k, source_ids=None: [])
     monkeypatch.setattr(store, "llm_client", llm_client)
 
-    payload = ChatRequest(hub_id="11111111-1111-1111-1111-111111111111", question="tell me more")
+    payload = ChatRequest(
+        hub_id="11111111-1111-1111-1111-111111111111",
+        question="tell me more",
+        session_id="33333333-3333-3333-3333-333333333333",
+    )
     result = store.chat(fake_client, "user-1", payload)
 
     assert embedded_queries == ["tell me more"]
@@ -669,8 +840,8 @@ def test_global_scope_also_benefits_from_rewritten_hub_retrieval(monkeypatch) ->
     retrieval_history = _retrieval_history()
     embedded_queries: list[str] = []
 
-    monkeypatch.setattr(store, "_recent_conversation", lambda client, user_id, hub_id: retrieval_history)
-    monkeypatch.setattr(store, "_recent_retrieval_context", lambda client, user_id, hub_id: retrieval_history)
+    monkeypatch.setattr(store, "_recent_conversation", lambda client, session_id: retrieval_history)
+    monkeypatch.setattr(store, "_recent_retrieval_context", lambda client, session_id: retrieval_history)
     monkeypatch.setattr(
         store,
         "_rewrite_query_for_retrieval",
@@ -690,6 +861,7 @@ def test_global_scope_also_benefits_from_rewritten_hub_retrieval(monkeypatch) ->
         hub_id="11111111-1111-1111-1111-111111111111",
         scope=HubScope.global_scope,
         question="tell me more",
+        session_id="33333333-3333-3333-3333-333333333333",
     )
     result = store.chat(fake_client, "user-1", payload)
 
@@ -722,6 +894,7 @@ def test_chat_filters_by_selected_sources(monkeypatch) -> None:
 
 def test_chat_caps_citations_at_three_and_stores_selected_order(monkeypatch) -> None:
     fake_client = FakeClient()
+    persisted: dict[str, object] = {}
     monkeypatch.setattr(store, "_embed_query", lambda text: [1.0, 0.0])
     monkeypatch.setattr(
         store,
@@ -734,12 +907,22 @@ def test_chat_caps_citations_at_three_and_stores_selected_order(monkeypatch) -> 
         ],
     )
     monkeypatch.setattr(store, "llm_client", FakeLLMClient("Answer [1] [2] [3]"))
+    monkeypatch.setattr(
+        store,
+        "_create_chat_session_with_messages",
+        lambda **kwargs: persisted.update(kwargs) or {
+            "session_id": "session-1",
+            "session_title": kwargs["title"],
+            "session_created_at": "2026-01-01T00:00:00Z",
+            "assistant_message_id": "message-1",
+            "assistant_created_at": "2026-01-01T00:00:01Z",
+        },
+    )
 
     payload = ChatRequest(hub_id="11111111-1111-1111-1111-111111111111", question="Limit citations")
     result = store.chat(fake_client, "user-1", payload)
 
     assert len(result.citations) == 3
-    assistant_payload = fake_client.inserted["messages"][1]
-    assert [citation["source_id"] for citation in assistant_payload["citations"]] == [
+    assert [citation.source_id for citation in persisted["assistant_citations"]] == [
         citation.source_id for citation in result.citations
     ]
