@@ -1,16 +1,17 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { useQuery } from '@tanstack/react-query';
+import { usePathname, useRouter } from 'next/navigation';
 import {
+  Squares2X2Icon,
   RectangleStackIcon,
+  ArchiveBoxIcon,
   Cog6ToothIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
   XMarkIcon,
+  PlusIcon,
 } from '@heroicons/react/24/outline';
-import { listHubs } from '../../lib/api';
 import { ThemeToggle } from './ThemeToggle';
 import { HubPanels } from './HubPanels';
 
@@ -21,24 +22,12 @@ interface SidebarProps {
   onStateChange: (state: SidebarState) => void;
   mobileOpen?: boolean;
   onMobileClose?: () => void;
+  onCreateHub?: () => void;
 }
 
-export function Sidebar({ state, onStateChange, mobileOpen, onMobileClose }: SidebarProps) {
+export function Sidebar({ state, onStateChange, mobileOpen, onMobileClose, onCreateHub }: SidebarProps) {
   const pathname = usePathname();
-  const isHome = pathname === '/';
-
-  const { data: hubs } = useQuery({
-    queryKey: ['hubs'],
-    queryFn: listHubs,
-    enabled: isHome,
-  });
-
-  const recentHubs = isHome
-    ? (hubs ?? [])
-        .filter((h) => h.last_accessed_at)
-        .sort((a, b) => new Date(b.last_accessed_at!).getTime() - new Date(a.last_accessed_at!).getTime())
-        .slice(0, 5)
-    : [];
+  const router = useRouter();
 
   const expandSidebar = () => {
     localStorage.setItem('sidebar-state', 'open');
@@ -50,18 +39,11 @@ export function Sidebar({ state, onStateChange, mobileOpen, onMobileClose }: Sid
     onStateChange('collapsed');
   };
 
-  const hideSidebar = () => {
-    localStorage.setItem('sidebar-state', 'hidden');
-    onStateChange('hidden');
-  };
-
   const isCollapsed = state === 'collapsed';
-  const isHidden = state === 'hidden';
 
   const sidebarClasses = [
     'sidebar',
     isCollapsed ? 'sidebar--collapsed' : '',
-    isHidden ? 'sidebar--hidden' : '',
     mobileOpen ? 'sidebar--mobile-open' : '',
   ].filter(Boolean).join(' ');
 
@@ -73,26 +55,16 @@ export function Sidebar({ state, onStateChange, mobileOpen, onMobileClose }: Sid
     <aside className={sidebarClasses}>
       <div className="sidebar-header">
         <Link href="/" className="sidebar-brand" onClick={handleLinkClick}>
-          <span className="sidebar-brand-mark" aria-hidden="true" />
           <span className="sidebar-brand-text">Caddie</span>
         </Link>
         {isCollapsed ? (
-          <div className="sidebar-controls">
-            <button
-              className="sidebar-toggle"
-              onClick={expandSidebar}
-              aria-label="Expand sidebar"
-            >
-              <ChevronRightIcon className="sidebar-toggle-icon" />
-            </button>
-            <button
-              className="sidebar-toggle"
-              onClick={hideSidebar}
-              aria-label="Hide sidebar"
-            >
-              <ChevronLeftIcon className="sidebar-toggle-icon" />
-            </button>
-          </div>
+          <button
+            className="sidebar-toggle"
+            onClick={expandSidebar}
+            aria-label="Expand sidebar"
+          >
+            <ChevronRightIcon className="sidebar-toggle-icon" />
+          </button>
         ) : (
           <button
             className="sidebar-toggle"
@@ -117,50 +89,71 @@ export function Sidebar({ state, onStateChange, mobileOpen, onMobileClose }: Sid
         <ul className="sidebar-nav-list">
           <li>
             <Link
+              href="/dashboard"
+              className={`sidebar-item ${pathname === '/dashboard' ? 'active' : ''}`}
+              title={isCollapsed ? 'Dashboard' : undefined}
+              onClick={handleLinkClick}
+            >
+              <Squares2X2Icon className="sidebar-item-icon" />
+              <span className="sidebar-item-text">Dashboard</span>
+            </Link>
+          </li>
+          <li>
+            <Link
               href="/"
               className={`sidebar-item ${pathname === '/' ? 'active' : ''}`}
-              title={isCollapsed ? 'All Hubs' : undefined}
+              title={isCollapsed ? 'Hubs' : undefined}
               onClick={handleLinkClick}
             >
               <RectangleStackIcon className="sidebar-item-icon" />
-              <span className="sidebar-item-text">All Hubs</span>
+              <span className="sidebar-item-text">Hubs</span>
+            </Link>
+          </li>
+          <li>
+            <Link
+              href="/vault"
+              className={`sidebar-item ${pathname === '/vault' ? 'active' : ''}`}
+              title={isCollapsed ? 'Vault' : undefined}
+              onClick={handleLinkClick}
+            >
+              <ArchiveBoxIcon className="sidebar-item-icon" />
+              <span className="sidebar-item-text">Vault</span>
+            </Link>
+          </li>
+          <li>
+            <Link
+              href="/settings"
+              className={`sidebar-item ${pathname === '/settings' ? 'active' : ''}`}
+              title={isCollapsed ? 'Settings' : undefined}
+              onClick={handleLinkClick}
+            >
+              <Cog6ToothIcon className="sidebar-item-icon" />
+              <span className="sidebar-item-text">Settings</span>
             </Link>
           </li>
         </ul>
-        {isHome && recentHubs.length > 0 && (
-          <div className="sidebar-section" style={{ marginTop: '16px' }}>
-            <p className="sidebar-section-title">Recent</p>
-            <ul className="sidebar-nav-list">
-              {recentHubs.map((h) => (
-                <li key={h.id}>
-                  <Link
-                    href={`/hubs/${h.id}`}
-                    className="sidebar-item"
-                    title={isCollapsed ? h.name : undefined}
-                    onClick={handleLinkClick}
-                  >
-                    <RectangleStackIcon className="sidebar-item-icon" />
-                    <span className="sidebar-item-text">{h.name}</span>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
         <HubPanels />
       </nav>
 
       <div className="sidebar-footer">
-        <ThemeToggle />
-        <Link
-          href="/settings"
-          className={`sidebar-item ${pathname === '/settings' ? 'active' : ''}`}
-          title={isCollapsed ? 'Settings' : undefined}
-          onClick={handleLinkClick}
+        <button
+          className="sidebar-item sidebar-new-hub-button"
+          onClick={() => {
+            if (onCreateHub) {
+              onCreateHub();
+            } else {
+              router.push('/?create=true');
+            }
+            onMobileClose?.();
+          }}
+          title={isCollapsed ? 'New Hub' : undefined}
         >
-          <Cog6ToothIcon className="sidebar-item-icon" />
-          <span className="sidebar-item-text">Settings</span>
-        </Link>
+          <PlusIcon className="sidebar-item-icon" />
+          <span className="sidebar-item-text">New Hub</span>
+        </button>
+        <div className="sidebar-footer-links">
+          <ThemeToggle />
+        </div>
       </div>
     </aside>
   );

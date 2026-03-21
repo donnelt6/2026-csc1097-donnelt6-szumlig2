@@ -12,6 +12,7 @@ export interface Hub {
   sources_count?: number | null;
   last_accessed_at?: string | null;
   is_favourite?: boolean | null;
+  member_emails?: string[] | null;
 }
 
 export interface Source {

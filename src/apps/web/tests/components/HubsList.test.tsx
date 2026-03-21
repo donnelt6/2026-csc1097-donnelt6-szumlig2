@@ -23,11 +23,8 @@ const defaultFilters: HubsFilterState = {
   sortField: "accessed",
   sortDirection: "desc",
   selectedRoles: new Set(),
-  minMembers: "",
-  maxMembers: "",
-  minSources: "",
-  maxSources: "",
-  showOnlyFavourites: false,
+  typeTab: "all",
+  statusTab: "all",
 };
 
 describe("HubsList", () => {
