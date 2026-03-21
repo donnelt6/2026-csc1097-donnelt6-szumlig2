@@ -54,6 +54,8 @@ export interface ChatResponse {
   answer: string;
   citations: Citation[];
   message_id: string;
+  session_id: string;
+  session_title: string;
 }
 
 export interface Citation {
@@ -67,6 +69,29 @@ export interface HistoryMessage {
   content: string;
   citations: Citation[];
   created_at: string;
+}
+
+export interface ChatSessionSummary {
+  id: string;
+  hub_id: string;
+  title: string;
+  scope: HubScope;
+  source_ids: string[];
+  created_at: string;
+  last_message_at: string;
+}
+
+export interface SessionMessage {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  citations: Citation[];
+  created_at: string;
+}
+
+export interface ChatSessionDetail {
+  session: ChatSessionSummary;
+  messages: SessionMessage[];
 }
 
 export interface FaqEntry {
