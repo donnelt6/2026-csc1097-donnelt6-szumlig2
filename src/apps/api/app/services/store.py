@@ -110,24 +110,28 @@ class SupabaseStore:
             hub_ids.append(hub_row["id"])
 
         if hub_ids:
-            members_response = (
-                client.table("hub_members")
-                .select("hub_id, user_id")
-                .in_("hub_id", hub_ids)
-                .not_.is_("accepted_at", "null")
-                .execute()
-            )
-            users = self.service_client.auth.admin.list_users()
-            email_lookup = {str(u.id): u.email or "" for u in users if u.id}
-            emails_by_hub: dict[str, List[str]] = {}
-            for m in members_response.data:
-                hid = m.get("hub_id")
-                uid = m.get("user_id")
-                email = email_lookup.get(uid, "")
-                if hid and email:
-                    emails_by_hub.setdefault(hid, []).append(email)
-            for hub in hubs:
-                hub.member_emails = emails_by_hub.get(hub.id, [])
+            try:
+                members_response = (
+                    client.table("hub_members")
+                    .select("hub_id, user_id")
+                    .in_("hub_id", hub_ids)
+                    .not_.is_("accepted_at", "null")
+                    .execute()
+                )
+                users = self.service_client.auth.admin.list_users()
+                email_lookup = {str(u.id): u.email or "" for u in users if u.id}
+                emails_by_hub: dict[str, List[str]] = {}
+                for m in members_response.data:
+                    hid = m.get("hub_id")
+                    uid = m.get("user_id")
+                    email = email_lookup.get(uid, "")
+                    if hid and email:
+                        emails_by_hub.setdefault(hid, []).append(email)
+                for hub in hubs:
+                    hub.member_emails = emails_by_hub.get(hub.id, [])
+            except Exception:
+                for hub in hubs:
+                    hub.member_emails = []
 
         return hubs
 

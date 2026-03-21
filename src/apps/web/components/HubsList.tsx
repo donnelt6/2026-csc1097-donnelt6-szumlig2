@@ -119,7 +119,13 @@ export function HubsList({ searchQuery, filters, onHubCountChange, onCreateHub }
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, filters.typeTab, filters.statusTab, filters.sortField, filters.sortDirection]);
+  }, [searchQuery, filters.typeTab, filters.statusTab, filters.sortField, filters.sortDirection, filters.selectedRoles]);
+
+  useEffect(() => {
+    if (currentPage > totalPages && totalPages > 0) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, totalPages]);
 
   const paginatedHubs = currentPage === 1
     ? filteredHubs?.slice(0, firstPageHubs)
