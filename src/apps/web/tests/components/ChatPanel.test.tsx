@@ -60,7 +60,7 @@ describe("ChatPanel", () => {
     vi.mocked(listChatSessions).mockResolvedValue([]);
 
     renderWithQueryClient(
-      <ChatPanel hubId="hub-1" hubName="CSC1097" sources={sources} />
+      <ChatPanel hubId="hub-1" sources={sources} />
     );
 
     await waitFor(() => expect(screen.getAllByText("New Chat").length).toBeGreaterThan(0));
@@ -79,7 +79,7 @@ describe("ChatPanel", () => {
     });
 
     renderWithQueryClient(
-      <ChatPanel hubId="hub-1" hubName="CSC1097" sources={sources} />
+      <ChatPanel hubId="hub-1" sources={sources} />
     );
 
     const user = userEvent.setup();
@@ -105,7 +105,7 @@ describe("ChatPanel", () => {
     vi.mocked(askQuestion).mockRejectedValue(new Error("Request failed"));
 
     renderWithQueryClient(
-      <ChatPanel hubId="hub-1" hubName="CSC1097" sources={sources} />
+      <ChatPanel hubId="hub-1" sources={sources} />
     );
 
     const user = userEvent.setup();
@@ -129,7 +129,7 @@ describe("ChatPanel", () => {
     });
 
     renderWithQueryClient(
-      <ChatPanel hubId="hub-1" hubName="CSC1097" sources={sources} />
+      <ChatPanel hubId="hub-1" sources={sources} />
     );
 
     const user = userEvent.setup();
@@ -219,7 +219,7 @@ describe("ChatPanel", () => {
     });
 
     renderWithQueryClient(
-      <ChatPanel hubId="hub-1" hubName="CSC1097" sources={sources} />
+      <ChatPanel hubId="hub-1" sources={sources} />
     );
 
     const user = userEvent.setup();
@@ -271,7 +271,7 @@ describe("ChatPanel", () => {
     vi.stubGlobal("confirm", vi.fn(() => true));
 
     renderWithQueryClient(
-      <ChatPanel hubId="hub-1" hubName="CSC1097" sources={sources} />
+      <ChatPanel hubId="hub-1" sources={sources} />
     );
 
     const user = userEvent.setup();
@@ -320,7 +320,7 @@ describe("ChatPanel", () => {
       });
 
     renderWithQueryClient(
-      <ChatPanel hubId="hub-1" hubName="CSC1097" sources={sources} />
+      <ChatPanel hubId="hub-1" sources={sources} />
     );
 
     await waitFor(() => expect(screen.getByText("How do I submit assignments?")).toBeInTheDocument());
@@ -353,11 +353,11 @@ describe("ChatPanel", () => {
     });
 
     const { rerender } = renderWithQueryClient(
-      <ChatPanel hubId="hub-1" hubName="CSC1097" sources={[]} sourcesLoading />
+      <ChatPanel hubId="hub-1" sources={[]} sourcesLoading />
     );
 
     await waitFor(() => expect(screen.getByText("Assignments")).toBeInTheDocument());
-    rerender(<ChatPanel hubId="hub-1" hubName="CSC1097" sources={sources} />);
+    rerender(<ChatPanel hubId="hub-1" sources={sources} />);
 
     await waitFor(() => expect(screen.getByRole("button", { name: "Sources (1/2)" })).toBeInTheDocument());
   });

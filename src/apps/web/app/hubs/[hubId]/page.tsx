@@ -89,7 +89,6 @@ export default function HubDetail({ params }: { params: { hubId: string } }) {
           {activeTab === 'chat' && (
             <ChatPanel
               hubId={params.hubId}
-              hubName={hub?.name ?? "Hub"}
               hubDescription={hub?.description ?? undefined}
               sources={sources ?? []}
               sourcesLoading={sourcesLoading}

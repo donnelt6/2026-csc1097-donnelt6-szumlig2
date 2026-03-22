@@ -40,13 +40,12 @@ interface DraftState extends ChatControlState {
 
 interface Props {
   hubId: string;
-  hubName: string;
   hubDescription?: string;
   sources: Source[];
   sourcesLoading?: boolean;
 }
 
-export function ChatPanel({ hubId, hubName: _hubName, hubDescription, sources, sourcesLoading }: Props) {
+export function ChatPanel({ hubId, hubDescription, sources, sourcesLoading }: Props) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -499,13 +498,13 @@ export function ChatPanel({ hubId, hubName: _hubName, hubDescription, sources, s
           <div className="chat__controls">
             <div className="chat__hub-info">
               <p className="chat__hub-name">{activeSessionTitle}</p>
-              <p className="chat__hub-desc">
-                {activeSessionId
-                  ? hasUnsavedSessionControlChanges
+              {activeSessionId && (
+                <p className="chat__hub-desc">
+                  {hasUnsavedSessionControlChanges
                     ? "Unsaved scope and source changes apply on the next successful send."
-                    : hubDescription ?? "Resume this chat in the current hub."
-                  : "Drafts stay in memory until the first successful send."}
-              </p>
+                    : hubDescription ?? "Resume this chat in the current hub."}
+                </p>
+              )}
             </div>
             <div className="chat__controls-divider" aria-hidden="true" />
             <div className="chat__controls-right">
