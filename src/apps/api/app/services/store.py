@@ -12,13 +12,22 @@ from supabase import Client, create_client
 
 from ..core.config import get_settings
 from ..schemas import (
+    ApplyRevisionRequest,
+    AssignableMembershipRole,
     ChatRequest,
     ChatResponse,
     ChatSessionDetail,
     ChatSessionSummary,
     Citation,
+    CreateRevisionRequest,
     FaqEntry,
     FaqGenerateRequest,
+    FlagCase,
+    FlagCaseStatus,
+    FlagMessageRequest,
+    FlagMessageResponse,
+    FlaggedChatDetail,
+    FlaggedChatQueueItem,
     HistoryMessage,
     GuideEntry,
     GuideGenerateRequest,
@@ -31,6 +40,9 @@ from ..schemas import (
     HubInviteRequest,
     HubMember,
     HubScope,
+    MessageFlagStatus,
+    MessageRevision,
+    MessageRevisionType,
     MembershipRole,
     NotificationEvent,
     Reminder,
@@ -140,27 +152,21 @@ class SupabaseStore:
         return hubs
 
     def create_hub(self, client: Client, user_id: str, payload: HubCreate) -> Hub:
-        response = (
-            client.table("hubs")
-            .insert({"owner_id": user_id, "name": payload.name, "description": payload.description})
-            .execute()
-        )
-        row = response.data[0]
-        now = datetime.now(timezone.utc).isoformat()
-        client.table("hub_members").insert(
+        _ = client
+        response = self.service_client.rpc(
+            "create_hub_with_owner_membership",
             {
-                "hub_id": row["id"],
-                "user_id": user_id,
-                "role": MembershipRole.owner.value,
-                "accepted_at": now,
-                "last_accessed_at": now,
-                "is_favourite": True,
-            }
+                "p_owner_id": str(user_id),
+                "p_name": payload.name,
+                "p_description": payload.description,
+            },
         ).execute()
-        row["role"] = MembershipRole.owner.value
-        row["last_accessed_at"] = now
-        row["is_favourite"] = True
-        return Hub(**row)
+        data = response.data or []
+        if isinstance(data, dict):
+            return Hub(**data)
+        if not data:
+            raise RuntimeError("Failed to create hub.")
+        return Hub(**data[0])
 
     def create_source(self, client: Client, payload: SourceCreate) -> Tuple[Source, str]:
         source_id = str(uuid.uuid4())
@@ -545,7 +551,13 @@ class SupabaseStore:
             raise KeyError("Invite not found")
         return HubMember(**response.data[0])
 
-    def update_member_role(self, client: Client, hub_id: str, user_id: str, role: MembershipRole) -> HubMember:
+    def update_member_role(
+        self,
+        client: Client,
+        hub_id: str,
+        user_id: str,
+        role: AssignableMembershipRole,
+    ) -> HubMember:
         response = (
             client.table("hub_members")
             .update({"role": role.value})
@@ -556,6 +568,30 @@ class SupabaseStore:
         if not response.data:
             raise KeyError("Member not found")
         return HubMember(**response.data[0])
+
+    def transfer_hub_ownership(self, hub_id: str, current_owner_id: str, target_user_id: str) -> HubMember:
+        response = self.service_client.rpc(
+            "transfer_hub_ownership",
+            {
+                "p_hub_id": str(hub_id),
+                "p_current_owner_id": str(current_owner_id),
+                "p_target_user_id": str(target_user_id),
+            },
+        ).execute()
+        data = response.data or []
+        if not data:
+            raise RuntimeError("Ownership transfer failed.")
+        member_response = (
+            self.service_client.table("hub_members")
+            .select("hub_id,user_id,role,invited_at,accepted_at")
+            .eq("hub_id", str(hub_id))
+            .eq("user_id", str(target_user_id))
+            .limit(1)
+            .execute()
+        )
+        if not member_response.data:
+            raise KeyError("Transferred owner not found")
+        return HubMember(**member_response.data[0])
 
     def remove_member(self, client: Client, hub_id: str, user_id: str) -> None:
         response = (
@@ -683,6 +719,22 @@ class SupabaseStore:
         response = query.execute()
         return response.data or []
 
+    def _conversation_from_message_rows(self, rows: List[Dict[str, Any]]) -> List[Dict[str, str]]:
+        return [
+            {"role": row["role"], "content": row["content"]}
+            for row in rows[-self.chat_rewrite_history_messages :]
+        ]
+
+    def _retrieval_context_from_message_rows(self, rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        return [
+            {
+                "role": row["role"],
+                "content": row["content"],
+                "citations": row.get("citations") or [],
+            }
+            for row in rows[-self.chat_rewrite_history_messages :]
+        ]
+
     def _recent_conversation(self, client: Client, session_id: str) -> List[Dict[str, str]]:
         try:
             rows = self._list_session_messages(
@@ -690,10 +742,7 @@ class SupabaseStore:
                 session_id,
                 fields="role, content, created_at",
             )
-            return [
-                {"role": row["role"], "content": row["content"]}
-                for row in rows[-self.chat_rewrite_history_messages :]
-            ]
+            return self._conversation_from_message_rows(rows)
         except Exception:
             return []
 
@@ -704,16 +753,154 @@ class SupabaseStore:
                 session_id,
                 fields="role, content, citations, created_at",
             )
-            return [
-                {
-                    "role": row["role"],
-                    "content": row["content"],
-                    "citations": row.get("citations") or [],
-                }
-                for row in rows[-self.chat_rewrite_history_messages :]
-            ]
+            return self._retrieval_context_from_message_rows(rows)
         except Exception:
             return []
+
+    def _serialize_flag_case(self, row: Dict[str, Any]) -> FlagCase:
+        return FlagCase(**row)
+
+    def _serialize_message_revision(self, row: Dict[str, Any]) -> MessageRevision:
+        payload = dict(row)
+        payload["citations"] = [Citation(**citation) for citation in (row.get("citations") or [])]
+        return MessageRevision(**payload)
+
+    def _message_flag_metadata(self, message_ids: List[str]) -> Dict[str, Dict[str, Any]]:
+        if not message_ids:
+            return {}
+        response = (
+            self.service_client.table("message_flag_cases")
+            .select("id,message_id,status,created_at")
+            .in_("message_id", message_ids)
+            .order("created_at", desc=True)
+            .execute()
+        )
+        metadata: Dict[str, Dict[str, Any]] = {}
+        for row in response.data or []:
+            message_id = str(row["message_id"])
+            if message_id in metadata:
+                continue
+            status_value = str(row.get("status") or FlagCaseStatus.open.value)
+            active_flag_id = row["id"] if status_value in {FlagCaseStatus.open.value, FlagCaseStatus.in_review.value} else None
+            metadata[message_id] = {
+                "active_flag_id": active_flag_id,
+                "flag_status": status_value,
+            }
+        return metadata
+
+    def _serialize_session_message(
+        self,
+        message: Dict[str, Any],
+        flag_metadata: Optional[Dict[str, Dict[str, Any]]] = None,
+    ) -> SessionMessage:
+        message_id = str(message["id"])
+        metadata = (flag_metadata or {}).get(message_id, {})
+        return SessionMessage(
+            id=message_id,
+            role=message["role"],
+            content=message["content"],
+            citations=[Citation(**citation) for citation in (message.get("citations") or [])],
+            created_at=message["created_at"],
+            active_flag_id=metadata.get("active_flag_id"),
+            flag_status=metadata.get("flag_status", MessageFlagStatus.none.value),
+        )
+
+    def _visible_message_for_user(self, client: Client, message_id: str) -> Dict[str, Any]:
+        response = (
+            client.table("messages")
+            .select("id,session_id,role,content,citations,created_at")
+            .eq("id", str(message_id))
+            .limit(1)
+            .execute()
+        )
+        if not response.data:
+            raise KeyError("Message not found")
+        return response.data[0]
+
+    def _service_message_row(self, message_id: str) -> Dict[str, Any]:
+        response = (
+            self.service_client.table("messages")
+            .select("id,session_id,role,content,citations,created_at")
+            .eq("id", str(message_id))
+            .limit(1)
+            .execute()
+        )
+        if not response.data:
+            raise KeyError("Message not found")
+        return response.data[0]
+
+    def _get_flag_case_row(self, flag_case_id: str) -> Dict[str, Any]:
+        response = (
+            self.service_client.table("message_flag_cases")
+            .select("*")
+            .eq("id", str(flag_case_id))
+            .limit(1)
+            .execute()
+        )
+        if not response.data:
+            raise KeyError("Flag case not found")
+        return response.data[0]
+
+    def _get_active_flag_case_for_message(self, message_id: str) -> Optional[Dict[str, Any]]:
+        response = (
+            self.service_client.table("message_flag_cases")
+            .select("*")
+            .eq("message_id", str(message_id))
+            .in_("status", [FlagCaseStatus.open.value, FlagCaseStatus.in_review.value])
+            .order("created_at", desc=True)
+            .limit(1)
+            .execute()
+        )
+        if not response.data:
+            return None
+        return response.data[0]
+
+    def _get_revision_row(self, revision_id: str) -> Dict[str, Any]:
+        response = (
+            self.service_client.table("message_revisions")
+            .select("*")
+            .eq("id", str(revision_id))
+            .limit(1)
+            .execute()
+        )
+        if not response.data:
+            raise KeyError("Revision not found")
+        return response.data[0]
+
+    def _moderated_hub_ids_for_user(self, user_id: str) -> List[str]:
+        response = (
+            self.service_client.table("hub_members")
+            .select("hub_id")
+            .eq("user_id", str(user_id))
+            .not_.is_("accepted_at", "null")
+            .in_("role", [MembershipRole.owner.value, MembershipRole.admin.value])
+            .execute()
+        )
+        hub_ids: List[str] = []
+        for row in response.data or []:
+            hub_id = str(row.get("hub_id") or "")
+            if hub_id and hub_id not in hub_ids:
+                hub_ids.append(hub_id)
+        return hub_ids
+
+    def _require_moderation_access(self, user_id: str, hub_id: str) -> None:
+        if str(hub_id) not in self._moderated_hub_ids_for_user(user_id):
+            raise PermissionError("Owner or admin role required.")
+
+    def _question_for_flagged_message(self, session_id: str, message_id: str) -> Dict[str, Any]:
+        rows = self._list_session_messages(
+            self.service_client,
+            session_id,
+            fields="id, role, content, citations, created_at",
+        )
+        previous: Optional[Dict[str, Any]] = None
+        for row in rows:
+            if str(row["id"]) == str(message_id):
+                break
+            previous = row
+        if previous is None or str(previous.get("role") or "") != "user":
+            raise KeyError("Flagged question not found")
+        return previous
 
     def _update_chat_session_state(
         self,
@@ -792,18 +979,10 @@ class SupabaseStore:
         complete_source_ids = self._complete_source_ids_for_hub(client, hub_id)
         session = self._serialize_chat_session(row, complete_source_ids)
         messages = self._list_session_messages(client, session_id)
+        flag_metadata = self._message_flag_metadata([str(message["id"]) for message in messages if message.get("role") == "assistant"])
         return ChatSessionDetail(
             session=session,
-            messages=[
-                SessionMessage(
-                    id=str(message["id"]),
-                    role=message["role"],
-                    content=message["content"],
-                    citations=[Citation(**citation) for citation in (message.get("citations") or [])],
-                    created_at=message["created_at"],
-                )
-                for message in messages
-            ],
+            messages=[self._serialize_session_message(message, flag_metadata) for message in messages],
         )
 
     def delete_chat_session(self, client: Client, user_id: str, session_id: str) -> None:
@@ -813,6 +992,283 @@ class SupabaseStore:
         self.service_client.table("chat_sessions").update(
             {"deleted_at": datetime.now(timezone.utc).isoformat()}
         ).eq("id", str(session_id)).is_("deleted_at", "null").execute()
+
+    def flag_message(
+        self,
+        client: Client,
+        user_id: str,
+        message_id: str,
+        payload: FlagMessageRequest,
+    ) -> FlagMessageResponse:
+        message_row = self._visible_message_for_user(client, message_id)
+        if str(message_row.get("role") or "") != "assistant":
+            raise ValueError("Only assistant messages can be flagged.")
+
+        session_row = self._get_chat_session_row(client, str(message_row["session_id"]))
+        existing = self._get_active_flag_case_for_message(message_id)
+        if existing is not None:
+            return FlagMessageResponse(
+                flag_case=self._serialize_flag_case(existing),
+                created=False,
+            )
+
+        try:
+            inserted = self.service_client.rpc(
+                "create_message_flag_case_with_original_revision",
+                {
+                    "p_message_id": str(message_row["id"]),
+                    "p_created_by": str(user_id),
+                    "p_reason": payload.reason.value,
+                    "p_notes": payload.notes,
+                },
+            ).execute()
+        except Exception as exc:
+            if getattr(exc, "code", None) == "23505":
+                existing = self._get_active_flag_case_for_message(message_id)
+                if existing is not None:
+                    return FlagMessageResponse(
+                        flag_case=self._serialize_flag_case(existing),
+                        created=False,
+                    )
+            raise
+        data = inserted.data or []
+        if isinstance(data, dict):
+            return FlagMessageResponse(flag_case=self._serialize_flag_case(data), created=True)
+        if not data:
+            raise RuntimeError("Failed to create flag case.")
+        return FlagMessageResponse(flag_case=self._serialize_flag_case(data[0]), created=True)
+
+    def _list_flag_case_revisions(self, flag_case_id: str) -> List[MessageRevision]:
+        response = (
+            self.service_client.table("message_revisions")
+            .select("*")
+            .eq("flag_case_id", str(flag_case_id))
+            .order("created_at", desc=False)
+            .execute()
+        )
+        return [self._serialize_message_revision(row) for row in (response.data or [])]
+
+    def _ensure_flag_case_open(self, case_row: Dict[str, Any]) -> None:
+        if str(case_row.get("status") or "") not in {FlagCaseStatus.open.value, FlagCaseStatus.in_review.value}:
+            raise ValueError("Closed flag cases cannot be edited.")
+
+    def _flag_case_generation_context(
+        self,
+        flag_case_row: Dict[str, Any],
+    ) -> tuple[Dict[str, Any], Dict[str, Any], List[Dict[str, str]], List[Dict[str, Any]], Optional[List[str]]]:
+        session_row = self._get_chat_session_row(
+            self.service_client,
+            str(flag_case_row["session_id"]),
+            include_deleted=True,
+        )
+        self._service_message_row(str(flag_case_row["message_id"]))
+        question_row = self._question_for_flagged_message(str(flag_case_row["session_id"]), str(flag_case_row["message_id"]))
+        session_rows = self._list_session_messages(
+            self.service_client,
+            str(flag_case_row["session_id"]),
+            fields="id, role, content, citations, created_at",
+        )
+        prior_rows: List[Dict[str, Any]] = []
+        for row in session_rows:
+            if str(row["id"]) == str(question_row["id"]):
+                break
+            prior_rows.append(row)
+        history_messages = self._conversation_from_message_rows(prior_rows)
+        retrieval_history = self._retrieval_context_from_message_rows(prior_rows)
+        source_ids = [str(source_id) for source_id in (session_row.get("source_ids") or [])]
+        return session_row, question_row, history_messages, retrieval_history, source_ids
+
+    def list_flagged_chat_queue(
+        self,
+        user_id: str,
+        hub_id: str,
+        *,
+        status_filter: Optional[FlagCaseStatus] = None,
+    ) -> List[FlaggedChatQueueItem]:
+        self._require_moderation_access(user_id, hub_id)
+        query = self.service_client.table("message_flag_cases").select("*").eq("hub_id", str(hub_id))
+        if status_filter is not None:
+            query = query.eq("status", status_filter.value)
+        response = query.order("created_at", desc=True).execute()
+
+        hubs_response = self.service_client.table("hubs").select("id,name").eq("id", str(hub_id)).limit(1).execute()
+        hub_name = str((hubs_response.data or [{}])[0].get("name") or "Hub")
+
+        items: List[FlaggedChatQueueItem] = []
+        for row in response.data or []:
+            try:
+                session_row = self._get_chat_session_row(
+                    self.service_client,
+                    str(row["session_id"]),
+                    include_deleted=True,
+                )
+                message_row = self._service_message_row(str(row["message_id"]))
+                question_row = self._question_for_flagged_message(str(row["session_id"]), str(row["message_id"]))
+            except KeyError:
+                continue
+            items.append(
+                FlaggedChatQueueItem(
+                    id=str(row["id"]),
+                    hub_id=str(row["hub_id"]),
+                    hub_name=hub_name,
+                    session_id=str(row["session_id"]),
+                    session_title=str(session_row.get("title") or "New Chat"),
+                    message_id=str(row["message_id"]),
+                    question_preview=_preview_text(question_row.get("content")),
+                    answer_preview=_preview_text(message_row.get("content")),
+                    reason=row["reason"],
+                    status=row["status"],
+                    flagged_at=row["created_at"],
+                    reviewed_at=row.get("reviewed_at"),
+                )
+            )
+        return items
+
+    def _get_flag_case_for_hub(self, user_id: str, hub_id: str, flag_case_id: str) -> Dict[str, Any]:
+        self._require_moderation_access(user_id, hub_id)
+        case_row = self._get_flag_case_row(flag_case_id)
+        if str(case_row.get("hub_id") or "") != str(hub_id):
+            raise KeyError("Flag case not found")
+        return case_row
+
+    def get_flagged_chat_detail(self, user_id: str, hub_id: str, flag_case_id: str) -> FlaggedChatDetail:
+        case_row = self._get_flag_case_for_hub(user_id, hub_id, flag_case_id)
+
+        hub_response = (
+            self.service_client.table("hubs")
+            .select("id,name")
+            .eq("id", str(case_row["hub_id"]))
+            .limit(1)
+            .execute()
+        )
+        hub_name = str((hub_response.data or [{}])[0].get("name") or "Hub")
+        session_row = self._get_chat_session_row(
+            self.service_client,
+            str(case_row["session_id"]),
+            include_deleted=True,
+        )
+        question_row = self._question_for_flagged_message(str(case_row["session_id"]), str(case_row["message_id"]))
+        message_row = self._service_message_row(str(case_row["message_id"]))
+        flag_metadata = self._message_flag_metadata([str(case_row["message_id"])])
+        return FlaggedChatDetail(
+            case=self._serialize_flag_case(case_row),
+            hub_name=hub_name,
+            session_title=str(session_row.get("title") or "New Chat"),
+            question_message=self._serialize_session_message(question_row),
+            flagged_message=self._serialize_session_message(message_row, flag_metadata),
+            revisions=self._list_flag_case_revisions(str(flag_case_id)),
+        )
+
+    def regenerate_flagged_chat_revision(self, user_id: str, hub_id: str, flag_case_id: str) -> MessageRevision:
+        case_row = self._get_flag_case_for_hub(user_id, hub_id, flag_case_id)
+        self._ensure_flag_case_open(case_row)
+
+        session_row, question_row, history_messages, retrieval_history, source_ids = self._flag_case_generation_context(case_row)
+        answer, citations, _usage = self._generate_chat_answer(
+            self.service_client,
+            hub_id=str(case_row["hub_id"]),
+            question=str(question_row["content"]),
+            scope=HubScope(session_row.get("scope") or HubScope.hub.value),
+            retrieval_source_ids=source_ids,
+            history_messages=history_messages,
+            retrieval_history=retrieval_history,
+        )
+        inserted = (
+            self.service_client.table("message_revisions")
+            .insert(
+                {
+                    "message_id": case_row["message_id"],
+                    "flag_case_id": case_row["id"],
+                    "revision_type": MessageRevisionType.regenerated.value,
+                    "content": answer,
+                    "citations": [citation.model_dump() for citation in citations],
+                    "created_by": str(user_id),
+                }
+            )
+            .execute()
+        )
+        if not inserted.data:
+            raise RuntimeError("Failed to create regenerated revision.")
+        if str(case_row.get("status") or "") == FlagCaseStatus.open.value:
+            self.service_client.table("message_flag_cases").update(
+                {"status": FlagCaseStatus.in_review.value}
+            ).eq("id", str(flag_case_id)).execute()
+        return self._serialize_message_revision(inserted.data[0])
+
+    def create_flagged_chat_revision(
+        self,
+        user_id: str,
+        hub_id: str,
+        flag_case_id: str,
+        payload: CreateRevisionRequest,
+    ) -> MessageRevision:
+        case_row = self._get_flag_case_for_hub(user_id, hub_id, flag_case_id)
+        self._ensure_flag_case_open(case_row)
+        inserted = (
+            self.service_client.table("message_revisions")
+            .insert(
+                {
+                    "message_id": case_row["message_id"],
+                    "flag_case_id": case_row["id"],
+                    "revision_type": MessageRevisionType.manual_edit.value,
+                    "content": payload.content,
+                    "citations": [citation.model_dump() for citation in payload.citations],
+                    "created_by": str(user_id),
+                }
+            )
+            .execute()
+        )
+        if not inserted.data:
+            raise RuntimeError("Failed to create manual revision.")
+        if str(case_row.get("status") or "") == FlagCaseStatus.open.value:
+            self.service_client.table("message_flag_cases").update(
+                {"status": FlagCaseStatus.in_review.value}
+            ).eq("id", str(flag_case_id)).execute()
+        return self._serialize_message_revision(inserted.data[0])
+
+    def apply_flagged_chat_revision(self, user_id: str, hub_id: str, flag_case_id: str, revision_id: str) -> FlagCase:
+        case_row = self._get_flag_case_for_hub(user_id, hub_id, flag_case_id)
+        self._ensure_flag_case_open(case_row)
+        revision_row = self._get_revision_row(revision_id)
+        if str(revision_row["flag_case_id"]) != str(flag_case_id):
+            raise ValueError("Revision does not belong to this flag case.")
+        if str(revision_row.get("revision_type") or "") == MessageRevisionType.original.value:
+            raise ValueError("Original snapshots cannot be applied.")
+
+        updated = self.service_client.rpc(
+            "apply_message_revision_and_resolve_flag_case",
+            {
+                "p_flag_case_id": str(flag_case_id),
+                "p_revision_id": str(revision_id),
+                "p_reviewed_by": str(user_id),
+            },
+        ).execute()
+        data = updated.data or []
+        if isinstance(data, dict):
+            return self._serialize_flag_case(data)
+        if not data:
+            raise RuntimeError("Failed to resolve flag case.")
+        return self._serialize_flag_case(data[0])
+
+    def dismiss_flagged_chat(self, user_id: str, hub_id: str, flag_case_id: str) -> FlagCase:
+        case_row = self._get_flag_case_for_hub(user_id, hub_id, flag_case_id)
+        self._ensure_flag_case_open(case_row)
+        now = datetime.now(timezone.utc).isoformat()
+        updated = (
+            self.service_client.table("message_flag_cases")
+            .update(
+                {
+                    "status": FlagCaseStatus.dismissed.value,
+                    "reviewed_by": str(user_id),
+                    "reviewed_at": now,
+                }
+            )
+            .eq("id", str(flag_case_id))
+            .execute()
+        )
+        if not updated.data:
+            raise RuntimeError("Failed to dismiss flag case.")
+        return self._serialize_flag_case(updated.data[0])
 
     def _select_matches(
         self,
@@ -1039,6 +1495,115 @@ class SupabaseStore:
             context_blocks.append(f"[{idx}] {snippet}")
         return raw_matches, citations, context_blocks
 
+    def _generate_chat_answer(
+        self,
+        client: Client,
+        *,
+        hub_id: str,
+        question: str,
+        scope: HubScope,
+        retrieval_source_ids: Optional[List[str]],
+        history_messages: List[Dict[str, str]],
+        retrieval_history: List[Dict[str, Any]],
+    ) -> tuple[str, List[Citation], Optional[Dict[str, Any]]]:
+        retrieval_query = question
+        rewrite_attempted = False
+        is_vague_follow_up = _is_vague_follow_up(question)
+        if self.chat_rewrite_enabled and retrieval_history and is_vague_follow_up:
+            retrieval_query = self._rewrite_query_for_retrieval(question, retrieval_history)
+            rewrite_attempted = True
+
+        raw_matches, citations, context_blocks = self._retrieve_chat_context(
+            client,
+            hub_id,
+            retrieval_query,
+            retrieval_source_ids,
+        )
+
+        if self.chat_rewrite_enabled and retrieval_history and not raw_matches and not rewrite_attempted:
+            rewritten_query = self._rewrite_query_for_retrieval(question, retrieval_history)
+            rewrite_attempted = True
+            if rewritten_query != retrieval_query:
+                raw_matches, citations, context_blocks = self._retrieve_chat_context(
+                    client,
+                    hub_id,
+                    rewritten_query,
+                    retrieval_source_ids,
+                )
+
+        if (
+            self.chat_rewrite_enabled
+            and retrieval_history
+            and is_vague_follow_up
+            and _history_has_multi_source_grounding(retrieval_history)
+            and _count_distinct_citation_sources(citations) == 1
+        ):
+            anchor_turn = _most_recent_informative_user_turn(retrieval_history)
+            if anchor_turn:
+                anchored_suffix = retrieval_query if retrieval_query != question else question
+                anchored_query = _build_anchored_retrieval_query(anchor_turn, anchored_suffix)
+                if anchored_query != retrieval_query:
+                    fallback_raw_matches, fallback_citations, fallback_context_blocks = self._retrieve_chat_context(
+                        client,
+                        hub_id,
+                        anchored_query,
+                        retrieval_source_ids,
+                    )
+                    fallback_distinct_sources = _count_distinct_citation_sources(fallback_citations)
+                    current_distinct_sources = _count_distinct_citation_sources(citations)
+                    if fallback_distinct_sources > current_distinct_sources:
+                        raw_matches = fallback_raw_matches
+                        citations = fallback_citations
+                        context_blocks = fallback_context_blocks
+
+        if scope == HubScope.global_scope:
+            answer, web_citations, usage = self._answer_with_web_search(question, context_blocks)
+            all_citations = citations + web_citations
+            if not _answer_has_citation(answer, len(all_citations)):
+                all_citations = []
+            return answer, all_citations, usage
+
+        system_prompt = (
+            "You are Caddie, an onboarding assistant. Answer using the provided context only. "
+            "If the context is insufficient, say you don't have enough information. "
+            "Cite sources inline using [n] that matches the context list, and only include citations when you are "
+            "directly using the cited content. "
+            "If the user sends small talk or a greeting, respond politely and ask how you can help."
+        )
+        user_prompt = f"Question: {question}\n\nContext:\n" + "\n".join(context_blocks)
+
+        if not context_blocks:
+            system_prompt = (
+                "You are Caddie, a helpful assistant. The user is chatting or asking something that is not tied to the "
+                "hub's sources. Respond naturally and helpfully. Do not cite sources."
+            )
+            completion = self.llm_client.chat.completions.create(
+                model=self.chat_model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    *history_messages,
+                    {"role": "user", "content": question},
+                ],
+                temperature=0.2,
+            )
+            answer = completion.choices[0].message.content or ""
+            usage = completion.usage.model_dump() if completion.usage else None
+            return answer, [], usage
+
+        completion = self.llm_client.chat.completions.create(
+            model=self.chat_model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                *history_messages,
+                {"role": "user", "content": user_prompt},
+            ],
+            temperature=0.2,
+        )
+        answer = completion.choices[0].message.content or ""
+        usage = completion.usage.model_dump() if completion.usage else None
+        final_citations = citations if _answer_has_citation(answer, len(context_blocks)) else []
+        return answer, final_citations, usage
+
     def chat(self, client: Client, user_id: str, payload: ChatRequest) -> ChatResponse:
         hub_id = str(payload.hub_id)
         requested_source_ids = None if payload.source_ids is None else [str(source_id) for source_id in payload.source_ids]
@@ -1065,66 +1630,6 @@ class SupabaseStore:
             session_title = self._generate_chat_session_title(payload.question)
             history_messages = []
             retrieval_history = []
-
-        retrieval_query = payload.question
-        rewrite_attempted = False
-        is_vague_follow_up = _is_vague_follow_up(payload.question)
-        if (
-            self.chat_rewrite_enabled
-            and retrieval_history
-            and is_vague_follow_up
-        ):
-            retrieval_query = self._rewrite_query_for_retrieval(payload.question, retrieval_history)
-            rewrite_attempted = True
-
-        raw_matches, citations, context_blocks = self._retrieve_chat_context(
-            client,
-            hub_id,
-            retrieval_query,
-            retrieval_source_ids,
-        )
-
-        if (
-            self.chat_rewrite_enabled
-            and retrieval_history
-            and not raw_matches
-            and not rewrite_attempted
-        ):
-            rewritten_query = self._rewrite_query_for_retrieval(payload.question, retrieval_history)
-            rewrite_attempted = True
-            if rewritten_query != retrieval_query:
-                raw_matches, citations, context_blocks = self._retrieve_chat_context(
-                    client,
-                    hub_id,
-                    rewritten_query,
-                    retrieval_source_ids,
-                )
-
-        if (
-            self.chat_rewrite_enabled
-            and retrieval_history
-            and is_vague_follow_up
-            and _history_has_multi_source_grounding(retrieval_history)
-            and _count_distinct_citation_sources(citations) == 1
-        ):
-            anchor_turn = _most_recent_informative_user_turn(retrieval_history)
-            if anchor_turn:
-                anchored_suffix = retrieval_query if retrieval_query != payload.question else payload.question
-                anchored_query = _build_anchored_retrieval_query(anchor_turn, anchored_suffix)
-                if anchored_query != retrieval_query:
-                    fallback_raw_matches, fallback_citations, fallback_context_blocks = self._retrieve_chat_context(
-                        client,
-                        hub_id,
-                        anchored_query,
-                        retrieval_source_ids,
-                    )
-                    fallback_distinct_sources = _count_distinct_citation_sources(fallback_citations)
-                    current_distinct_sources = _count_distinct_citation_sources(citations)
-                    if fallback_distinct_sources > current_distinct_sources:
-                        raw_matches = fallback_raw_matches
-                        citations = fallback_citations
-                        context_blocks = fallback_context_blocks
-
         def finalize_response(
             answer: str,
             response_citations: List[Citation],
@@ -1148,6 +1653,7 @@ class SupabaseStore:
                     message_id=str(persisted["assistant_message_id"]),
                     session_id=str(persisted["session_id"]),
                     session_title=str(persisted.get("session_title") or session_title or "New Chat"),
+                    flag_status=MessageFlagStatus.none.value,
                 )
 
             assistant_row = (
@@ -1176,58 +1682,19 @@ class SupabaseStore:
                 message_id=assistant_row.data[0]["id"],
                 session_id=existing_session_id,
                 session_title=session_title,
+                flag_status=MessageFlagStatus.none.value,
             )
 
-        if payload.scope == HubScope.global_scope:
-            answer, web_citations, usage = self._answer_with_web_search(payload.question, context_blocks)
-            all_citations = citations + web_citations
-            has_citation = _answer_has_citation(answer, len(all_citations))
-            if not has_citation:
-                all_citations = []
-            return finalize_response(answer, all_citations, usage)
-
-        system_prompt = (
-            "You are Caddie, an onboarding assistant. Answer using the provided context only. "
-            "If the context is insufficient, say you don't have enough information. "
-            "Cite sources inline using [n] that matches the context list, and only include citations when you are "
-            "directly using the cited content. "
-            "If the user sends small talk or a greeting, respond politely and ask how you can help."
+        answer, citations, usage = self._generate_chat_answer(
+            client,
+            hub_id=hub_id,
+            question=payload.question,
+            scope=payload.scope,
+            retrieval_source_ids=retrieval_source_ids,
+            history_messages=history_messages,
+            retrieval_history=retrieval_history,
         )
-        user_prompt = f"Question: {payload.question}\n\nContext:\n" + "\n".join(context_blocks)
-
-        if not context_blocks:
-            system_prompt = (
-                "You are Caddie, a helpful assistant. The user is chatting or asking something that is not tied to the "
-                "hub's sources. Respond naturally and helpfully. Do not cite sources."
-            )
-            completion = self.llm_client.chat.completions.create(
-                model=self.chat_model,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    *history_messages,
-                    {"role": "user", "content": payload.question},
-                ],
-                temperature=0.2,
-            )
-            answer = completion.choices[0].message.content or ""
-            usage = completion.usage.model_dump() if completion.usage else None
-            return finalize_response(answer, [], usage)
-
-        completion = self.llm_client.chat.completions.create(
-            model=self.chat_model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                *history_messages,
-                {"role": "user", "content": user_prompt},
-            ],
-            temperature=0.2,
-        )
-        answer = completion.choices[0].message.content or ""
-        usage = completion.usage.model_dump() if completion.usage else None
-
-        has_citation = _answer_has_citation(answer, len(context_blocks))
-        final_citations = citations if has_citation else []
-        return finalize_response(answer, final_citations, usage)
+        return finalize_response(answer, citations, usage)
 
     def chat_history(self, client: Client, user_id: str, hub_id: str) -> List[HistoryMessage]:
         response = (
@@ -1245,14 +1712,17 @@ class SupabaseStore:
         rows = self._list_session_messages(
             client,
             response.data[0]["id"],
-            fields="role, content, citations, created_at",
+            fields="id, role, content, citations, created_at",
         )
+        flag_metadata = self._message_flag_metadata([str(row["id"]) for row in rows if row.get("role") == "assistant"])
         return [
             HistoryMessage(
                 role=m["role"],
                 content=m["content"],
                 citations=[Citation(**c) for c in (m.get("citations") or [])],
                 created_at=m["created_at"],
+                active_flag_id=flag_metadata.get(str(m["id"]), {}).get("active_flag_id"),
+                flag_status=flag_metadata.get(str(m["id"]), {}).get("flag_status", MessageFlagStatus.none.value),
             )
             for m in rows
         ]
@@ -2396,6 +2866,13 @@ def _normalize_retrieval_query(original_question: str, rewritten_query: str) -> 
     if not candidate or candidate.lower() in {"n/a", "none"}:
         return original_question
     return candidate
+
+
+def _preview_text(value: Any, limit: int = 140) -> str:
+    text = re.sub(r"\s+", " ", str(value or "")).strip()
+    if len(text) <= limit:
+        return text
+    return f"{text[: max(0, limit - 1)].rstrip()}..."
 
 
 def _average_similarity(matches: List[Dict[str, Any]]) -> float:

@@ -25,8 +25,8 @@ router = APIRouter(prefix="/guides", tags=["guides"])
 
 
 def _require_editor(role: MembershipRole) -> None:
-    if role not in (MembershipRole.owner, MembershipRole.editor):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Owner or editor role required.")
+    if role not in (MembershipRole.owner, MembershipRole.admin, MembershipRole.editor):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Owner, admin, or editor role required.")
 
 
 @router.get(

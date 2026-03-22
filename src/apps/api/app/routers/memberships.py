@@ -6,7 +6,7 @@ from postgrest.exceptions import APIError
 from supabase import Client
 
 from ..dependencies import CurrentUser, get_current_user, get_supabase_user_client, rate_limit_user_ip
-from ..schemas import HubInviteRequest, HubInviteResponse, HubMember, HubMemberUpdate, PendingInvite
+from ..schemas import HubInviteRequest, HubInviteResponse, HubMember, HubMemberUpdate, MembershipRole, PendingInvite
 from ..services.store import store
 from .errors import raise_postgrest_error
 
@@ -21,20 +21,6 @@ def _require_accepted(member: HubMember) -> None:
 def _require_owner(member: HubMember) -> None:
     if member.role != "owner":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Owner role required.")
-
-
-def _ensure_not_last_owner(client: Client, hub_id: str, target_user_id: str) -> None:
-    owners = (
-        client.table("hub_members")
-        .select("user_id")
-        .eq("hub_id", hub_id)
-        .eq("role", "owner")
-        .not_.is_("accepted_at", "null")
-        .execute()
-    )
-    owner_ids = {row["user_id"] for row in owners.data}
-    if target_user_id in owner_ids and len(owner_ids) <= 1:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Hub must have at least one owner.")
 
 
 def _attach_emails(members: List[HubMember]) -> List[HubMember]:
@@ -145,7 +131,6 @@ def update_member_role(
         member = store.get_member_role(client, hub_id, current_user.id)
         _require_accepted(member)
         _require_owner(member)
-        _ensure_not_last_owner(client, hub_id, user_id)
         return store.update_member_role(client, hub_id, user_id, payload.role)
     except KeyError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
@@ -168,10 +153,42 @@ def remove_member(
         member = store.get_member_role(client, hub_id, current_user.id)
         _require_accepted(member)
         _require_owner(member)
-        _ensure_not_last_owner(client, hub_id, user_id)
         store.remove_member(client, hub_id, user_id)
     except KeyError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except APIError as exc:
         raise_postgrest_error(exc)
     store.log_activity(client, str(hub_id), current_user.id, "removed", "member", str(user_id))
+
+
+@router.post(
+    "/hubs/{hub_id}/members/{user_id}/transfer-ownership",
+    response_model=HubMember,
+    dependencies=[Depends(rate_limit_user_ip("memberships:write", "rate_limit_write_per_minute"))],
+)
+def transfer_ownership(
+    hub_id: UUID,
+    user_id: UUID,
+    current_user: CurrentUser = Depends(get_current_user),
+    client: Client = Depends(get_supabase_user_client),
+) -> HubMember:
+    try:
+        member = store.get_member_role(client, hub_id, current_user.id)
+        _require_accepted(member)
+        _require_owner(member)
+        target_member = store.get_member_role(client, hub_id, str(user_id))
+        _require_accepted(target_member)
+        if target_member.role != MembershipRole.admin:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Ownership can only transfer to an accepted admin.",
+            )
+        return store.transfer_hub_ownership(str(hub_id), current_user.id, str(user_id))
+    except KeyError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except APIError as exc:
+        raise_postgrest_error(exc)

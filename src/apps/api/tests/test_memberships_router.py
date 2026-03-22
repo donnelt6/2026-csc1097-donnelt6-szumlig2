@@ -71,3 +71,37 @@ def test_invite_member_requires_owner(client, monkeypatch) -> None:
         json={"email": "other@example.com", "role": "viewer"},
     )
     assert resp.status_code == 403
+
+
+def test_update_member_role_rejects_owner_assignment(client) -> None:
+    resp = client.patch(
+        "/hubs/11111111-1111-1111-1111-111111111111/members/00000000-0000-0000-0000-000000000002",
+        json={"role": "owner"},
+    )
+    assert resp.status_code == 422
+
+
+def test_transfer_ownership_requires_admin_target(client, monkeypatch) -> None:
+    owner = HubMember(
+        hub_id="11111111-1111-1111-1111-111111111111",
+        user_id="00000000-0000-0000-0000-000000000001",
+        role=MembershipRole.owner,
+        accepted_at=datetime.utcnow(),
+    )
+    viewer = HubMember(
+        hub_id="11111111-1111-1111-1111-111111111111",
+        user_id="00000000-0000-0000-0000-000000000002",
+        role=MembershipRole.viewer,
+        accepted_at=datetime.utcnow(),
+    )
+    monkeypatch.setattr(
+        store_module.store,
+        "get_member_role",
+        lambda _client, hub_id, user_id: owner if str(user_id).endswith("1") else viewer,
+    )
+
+    resp = client.post(
+        "/hubs/11111111-1111-1111-1111-111111111111/members/00000000-0000-0000-0000-000000000002/transfer-ownership",
+    )
+
+    assert resp.status_code == 400

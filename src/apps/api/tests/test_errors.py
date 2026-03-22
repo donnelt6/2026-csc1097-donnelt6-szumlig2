@@ -1,9 +1,10 @@
 """Tests for PostgREST error mapping to HTTP responses."""
 
+import httpx
 import pytest
 from fastapi import HTTPException, status
 
-from app.routers.errors import raise_postgrest_error
+from app.routers.errors import raise_postgrest_error, raise_upstream_http_error
 
 
 class FakeAPIError(Exception):
@@ -35,3 +36,11 @@ def test_raise_postgrest_error_defaults_to_400() -> None:
     with pytest.raises(HTTPException) as excinfo:
         raise_postgrest_error(exc)
     assert excinfo.value.status_code == status.HTTP_400_BAD_REQUEST
+
+
+def test_raise_upstream_http_error_maps_transport_failure() -> None:
+    exc = httpx.RemoteProtocolError("Server disconnected")
+    with pytest.raises(HTTPException) as excinfo:
+        raise_upstream_http_error(exc)
+    assert excinfo.value.status_code == status.HTTP_502_BAD_GATEWAY
+    assert excinfo.value.detail == "Upstream Supabase request failed. Please retry."
