@@ -1,5 +1,7 @@
 import { getAccessToken } from "./supabaseClient";
 import type {
+  ChatSessionDetail,
+  ChatSessionSummary,
   ChatResponse,
   HistoryMessage,
   Hub,
@@ -195,11 +197,34 @@ export async function getChatHistory(hubId: string): Promise<HistoryMessage[]> {
   return handle<HistoryMessage[]>(res);
 }
 
+export async function listChatSessions(hubId: string): Promise<ChatSessionSummary[]> {
+  const res = await authedFetch(`${API_BASE}/chat/sessions?hub_id=${hubId}`, { cache: "no-store" });
+  return handle<ChatSessionSummary[]>(res);
+}
+
+export async function getChatSessionMessages(sessionId: string, hubId: string): Promise<ChatSessionDetail> {
+  const res = await authedFetch(
+    `${API_BASE}/chat/sessions/${sessionId}/messages?hub_id=${hubId}`,
+    { cache: "no-store" }
+  );
+  return handle<ChatSessionDetail>(res);
+}
+
+export async function deleteChatSession(sessionId: string): Promise<void> {
+  const res = await authedFetch(`${API_BASE}/chat/sessions/${sessionId}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) {
+    await handle(res);
+  }
+}
+
 export async function askQuestion(data: {
   hub_id: string;
   scope: "hub" | "global";
   question: string;
   source_ids?: string[];
+  session_id?: string | null;
 }): Promise<ChatResponse> {
   const res = await authedFetch(`${API_BASE}/chat`, {
     method: "POST",

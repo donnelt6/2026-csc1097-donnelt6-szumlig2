@@ -89,15 +89,9 @@ export default function HubDetail({ params }: { params: { hubId: string } }) {
           {activeTab === 'chat' && (
             <ChatPanel
               hubId={params.hubId}
-              hubName={hub?.name ?? "Hub"}
               hubDescription={hub?.description ?? undefined}
-              selectedSourceIds={sourceSelection.selectedIds}
-              hasSelectableSources={sourceSelection.completeCount > 0}
               sources={sources ?? []}
               sourcesLoading={sourcesLoading}
-              onToggleSource={sourceSelection.toggleSource}
-              onSelectAllSources={sourceSelection.selectAll}
-              onClearSourceSelection={sourceSelection.clearAll}
             />
           )}
           {activeTab === 'sources' && (

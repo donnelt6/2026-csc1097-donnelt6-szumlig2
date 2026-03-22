@@ -1,8 +1,8 @@
-"""Router tests for chat endpoint with mocked rate limiting and store calls."""
+"""Router tests for chat endpoints with mocked rate limiting and store calls."""
 
 from app.dependencies import get_rate_limiter
 from app.main import app
-from app.schemas import ChatResponse, Citation
+from app.schemas import ChatResponse, ChatSessionDetail, ChatSessionSummary, Citation, SessionMessage
 from app.services import rate_limit as rate_limit_module
 from app.services import store as store_module
 
@@ -33,6 +33,8 @@ def test_chat_success(client, monkeypatch) -> None:
         answer="Answer",
         citations=[Citation(source_id="src-1", snippet="Snippet", chunk_index=0)],
         message_id="msg-1",
+        session_id="session-1",
+        session_title="Assignment Help",
     )
     monkeypatch.setattr(store_module.store, "chat", lambda _client, user_id, payload: response)
 
@@ -50,6 +52,8 @@ def test_chat_accepts_source_ids(client, monkeypatch) -> None:
         answer="Answer",
         citations=[],
         message_id="msg-2",
+        session_id="session-2",
+        session_title="Assignment Help",
     )
     captured = {}
 
@@ -67,3 +71,74 @@ def test_chat_accepts_source_ids(client, monkeypatch) -> None:
     resp = client.post("/chat", json=payload)
     assert resp.status_code == 200
     assert [str(value) for value in captured["source_ids"]] == ["22222222-2222-2222-2222-222222222222"]
+
+
+def test_list_chat_sessions(client, monkeypatch) -> None:
+    response = [
+        ChatSessionSummary(
+            id="session-1",
+            hub_id="11111111-1111-1111-1111-111111111111",
+            title="How do I submit assignments?",
+            scope="hub",
+            source_ids=["src-1"],
+            created_at="2026-01-01T00:00:00Z",
+            last_message_at="2026-01-01T00:05:00Z",
+        )
+    ]
+    monkeypatch.setattr(store_module.store, "list_chat_sessions", lambda _client, user_id, hub_id: response)
+
+    resp = client.get("/chat/sessions", params={"hub_id": "11111111-1111-1111-1111-111111111111"})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data[0]["id"] == "session-1"
+    assert data[0]["title"] == "How do I submit assignments?"
+
+
+def test_get_chat_session_messages(client, monkeypatch) -> None:
+    response = ChatSessionDetail(
+        session=ChatSessionSummary(
+            id="session-1",
+            hub_id="11111111-1111-1111-1111-111111111111",
+            title="How do I submit assignments?",
+            scope="hub",
+            source_ids=["src-1"],
+            created_at="2026-01-01T00:00:00Z",
+            last_message_at="2026-01-01T00:05:00Z",
+        ),
+        messages=[
+            SessionMessage(
+                id="message-1",
+                role="user",
+                content="How do I submit assignments?",
+                citations=[],
+                created_at="2026-01-01T00:00:00Z",
+            )
+        ],
+    )
+    monkeypatch.setattr(
+        store_module.store,
+        "get_chat_session_with_messages",
+        lambda _client, user_id, hub_id, session_id: response,
+    )
+
+    resp = client.get(
+        "/chat/sessions/11111111-1111-1111-1111-111111111111/messages",
+        params={"hub_id": "11111111-1111-1111-1111-111111111111"},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["session"]["id"] == "session-1"
+    assert data["messages"][0]["content"] == "How do I submit assignments?"
+
+
+def test_delete_chat_session(client, monkeypatch) -> None:
+    captured = {}
+
+    def fake_delete(_client, user_id, session_id) -> None:
+        captured["session_id"] = session_id
+
+    monkeypatch.setattr(store_module.store, "delete_chat_session", fake_delete)
+
+    resp = client.delete("/chat/sessions/11111111-1111-1111-1111-111111111111")
+    assert resp.status_code == 204
+    assert captured["session_id"] == "11111111-1111-1111-1111-111111111111"

@@ -238,19 +238,45 @@ class ChatRequest(StrictModel):
     scope: HubScope = HubScope.hub
     question: str = Field(..., min_length=1, max_length=4000)
     source_ids: Optional[List[UUID]] = None
+    session_id: Optional[UUID] = None
 
 
 class ChatResponse(BaseModel):
     answer: str
-    citations: List[Citation] = []
+    citations: List[Citation] = Field(default_factory=list)
     message_id: str
+    session_id: str
+    session_title: str
 
 
 class HistoryMessage(BaseModel):
     role: str
     content: str
-    citations: List[Citation] = []
+    citations: List[Citation] = Field(default_factory=list)
     created_at: str
+
+
+class ChatSessionSummary(BaseModel):
+    id: str
+    hub_id: str
+    title: str
+    scope: HubScope
+    source_ids: List[str] = Field(default_factory=list)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    last_message_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class SessionMessage(BaseModel):
+    id: str
+    role: str
+    content: str
+    citations: List[Citation] = Field(default_factory=list)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class ChatSessionDetail(BaseModel):
+    session: ChatSessionSummary
+    messages: List[SessionMessage] = Field(default_factory=list)
 
 
 class FaqEntry(BaseModel):
