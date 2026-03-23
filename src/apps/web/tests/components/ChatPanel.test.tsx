@@ -5,6 +5,7 @@ import { ChatPanel } from "../../components/ChatPanel";
 import {
   askQuestion,
   deleteChatSession,
+  flagMessage,
   getChatSessionMessages,
   listChatSessions,
 } from "../../lib/api";
@@ -23,6 +24,7 @@ vi.mock("next/navigation", () => ({
 vi.mock("../../lib/api", () => ({
   askQuestion: vi.fn(),
   deleteChatSession: vi.fn(),
+  flagMessage: vi.fn(),
   getChatSessionMessages: vi.fn(),
   listChatSessions: vi.fn(),
 }));
@@ -76,6 +78,7 @@ describe("ChatPanel", () => {
       message_id: "message-1",
       session_id: "session-1",
       session_title: "Assignment Help",
+      flag_status: "none",
     });
 
     renderWithQueryClient(
@@ -126,6 +129,7 @@ describe("ChatPanel", () => {
       message_id: "message-3",
       session_id: "session-3",
       session_title: "Global Help",
+      flag_status: "none",
     });
 
     renderWithQueryClient(
@@ -192,6 +196,7 @@ describe("ChatPanel", () => {
               content: "How do I submit assignments?",
               citations: [],
               created_at: "2026-01-02T12:00:00Z",
+              flag_status: "none",
             },
           ],
         };
@@ -213,6 +218,7 @@ describe("ChatPanel", () => {
             content: "When is the exam?",
             citations: [],
             created_at: "2026-01-01T12:00:00Z",
+            flag_status: "none",
           },
         ],
       };
@@ -315,6 +321,7 @@ describe("ChatPanel", () => {
             content: "How do I submit assignments?",
             citations: [],
             created_at: "2026-01-02T12:00:00Z",
+            flag_status: "none",
           },
         ],
       });
@@ -360,5 +367,48 @@ describe("ChatPanel", () => {
     rerender(<ChatPanel hubId="hub-1" sources={sources} />);
 
     await waitFor(() => expect(screen.getByRole("button", { name: "Sources (1/2)" })).toBeInTheDocument());
+  });
+
+  it("flags an assistant response for moderation", async () => {
+    vi.mocked(listChatSessions).mockResolvedValue([]);
+    vi.mocked(askQuestion).mockResolvedValue({
+      answer: "Use Moodle.",
+      citations: [],
+      message_id: "message-1",
+      session_id: "session-1",
+      session_title: "Assignment Help",
+      flag_status: "none",
+    });
+    vi.mocked(flagMessage).mockResolvedValue({
+      created: true,
+      flag_case: {
+        id: "flag-1",
+        hub_id: "hub-1",
+        session_id: "session-1",
+        message_id: "message-1",
+        created_by: "user-1",
+        reason: "incorrect",
+        status: "open",
+        created_at: "2026-03-22T10:00:00Z",
+        updated_at: "2026-03-22T10:00:00Z",
+      },
+    });
+    vi.stubGlobal("confirm", vi.fn(() => true));
+
+    renderWithQueryClient(
+      <ChatPanel hubId="hub-1" hubRole="viewer" sources={sources} />
+    );
+
+    const user = userEvent.setup();
+    await waitFor(() => expect(screen.getAllByText("New Chat").length).toBeGreaterThan(0));
+    await user.type(screen.getByLabelText("Ask a question"), "How do I submit assignments?");
+    await user.click(screen.getByRole("button", { name: "Send message" }));
+
+    await waitFor(() => expect(screen.getByRole("button", { name: "Flag response" })).toBeInTheDocument());
+    await user.selectOptions(screen.getByLabelText("Flag reason"), "outdated");
+    await user.click(screen.getByRole("button", { name: "Flag response" }));
+
+    await waitFor(() => expect(flagMessage).toHaveBeenCalledWith("message-1", { reason: "outdated" }));
+    expect(screen.getByRole("button", { name: "Flagged" })).toBeDisabled();
   });
 });

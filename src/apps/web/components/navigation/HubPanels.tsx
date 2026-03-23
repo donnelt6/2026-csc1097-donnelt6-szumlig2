@@ -8,8 +8,10 @@ import {
   UsersIcon,
   ClipboardDocumentListIcon,
   QuestionMarkCircleIcon,
+  ShieldCheckIcon,
 } from '@heroicons/react/24/outline';
 import { useHubTab, type HubTab } from '../../lib/HubTabContext';
+import { useCurrentHub } from '../../lib/CurrentHubContext';
 
 const items: { key: HubTab; icon: typeof DocumentTextIcon; label: string }[] = [
   { key: 'chat', icon: ChatBubbleLeftRightIcon, label: 'Chat' },
@@ -20,11 +22,16 @@ const items: { key: HubTab; icon: typeof DocumentTextIcon; label: string }[] = [
   { key: 'faq', icon: QuestionMarkCircleIcon, label: 'FAQs' },
 ];
 
+const adminItem = { key: 'admin' as HubTab, icon: ShieldCheckIcon, label: 'Admin' };
+
 export function HubPanels() {
   const params = useParams<{ hubId: string }>();
   const { activeTab, setActiveTab } = useHubTab();
+  const { currentHub } = useCurrentHub();
 
   const hubId = params?.hubId ?? null;
+  const canModerate = currentHub?.id === hubId && (currentHub.role === 'owner' || currentHub.role === 'admin');
+  const visibleItems = canModerate ? [...items, adminItem] : items;
 
   if (!hubId) return null;
 
@@ -32,7 +39,7 @@ export function HubPanels() {
     <div className="sidebar-section">
       <p className="sidebar-section-title">Hub</p>
       <ul className="sidebar-nav-list">
-        {items.map(({ key, icon: Icon, label }) => (
+        {visibleItems.map(({ key, icon: Icon, label }) => (
           <li key={key}>
             <button
               className={`sidebar-item hub-nav-button${activeTab === key ? ' active' : ''}`}

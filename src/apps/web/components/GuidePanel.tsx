@@ -459,7 +459,7 @@ export function GuidePanel({ hubId, selectedSourceIds, hasSelectableSources, can
           {hasSelectableSources && !hasSelection && (
             <p className="muted">Select at least one source to generate guides.</p>
           )}
-          {!canEdit && <p className="muted">Only owners and editors can generate or edit guides.</p>}
+          {!canEdit && <p className="muted">Only owners, admins, and editors can generate or edit guides.</p>}
         </div>
       </div>
       {statusMessage && <p className="muted">{statusMessage}</p>}

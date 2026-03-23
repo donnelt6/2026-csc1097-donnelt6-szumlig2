@@ -109,7 +109,7 @@ export function HubsToolbar({ filters, onFiltersChange }: HubsToolbarProps) {
             <div className="filter-section">
               <p className="filter-section-header">Role</p>
               <div className="checkbox-group">
-                {["owner", "editor", "viewer"].map((role) => (
+                {["owner", "admin", "editor", "viewer"].map((role) => (
                   <label key={role} className="checkbox-label">
                     <input
                       type="checkbox"

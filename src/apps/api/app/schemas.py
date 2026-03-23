@@ -14,6 +14,13 @@ class HubScope(str, Enum):
 
 class MembershipRole(str, Enum):
     owner = "owner"
+    admin = "admin"
+    editor = "editor"
+    viewer = "viewer"
+
+
+class AssignableMembershipRole(str, Enum):
+    admin = "admin"
     editor = "editor"
     viewer = "viewer"
 
@@ -57,7 +64,7 @@ class HubMember(BaseModel):
 
 class HubInviteRequest(StrictModel):
     email: EmailStr
-    role: MembershipRole = MembershipRole.viewer
+    role: AssignableMembershipRole = AssignableMembershipRole.viewer
 
     @field_validator("email")
     @classmethod
@@ -70,7 +77,7 @@ class HubInviteResponse(BaseModel):
 
 
 class HubMemberUpdate(StrictModel):
-    role: MembershipRole
+    role: AssignableMembershipRole
 
 
 class HubFavouriteToggle(StrictModel):
@@ -247,6 +254,8 @@ class ChatResponse(BaseModel):
     message_id: str
     session_id: str
     session_title: str
+    active_flag_id: Optional[str] = None
+    flag_status: str = "none"
 
 
 class HistoryMessage(BaseModel):
@@ -254,6 +263,8 @@ class HistoryMessage(BaseModel):
     content: str
     citations: List[Citation] = Field(default_factory=list)
     created_at: str
+    active_flag_id: Optional[str] = None
+    flag_status: str = "none"
 
 
 class ChatSessionSummary(BaseModel):
@@ -272,11 +283,113 @@ class SessionMessage(BaseModel):
     content: str
     citations: List[Citation] = Field(default_factory=list)
     created_at: datetime = Field(default_factory=datetime.utcnow)
+    active_flag_id: Optional[str] = None
+    flag_status: str = "none"
 
 
 class ChatSessionDetail(BaseModel):
     session: ChatSessionSummary
     messages: List[SessionMessage] = Field(default_factory=list)
+
+
+class MessageFlagStatus(str, Enum):
+    none = "none"
+    open = "open"
+    in_review = "in_review"
+    resolved = "resolved"
+    dismissed = "dismissed"
+
+
+class FlagCaseStatus(str, Enum):
+    open = "open"
+    in_review = "in_review"
+    resolved = "resolved"
+    dismissed = "dismissed"
+
+
+class FlagReason(str, Enum):
+    incorrect = "incorrect"
+    unsupported = "unsupported"
+    harmful = "harmful"
+    outdated = "outdated"
+    other = "other"
+
+
+class MessageRevisionType(str, Enum):
+    original = "original"
+    regenerated = "regenerated"
+    manual_edit = "manual_edit"
+
+
+class FlagMessageRequest(StrictModel):
+    reason: FlagReason
+    notes: Optional[str] = Field(default=None, max_length=1000)
+
+
+class FlagCase(BaseModel):
+    id: str
+    hub_id: str
+    session_id: str
+    message_id: str
+    created_by: str
+    reason: FlagReason
+    notes: Optional[str] = None
+    status: FlagCaseStatus
+    reviewed_by: Optional[str] = None
+    reviewed_at: Optional[datetime] = None
+    resolved_revision_id: Optional[str] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class FlagMessageResponse(BaseModel):
+    flag_case: FlagCase
+    created: bool
+
+
+class MessageRevision(BaseModel):
+    id: str
+    message_id: str
+    flag_case_id: str
+    revision_type: MessageRevisionType
+    content: str
+    citations: List[Citation] = Field(default_factory=list)
+    created_by: Optional[str] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    applied_at: Optional[datetime] = None
+
+
+class CreateRevisionRequest(StrictModel):
+    content: str = Field(..., min_length=1, max_length=12000)
+    citations: List[Citation] = Field(default_factory=list)
+
+
+class ApplyRevisionRequest(StrictModel):
+    revision_id: UUID
+
+
+class FlaggedChatQueueItem(BaseModel):
+    id: str
+    hub_id: str
+    hub_name: str
+    session_id: str
+    session_title: str
+    message_id: str
+    question_preview: str
+    answer_preview: str
+    reason: FlagReason
+    status: FlagCaseStatus
+    flagged_at: datetime = Field(default_factory=datetime.utcnow)
+    reviewed_at: Optional[datetime] = None
+
+
+class FlaggedChatDetail(BaseModel):
+    case: FlagCase
+    hub_name: str
+    session_title: str
+    question_message: SessionMessage
+    flagged_message: SessionMessage
+    revisions: List[MessageRevision] = Field(default_factory=list)
 
 
 class FaqEntry(BaseModel):

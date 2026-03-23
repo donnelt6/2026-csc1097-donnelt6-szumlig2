@@ -1,13 +1,16 @@
 'use client';
 
-import { useState, useCallback, useLayoutEffect } from 'react';
-import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { useState, useCallback, useLayoutEffect, useMemo } from 'react';
+import { useParams, usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { useQuery } from '@tanstack/react-query';
 import { Bars3Icon, MagnifyingGlassIcon } from '@heroicons/react/24/outline';
 import { Sidebar } from './navigation/Sidebar';
 import { ProfileMenu } from './navigation/ProfileMenu';
 import { NotificationsMenu } from './navigation/NotificationsMenu';
 import { useAuth } from './auth/AuthProvider';
 import { useSearch } from '../lib/SearchContext';
+import { listHubs } from '../lib/api';
+import { CurrentHubProvider } from '../lib/CurrentHubContext';
 
 type SidebarState = 'open' | 'collapsed' | 'hidden';
 
@@ -18,6 +21,7 @@ interface AppShellProps {
 export function AppShell({ children }: AppShellProps) {
   const [sidebarState, setSidebarState] = useState<SidebarState | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const params = useParams<{ hubId?: string }>();
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -26,7 +30,18 @@ export function AppShell({ children }: AppShellProps) {
 
   const isAuthPage = pathname.startsWith('/auth');
   const isDashboard = pathname === '/dashboard';
+  const isHubRoute = pathname.startsWith('/hubs/');
+  const hubId = isHubRoute ? params?.hubId ?? null : null;
   const showChrome = !isAuthPage && !loading && !!user;
+  const { data: hubs, isLoading: hubsLoading } = useQuery({
+    queryKey: ["hubs"],
+    queryFn: listHubs,
+    enabled: showChrome && !!hubId,
+  });
+  const currentHub = useMemo(
+    () => hubs?.find((hub) => hub.id === hubId) ?? null,
+    [hubId, hubs]
+  );
 
   const dashboardTab = searchParams.get('tab') ?? 'dashboard';
   const dashboardTabs = [
@@ -72,71 +87,73 @@ export function AppShell({ children }: AppShellProps) {
   }
 
   return (
-    <div className={`app-shell sidebar-${effectiveSidebarState}${!isHydrated ? ' no-transition' : ''}`}>
-      <div
-        className={`mobile-overlay ${mobileMenuOpen ? 'is-visible' : ''}`}
-        onClick={closeMobileMenu}
-      />
-      <Sidebar
-        state={effectiveSidebarState}
-        onStateChange={handleStateChange}
-        mobileOpen={mobileMenuOpen}
-        onMobileClose={closeMobileMenu}
-      />
-      <header className="site-nav">
-        <div className="nav-content">
-          <div className="nav-brand">
-            <button
-              className={`mobile-menu-button ${sidebarHidden ? 'is-visible-desktop' : ''}`}
-              onClick={handleMenuClick}
-              aria-label="Open menu"
-            >
-              <Bars3Icon />
-            </button>
-            <a className="brand" href="/">
-              Caddie
-            </a>
-          </div>
-          {isDashboard ? (
-            <div className="dash-nav-tabs">
-              {dashboardTabs.map((tab) => (
-                <button
-                  key={tab.key}
-                  className={`dash-nav-tab ${dashboardTab === tab.key ? 'dash-nav-tab--active' : ''}`}
-                  onClick={() => {
-                    const params = new URLSearchParams(searchParams.toString());
-                    if (tab.key === 'dashboard') {
-                      params.delete('tab');
-                    } else {
-                      params.set('tab', tab.key);
-                    }
-                    const qs = params.toString();
-                    router.push(`/dashboard${qs ? `?${qs}` : ''}`, { scroll: false });
-                  }}
-                >
-                  {tab.label}
-                </button>
-              ))}
+    <CurrentHubProvider value={{ currentHub, isLoading: isHubRoute && hubsLoading }}>
+      <div className={`app-shell sidebar-${effectiveSidebarState}${!isHydrated ? ' no-transition' : ''}`}>
+        <div
+          className={`mobile-overlay ${mobileMenuOpen ? 'is-visible' : ''}`}
+          onClick={closeMobileMenu}
+        />
+        <Sidebar
+          state={effectiveSidebarState}
+          onStateChange={handleStateChange}
+          mobileOpen={mobileMenuOpen}
+          onMobileClose={closeMobileMenu}
+        />
+        <header className="site-nav">
+          <div className="nav-content">
+            <div className="nav-brand">
+              <button
+                className={`mobile-menu-button ${sidebarHidden ? 'is-visible-desktop' : ''}`}
+                onClick={handleMenuClick}
+                aria-label="Open menu"
+              >
+                <Bars3Icon />
+              </button>
+              <a className="brand" href="/">
+                Caddie
+              </a>
             </div>
-          ) : (
-            <div className="nav-search">
-              <MagnifyingGlassIcon className="nav-search-icon" />
-              <input
-                type="text"
-                placeholder="Search documentation hubs..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="nav-search-input"
-              />
+            {isDashboard ? (
+              <div className="dash-nav-tabs">
+                {dashboardTabs.map((tab) => (
+                  <button
+                    key={tab.key}
+                    className={`dash-nav-tab ${dashboardTab === tab.key ? 'dash-nav-tab--active' : ''}`}
+                    onClick={() => {
+                      const params = new URLSearchParams(searchParams.toString());
+                      if (tab.key === 'dashboard') {
+                        params.delete('tab');
+                      } else {
+                        params.set('tab', tab.key);
+                      }
+                      const qs = params.toString();
+                      router.push(`/dashboard${qs ? `?${qs}` : ''}`, { scroll: false });
+                    }}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="nav-search">
+                <MagnifyingGlassIcon className="nav-search-icon" />
+                <input
+                  type="text"
+                  placeholder="Search documentation hubs..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="nav-search-input"
+                />
+              </div>
+            )}
+            <div className="nav-actions">
+              <NotificationsMenu />
+              <ProfileMenu />
             </div>
-          )}
-          <div className="nav-actions">
-            <NotificationsMenu />
-            <ProfileMenu />
           </div>
-        </div>
-      </header>
-      {children}
-    </div>
+        </header>
+        {children}
+      </div>
+    </CurrentHubProvider>
   );
 }

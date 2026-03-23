@@ -128,7 +128,7 @@ export function FaqPanel({ hubId, selectedSourceIds, hasSelectableSources, canEd
         {hasSelectableSources && !hasSelection && (
           <p className="muted">Select at least one source to generate FAQs.</p>
         )}
-        {!canEdit && <p className="muted">Only owners and editors can generate or edit FAQs.</p>}
+        {!canEdit && <p className="muted">Only owners, admins, and editors can generate or edit FAQs.</p>}
       </div>
       {statusMessage && <p className="muted">{statusMessage}</p>}
       {isLoading && <p className="muted">Loading FAQs...</p>}

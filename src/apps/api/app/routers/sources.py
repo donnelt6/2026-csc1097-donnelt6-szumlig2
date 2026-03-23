@@ -162,7 +162,11 @@ def decide_source_suggestion(
     except APIError as exc:
         raise_postgrest_error(exc)
 
-    if membership.accepted_at is None or membership.role not in {MembershipRole.owner, MembershipRole.editor}:
+    if membership.accepted_at is None or membership.role not in {
+        MembershipRole.owner,
+        MembershipRole.admin,
+        MembershipRole.editor,
+    }:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You do not have permission to review suggestions.")
 
     now = datetime.now(timezone.utc).isoformat()

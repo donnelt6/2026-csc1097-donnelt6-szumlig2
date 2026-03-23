@@ -100,7 +100,7 @@ export function SuggestedSourcesPanel({ hubId, canReview, onAccepted }: Props) {
                     </button>
                   </div>
                 ) : (
-                  <p className="muted" style={{ margin: 0 }}>Only owners and editors can review suggestions.</p>
+                  <p className="muted" style={{ margin: 0 }}>Only owners, admins, and editors can review suggestions.</p>
                 )}
               </div>
             </div>

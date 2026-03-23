@@ -91,6 +91,6 @@ describe("SuggestedSourcesPanel", () => {
 
     expect(await screen.findByText("Demo video")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Accept" })).not.toBeInTheDocument();
-    expect(screen.getByText("Only owners and editors can review suggestions.")).toBeInTheDocument();
+    expect(screen.getByText("Only owners, admins, and editors can review suggestions.")).toBeInTheDocument();
   });
 });
