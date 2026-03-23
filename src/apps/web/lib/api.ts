@@ -1,15 +1,22 @@
 import { getAccessToken } from "./supabaseClient";
 import type {
   ActivityEvent,
+  AssignableMembershipRole,
   ChatSessionDetail,
   ChatSessionSummary,
   ChatResponse,
+  FlagCase,
+  FlagCaseStatus,
+  FlagMessageResponse,
+  FlaggedChatDetail,
+  FlaggedChatQueueItem,
   HistoryMessage,
   Hub,
   HubMember,
   FaqEntry,
   GuideEntry,
   GuideStep,
+  MessageRevision,
   NotificationEvent,
   PendingInvite,
   Reminder,
@@ -243,6 +250,74 @@ export async function listActivity(hubId?: string, limit = 50): Promise<Activity
   return handle<ActivityEvent[]>(res);
 }
 
+export async function flagMessage(
+  messageId: string,
+  data: { reason: "incorrect" | "unsupported" | "harmful" | "outdated" | "other"; notes?: string }
+): Promise<FlagMessageResponse> {
+  const res = await authedFetch(`${API_BASE}/messages/${messageId}/flag`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  return handle<FlagMessageResponse>(res);
+}
+
+export async function listFlaggedChats(
+  hubId: string,
+  params: {
+    status?: FlagCaseStatus;
+  } = {}
+): Promise<FlaggedChatQueueItem[]> {
+  const search = new URLSearchParams();
+  if (params.status) search.set("status", params.status);
+  const url = search.toString()
+    ? `${API_BASE}/hubs/${hubId}/flagged-chats?${search}`
+    : `${API_BASE}/hubs/${hubId}/flagged-chats`;
+  const res = await authedFetch(url, { cache: "no-store" });
+  return handle<FlaggedChatQueueItem[]>(res);
+}
+
+export async function getFlaggedChat(hubId: string, flagId: string): Promise<FlaggedChatDetail> {
+  const res = await authedFetch(`${API_BASE}/hubs/${hubId}/flagged-chats/${flagId}`, { cache: "no-store" });
+  return handle<FlaggedChatDetail>(res);
+}
+
+export async function regenerateFlaggedChat(hubId: string, flagId: string): Promise<MessageRevision> {
+  const res = await authedFetch(`${API_BASE}/hubs/${hubId}/flagged-chats/${flagId}/regenerate`, {
+    method: "POST",
+  });
+  return handle<MessageRevision>(res);
+}
+
+export async function createFlaggedChatRevision(
+  hubId: string,
+  flagId: string,
+  data: { content: string; citations: ChatResponse["citations"] }
+): Promise<MessageRevision> {
+  const res = await authedFetch(`${API_BASE}/hubs/${hubId}/flagged-chats/${flagId}/revisions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  return handle<MessageRevision>(res);
+}
+
+export async function applyFlaggedChatRevision(hubId: string, flagId: string, revisionId: string): Promise<FlagCase> {
+  const res = await authedFetch(`${API_BASE}/hubs/${hubId}/flagged-chats/${flagId}/apply`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ revision_id: revisionId }),
+  });
+  return handle<FlagCase>(res);
+}
+
+export async function dismissFlaggedChat(hubId: string, flagId: string): Promise<FlagCase> {
+  const res = await authedFetch(`${API_BASE}/hubs/${hubId}/flagged-chats/${flagId}/dismiss`, {
+    method: "POST",
+  });
+  return handle<FlagCase>(res);
+}
+
 export async function listFaqs(hubId: string): Promise<FaqEntry[]> {
   const res = await authedFetch(`${API_BASE}/faqs?hub_id=${hubId}`, { cache: "no-store" });
   return handle<FaqEntry[]>(res);
@@ -393,7 +468,7 @@ export async function listMembers(hubId: string): Promise<HubMember[]> {
   return handle<HubMember[]>(res);
 }
 
-export async function inviteMember(hubId: string, data: { email: string; role: "owner" | "editor" | "viewer" }): Promise<HubMember> {
+export async function inviteMember(hubId: string, data: { email: string; role: AssignableMembershipRole }): Promise<HubMember> {
   const res = await authedFetch(`${API_BASE}/hubs/${hubId}/members/invite`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -413,12 +488,19 @@ export async function acceptInvite(hubId: string): Promise<HubMember> {
 export async function updateMemberRole(
   hubId: string,
   userId: string,
-  data: { role: "owner" | "editor" | "viewer" }
+  data: { role: AssignableMembershipRole }
 ): Promise<HubMember> {
   const res = await authedFetch(`${API_BASE}/hubs/${hubId}/members/${userId}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
+  });
+  return handle<HubMember>(res);
+}
+
+export async function transferHubOwnership(hubId: string, userId: string): Promise<HubMember> {
+  const res = await authedFetch(`${API_BASE}/hubs/${hubId}/members/${userId}/transfer-ownership`, {
+    method: "POST",
   });
   return handle<HubMember>(res);
 }

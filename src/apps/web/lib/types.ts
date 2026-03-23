@@ -1,5 +1,10 @@
 export type HubScope = "hub" | "global";
-export type MembershipRole = "owner" | "editor" | "viewer";
+export type MembershipRole = "owner" | "admin" | "editor" | "viewer";
+export type AssignableMembershipRole = "admin" | "editor" | "viewer";
+export type FlagCaseStatus = "open" | "in_review" | "resolved" | "dismissed";
+export type MessageFlagStatus = "none" | FlagCaseStatus;
+export type FlagReason = "incorrect" | "unsupported" | "harmful" | "outdated" | "other";
+export type MessageRevisionType = "original" | "regenerated" | "manual_edit";
 
 export interface Hub {
   id: string;
@@ -56,6 +61,8 @@ export interface ChatResponse {
   message_id: string;
   session_id: string;
   session_title: string;
+  active_flag_id?: string | null;
+  flag_status: MessageFlagStatus;
 }
 
 export interface Citation {
@@ -69,6 +76,8 @@ export interface HistoryMessage {
   content: string;
   citations: Citation[];
   created_at: string;
+  active_flag_id?: string | null;
+  flag_status: MessageFlagStatus;
 }
 
 export interface ChatSessionSummary {
@@ -87,6 +96,8 @@ export interface SessionMessage {
   content: string;
   citations: Citation[];
   created_at: string;
+  active_flag_id?: string | null;
+  flag_status: MessageFlagStatus;
 }
 
 export interface ChatSessionDetail {
@@ -165,6 +176,63 @@ export interface PendingInvite {
   hub: Hub;
   role: MembershipRole;
   invited_at?: string | null;
+}
+
+export interface FlagCase {
+  id: string;
+  hub_id: string;
+  session_id: string;
+  message_id: string;
+  created_by: string;
+  reason: FlagReason;
+  notes?: string | null;
+  status: FlagCaseStatus;
+  reviewed_by?: string | null;
+  reviewed_at?: string | null;
+  resolved_revision_id?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface FlagMessageResponse {
+  flag_case: FlagCase;
+  created: boolean;
+}
+
+export interface MessageRevision {
+  id: string;
+  message_id: string;
+  flag_case_id: string;
+  revision_type: MessageRevisionType;
+  content: string;
+  citations: Citation[];
+  created_by?: string | null;
+  created_at: string;
+  applied_at?: string | null;
+}
+
+export interface FlaggedChatQueueItem {
+  id: string;
+  hub_id: string;
+  hub_name: string;
+  session_id: string;
+  session_title: string;
+  message_id: string;
+  question_preview: string;
+  answer_preview: string;
+  reason: FlagReason;
+  status: FlagCaseStatus;
+  flagged_at: string;
+  reviewed_at?: string | null;
+}
+
+export interface FlaggedChatDetail {
+  case: FlagCase;
+  hub_name: string;
+  session_title: string;
+  question_message: SessionMessage;
+  flagged_message: SessionMessage;
+  revisions: MessageRevision[];
 }
 
 export type ReminderStatus = "scheduled" | "sent" | "completed" | "cancelled";
