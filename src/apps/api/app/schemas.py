@@ -392,6 +392,10 @@ class FlaggedChatDetail(BaseModel):
     revisions: List[MessageRevision] = Field(default_factory=list)
 
 
+class ChatSessionRenameRequest(StrictModel):
+    title: str = Field(..., min_length=1, max_length=80)
+
+
 class FaqEntry(BaseModel):
     id: str
     hub_id: str

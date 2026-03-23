@@ -2,18 +2,18 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { ChevronDownIcon, FlagIcon, PaperAirplaneIcon, PlusIcon, TrashIcon } from "@heroicons/react/24/outline";
+import { ChevronDownIcon, ClipboardDocumentIcon, FlagIcon, HandThumbUpIcon, HandThumbDownIcon, PaperAirplaneIcon } from "@heroicons/react/24/outline";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
   askQuestion,
-  deleteChatSession,
   flagMessage,
   getChatSessionMessages,
   listChatSessions,
 } from "../lib/api";
 import type { ChatResponse, Citation, ChatSessionSummary, FlagReason, MembershipRole, SessionMessage, Source } from "../lib/types";
 import { SourceSelector } from "./SourceSelector";
+import { useAuth } from "./auth/AuthProvider";
 
 const SCOPE_OPTIONS = [
   { value: "hub" as const, label: "Hub only" },
@@ -36,6 +36,7 @@ interface MessagePair {
   response: ChatResponse | null;
   error: string | null;
   isLoading: boolean;
+  timestamp: string | null;
 }
 
 interface ChatControlState {
@@ -49,13 +50,15 @@ interface DraftState extends ChatControlState {
 
 interface Props {
   hubId: string;
+  hubName?: string;
   hubDescription?: string;
   hubRole?: MembershipRole | null;
   sources: Source[];
   sourcesLoading?: boolean;
 }
 
-export function ChatPanel({ hubId, hubDescription, hubRole, sources, sourcesLoading }: Props) {
+export function ChatPanel({ hubId, hubName, hubDescription, hubRole, sources, sourcesLoading }: Props) {
+  const { user } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -81,11 +84,15 @@ export function ChatPanel({ hubId, hubDescription, hubRole, sources, sourcesLoad
   const [activeCitation, setActiveCitation] = useState<Citation | null>(null);
   const [panelError, setPanelError] = useState<string | null>(null);
 
-  const scopeRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const modalCloseRef = useRef<HTMLButtonElement>(null);
   const previousCompleteSourceIdsRef = useRef<string[]>([]);
+
+  const userInitial = useMemo(() => {
+    const name = user?.email ?? user?.user_metadata?.full_name ?? "U";
+    return name.trim()[0]?.toUpperCase() ?? "U";
+  }, [user]);
 
   const completeSources = useMemo(
     () => sources.filter((source) => source.status === "complete"),
@@ -109,16 +116,6 @@ export function ChatPanel({ hubId, hubDescription, hubRole, sources, sourcesLoad
     }
     return sessionList.find((session) => session.id === activeSessionId)?.title ?? "New Chat";
   }, [activeSessionId, sessionList]);
-  const hasUnsavedSessionControlChanges = useMemo(() => {
-    if (activeSessionId === null || persistedSessionControls === null) {
-      return false;
-    }
-    return (
-      scope !== persistedSessionControls.scope ||
-      !arraysEqual(selectedSourceIds, persistedSessionControls.selectedSourceIds)
-    );
-  }, [activeSessionId, persistedSessionControls, scope, selectedSourceIds]);
-
   useEffect(() => {
     const previousIds = previousCompleteSourceIdsRef.current;
     if (
@@ -143,26 +140,6 @@ export function ChatPanel({ hubId, hubDescription, hubRole, sources, sourcesLoad
       selectedSourceIds,
     });
   }, [activeSessionId, messages, scope, selectedSourceIds]);
-
-  useEffect(() => {
-    if (!scopeOpen) return;
-    const handleClick = (event: MouseEvent) => {
-      if (scopeRef.current && !scopeRef.current.contains(event.target as Node)) {
-        setScopeOpen(false);
-      }
-    };
-    const handleKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setScopeOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClick);
-    document.addEventListener("keydown", handleKey);
-    return () => {
-      document.removeEventListener("mousedown", handleClick);
-      document.removeEventListener("keydown", handleKey);
-    };
-  }, [scopeOpen]);
 
   useEffect(() => {
     if (!activeCitation) return;
@@ -321,13 +298,23 @@ export function ChatPanel({ hubId, hubDescription, hubRole, sources, sourcesLoad
     }
   }
 
-  function handleNewChat() {
-    activateDraft(buildDraftState(draftState, completeSourceIds), true);
-  }
+  const currentSessionParam = searchParams.get("session");
+  useEffect(() => {
+    if (isBootstrapping) return;
+    if (currentSessionParam === "new") {
+      const carryOver = normalizedSelectedSourceIds.length > 0
+        ? normalizedSelectedSourceIds
+        : completeSourceIds;
+      activateDraft({ messages: [], scope, selectedSourceIds: [...carryOver] }, false);
+      return;
+    }
+    if (currentSessionParam && currentSessionParam !== activeSessionId) {
+      void openSession(currentSessionParam, undefined, false);
+    }
+  }, [currentSessionParam]);
 
   function handleScopeChange(nextScope: ChatScope) {
     setScope(nextScope);
-    setScopeOpen(false);
   }
 
   function handleToggleSource(sourceId: string) {
@@ -384,6 +371,7 @@ export function ChatPanel({ hubId, hubDescription, hubRole, sources, sourcesLoad
       response: null,
       error: null,
       isLoading: true,
+      timestamp: new Date().toISOString(),
     };
 
     setMessages((current) => [...current, pendingPair]);
@@ -456,28 +444,6 @@ export function ChatPanel({ hubId, hubDescription, hubRole, sources, sourcesLoad
     }
   }
 
-  async function handleDeleteSession(sessionId: string) {
-    if (typeof window !== "undefined") {
-      const confirmed = window.confirm("Delete this chat? Messages stay in the database but the chat will disappear.");
-      if (!confirmed) {
-        return;
-      }
-    }
-
-    setDeletingSessionId(sessionId);
-    setPanelError(null);
-    try {
-      await deleteChatSession(sessionId);
-      setSessionList((current) => current.filter((session) => session.id !== sessionId));
-      if (activeSessionId === sessionId) {
-        activateDraft(buildDraftState(draftState, completeSourceIds), true);
-      }
-    } catch (error) {
-      setPanelError(error instanceof Error ? error.message : String(error));
-    } finally {
-      setDeletingSessionId(null);
-    }
-  }
 
   async function handleFlagResponse(messageId: string) {
     if (!canFlagResponses || flaggingMessageId) {
@@ -517,57 +483,14 @@ export function ChatPanel({ hubId, hubDescription, hubRole, sources, sourcesLoad
   return (
     <>
       <div className="chat">
-        <aside className="chat__sidebar">
-          <button type="button" className="chat__new-button" onClick={handleNewChat}>
-            <PlusIcon className="chat__new-icon" />
-            <span>New Chat</span>
-          </button>
-
-          <div className="chat__sidebar-list">
-            {sessionList.length === 0 ? (
-              <p className="chat__sidebar-empty">No saved chats yet.</p>
-            ) : (
-              sessionList.map((session) => (
-                <div
-                  key={session.id}
-                  className={`chat__session-item${activeSessionId === session.id ? " chat__session-item--active" : ""}`}
-                >
-                  <button
-                    type="button"
-                    className="chat__session-button"
-                    onClick={() => void openSession(session.id, session)}
-                  >
-                    <span className="chat__session-title">{session.title}</span>
-                    <span className="chat__session-time">{formatSessionTimestamp(session.last_message_at)}</span>
-                  </button>
-                  <button
-                    type="button"
-                    className="chat__session-delete"
-                    aria-label={`Delete ${session.title}`}
-                    onClick={() => void handleDeleteSession(session.id)}
-                    disabled={deletingSessionId === session.id}
-                  >
-                    <TrashIcon className="chat__session-delete-icon" />
-                  </button>
-                </div>
-              ))
-            )}
-          </div>
-        </aside>
-
         <section className="chat__main">
           <div className="chat__controls">
             <div className="chat__hub-info">
               <p className="chat__hub-name">{activeSessionTitle}</p>
-              {activeSessionId && (
-                <p className="chat__hub-desc">
-                  {hasUnsavedSessionControlChanges
-                    ? "Unsaved scope and source changes apply on the next successful send."
-                    : hubDescription ?? "Resume this chat in the current hub."}
-                </p>
+              {hubName && (
+                <p className="chat__hub-desc">{hubName}</p>
               )}
             </div>
-            <div className="chat__controls-divider" aria-hidden="true" />
             <div className="chat__controls-right">
               <SourceSelector
                 sources={sources}
@@ -577,33 +500,17 @@ export function ChatPanel({ hubId, hubDescription, hubRole, sources, sourcesLoad
                 onSelectAllSources={handleSelectAllSources}
                 onClearSourceSelection={handleClearSourceSelection}
               />
-              <div className="scope-selector" ref={scopeRef} data-open={scopeOpen || undefined}>
-                <button
-                  type="button"
-                  className="scope-selector__toggle"
-                  aria-expanded={scopeOpen}
-                  aria-haspopup="listbox"
-                  onClick={() => setScopeOpen((current) => !current)}
-                >
-                  <span>{SCOPE_OPTIONS.find((option) => option.value === scope)?.label}</span>
-                  <ChevronDownIcon className="scope-selector__chevron" />
-                </button>
-                {scopeOpen && (
-                  <div className="scope-selector__dropdown" role="listbox">
-                    {SCOPE_OPTIONS.map((option) => (
-                      <button
-                        key={option.value}
-                        type="button"
-                        role="option"
-                        aria-selected={scope === option.value}
-                        className={`scope-selector__option${scope === option.value ? " scope-selector__option--active" : ""}`}
-                        onClick={() => handleScopeChange(option.value)}
-                      >
-                        {option.label}
-                      </button>
-                    ))}
-                  </div>
-                )}
+              <div className="chat__scope-pills">
+                {SCOPE_OPTIONS.map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    className={`chat__scope-pill${scope === option.value ? " chat__scope-pill--active" : ""}`}
+                    onClick={() => handleScopeChange(option.value)}
+                  >
+                    {option.label}
+                  </button>
+                ))}
               </div>
             </div>
           </div>
@@ -618,7 +525,19 @@ export function ChatPanel({ hubId, hubDescription, hubRole, sources, sourcesLoad
             {!isBootstrapping && !isLoadingSession && messages.length === 0 && (
               <div className="chat__empty">
                 <p className="chat__empty-text">Ask a question about your hub</p>
-                <p className="muted">Answers use the active chat&apos;s selected sources. Change scope only when you want broader context.</p>
+                <p className="muted">Caddie will search your selected sources for answers.</p>
+                <div className="chat__prompt-chips">
+                  {["Summarise the vault", "Key risks", "Give me an overview"].map((prompt) => (
+                    <button
+                      key={prompt}
+                      type="button"
+                      className="chat__prompt-chip"
+                      onClick={() => { setQuestion(prompt); textareaRef.current?.focus(); }}
+                    >
+                      {prompt}
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
 
@@ -628,8 +547,17 @@ export function ChatPanel({ hubId, hubDescription, hubRole, sources, sourcesLoad
                   <div className="chat__bubble chat__bubble--user">
                     {message.question}
                   </div>
+                  <div className="chat__avatar chat__avatar--user">
+                    <span className="chat__avatar-letter">{userInitial}</span>
+                  </div>
                 </div>
+                {message.timestamp && (
+                  <span className="chat__timestamp chat__timestamp--user">{formatMessageTime(message.timestamp)}</span>
+                )}
                 <div className="chat__message chat__message--ai">
+                  <div className="chat__avatar chat__avatar--ai">
+                    <span className="chat__avatar-letter">C</span>
+                  </div>
                   <div className="chat__bubble chat__bubble--ai">
                     {message.isLoading && (
                       <div className="chat__typing">
@@ -654,18 +582,20 @@ export function ChatPanel({ hubId, hubDescription, hubRole, sources, sourcesLoad
                           </p>
                         )}
                         {message.response.citations.length > 0 && (
-                          <div className="chat__citations">
-                            {message.response.citations.map((citation, index) => (
-                              <button
-                                key={`${citation.source_id}-${citation.chunk_index ?? index}`}
-                                className="chat__citation-chip"
-                                type="button"
-                                onClick={() => setActiveCitation(citation)}
-                              >
-                                <span className="chat__citation-num">[{index + 1}]</span>
-                                <span className="chat__citation-name">{getSourceName(citation.source_id)}</span>
-                              </button>
-                            ))}
+                          <div className="chat__sources-block">
+                            <span className="chat__sources-label">Sources</span>
+                            <div className="chat__citations">
+                              {message.response.citations.map((citation, index) => (
+                                <button
+                                  key={`${citation.source_id}-${citation.chunk_index ?? index}`}
+                                  className="chat__citation-chip"
+                                  type="button"
+                                  onClick={() => setActiveCitation(citation)}
+                                >
+                                  {getSourceName(citation.source_id)}
+                                </button>
+                              ))}
+                            </div>
                           </div>
                         )}
                         {canFlagResponses && (
@@ -725,10 +655,32 @@ export function ChatPanel({ hubId, hubDescription, hubRole, sources, sourcesLoad
                             </button>
                           </div>
                         )}
+                        <div className="chat__actions">
+                          <button
+                            type="button"
+                            className="chat__action-btn"
+                            onClick={() => navigator.clipboard.writeText(message.response!.answer)}
+                            aria-label="Copy result"
+                          >
+                            <ClipboardDocumentIcon className="chat__action-icon" />
+                            <span>Copy</span>
+                          </button>
+                          <button type="button" className="chat__action-btn" aria-label="Helpful">
+                            <HandThumbUpIcon className="chat__action-icon" />
+                          </button>
+                          <button type="button" className="chat__action-btn" aria-label="Not helpful">
+                            <HandThumbDownIcon className="chat__action-icon" />
+                          </button>
+                        </div>
                       </>
                     )}
                   </div>
                 </div>
+                {!message.isLoading && message.timestamp && (
+                  <span className="chat__timestamp chat__timestamp--ai">
+                    {formatMessageTime(message.timestamp)}
+                  </span>
+                )}
               </div>
             ))}
             {panelError && (
@@ -743,7 +695,7 @@ export function ChatPanel({ hubId, hubDescription, hubRole, sources, sourcesLoad
                 Select at least one source above to send in this chat.
               </p>
             )}
-            <div className="chat__input-row">
+            <div className="chat__input-row" onClick={() => textareaRef.current?.focus()}>
               <textarea
                 ref={textareaRef}
                 className="chat__textarea"
@@ -764,6 +716,9 @@ export function ChatPanel({ hubId, hubDescription, hubRole, sources, sourcesLoad
               </button>
             </div>
           </form>
+          <p className="chat__disclaimer">
+            Caddie can make mistakes. Check important info.
+          </p>
         </section>
       </div>
 
@@ -810,6 +765,7 @@ function convertSessionMessagesToPairs(messages: SessionMessage[]): MessagePair[
         response: null,
         error: null,
         isLoading: false,
+        timestamp: message.created_at,
       });
       continue;
     }
@@ -846,13 +802,6 @@ function normalizeSelectedSourceIds(selectedSourceIds: string[], completeSourceI
   return completeSourceIds.filter((sourceId) => selectedSet.has(sourceId));
 }
 
-function arraysEqual(left: string[], right: string[]): boolean {
-  if (left.length !== right.length) {
-    return false;
-  }
-  return left.every((value, index) => value === right[index]);
-}
-
 function upsertSessionSummary(
   sessions: ChatSessionSummary[],
   nextSession: ChatSessionSummary
@@ -874,13 +823,13 @@ function moveSessionToTop(sessions: ChatSessionSummary[], sessionId: string): Ch
   return [target, ...sessions.filter((session) => session.id !== sessionId)];
 }
 
-function formatSessionTimestamp(value: string): string {
+function formatMessageTime(value: string): string {
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return "";
-  }
-  return date.toLocaleDateString("en-IE", {
-    day: "2-digit",
-    month: "short",
-  });
+  if (Number.isNaN(date.getTime())) return "";
+  const now = new Date();
+  const isToday = date.toDateString() === now.toDateString();
+  const time = date.toLocaleTimeString("en-IE", { hour: "2-digit", minute: "2-digit" });
+  if (isToday) return time;
+  const day = date.toLocaleDateString("en-IE", { day: "2-digit", month: "short" });
+  return `${day} ${time}`;
 }

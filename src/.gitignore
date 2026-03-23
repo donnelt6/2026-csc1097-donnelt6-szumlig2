@@ -27,6 +27,7 @@ __pycache__/
 # Build artifacts
 dist/
 build/
+*.tsbuildinfo
 
 # Python packaging metadata
 *.egg-info/

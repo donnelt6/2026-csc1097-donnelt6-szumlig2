@@ -8,7 +8,7 @@ from postgrest.exceptions import APIError
 from supabase import Client
 
 from ..dependencies import CurrentUser, get_current_user, get_supabase_user_client, rate_limit_user_ip
-from ..schemas import ChatRequest, ChatResponse, ChatSessionDetail, ChatSessionSummary, HistoryMessage
+from ..schemas import ChatRequest, ChatResponse, ChatSessionDetail, ChatSessionRenameRequest, ChatSessionSummary, HistoryMessage
 from ..services.store import store
 from .errors import raise_postgrest_error
 
@@ -72,6 +72,22 @@ def get_session_messages(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Chat session not found.") from exc
     except APIError as exc:
         raise_postgrest_error(exc)
+
+
+@router.patch("/sessions/{session_id}", status_code=status.HTTP_204_NO_CONTENT)
+def rename_session(
+    session_id: UUID,
+    payload: ChatSessionRenameRequest,
+    client: Client = Depends(get_supabase_user_client),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> Response:
+    try:
+        store.rename_chat_session(client, current_user.id, str(session_id), payload.title)
+    except KeyError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Chat session not found.") from exc
+    except APIError as exc:
+        raise_postgrest_error(exc)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.delete("/sessions/{session_id}", status_code=status.HTTP_204_NO_CONTENT)

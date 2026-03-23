@@ -219,6 +219,17 @@ export async function getChatSessionMessages(sessionId: string, hubId: string): 
   return handle<ChatSessionDetail>(res);
 }
 
+export async function renameChatSession(sessionId: string, title: string): Promise<void> {
+  const res = await authedFetch(`${API_BASE}/chat/sessions/${sessionId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ title }),
+  });
+  if (!res.ok) {
+    await handle(res);
+  }
+}
+
 export async function deleteChatSession(sessionId: string): Promise<void> {
   const res = await authedFetch(`${API_BASE}/chat/sessions/${sessionId}`, {
     method: "DELETE",

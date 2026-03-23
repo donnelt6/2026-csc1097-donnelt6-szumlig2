@@ -1036,6 +1036,12 @@ class SupabaseStore:
             messages=[self._serialize_session_message(message, flag_metadata) for message in messages],
         )
 
+    def rename_chat_session(self, client: Client, user_id: str, session_id: str, title: str) -> None:
+        self._get_chat_session_row(client, session_id)
+        self.service_client.table("chat_sessions").update(
+            {"title": title}
+        ).eq("id", str(session_id)).is_("deleted_at", "null").execute()
+
     def delete_chat_session(self, client: Client, user_id: str, session_id: str) -> None:
         row = self._get_chat_session_row(client, session_id, include_deleted=True)
         if str(row.get("deleted_at") or "").strip():
