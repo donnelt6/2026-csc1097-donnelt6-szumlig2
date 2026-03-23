@@ -13,6 +13,7 @@ import {
   SparklesIcon,
   UserPlusIcon,
   UserMinusIcon,
+  UserIcon,
   BellIcon,
   BellSlashIcon,
   QuestionMarkCircleIcon,
@@ -58,7 +59,7 @@ export function DashboardHome() {
     staleTime: 0,
   });
 
-  const recentHubs = hubs?.slice(0, 4) ?? [];
+  const recentHubs = hubs?.slice(0, 2) ?? [];
 
   const hubNameMap = new Map<string, string>();
   hubs?.forEach((h) => hubNameMap.set(h.id, h.name));
@@ -131,39 +132,61 @@ export function DashboardHome() {
             <span className="dash-section-label">JUMP BACK IN</span>
             <div className="dash-section-header">
               <h2 className="dash-section-title">Recent Hubs</h2>
-              <Link href="/" className="dash-section-link">View all hubs</Link>
+              {recentHubs.length > 0 && <Link href="/" className="dash-section-link">View all hubs</Link>}
             </div>
             <div className="dash-recent-hubs">
-              {recentHubs.map((hub) => (
-                <Link key={hub.id} href={`/hubs/${hub.id}`} className="dash-hub-card">
-                  <div className="dash-hub-card-icon">
-                    <RectangleStackIcon />
-                  </div>
-                  <div className="dash-hub-card-info">
-                    <div className="dash-hub-card-top-row">
-                      <h3 className="dash-hub-card-name">{hub.name}</h3>
-                      {(hub.member_emails?.length ?? 0) > 0 && (
-                        <div className="dash-hub-card-avatars">
-                          {hub.member_emails!.slice(0, 3).map((email, i) => (
-                            <div key={i} className="hub-avatar hub-avatar--initials" title={email}>
-                              {email.charAt(0).toUpperCase()}
-                            </div>
-                          ))}
-                        </div>
-                      )}
+              {recentHubs.length > 0 ? (
+                recentHubs.map((hub) => (
+                  <Link key={hub.id} href={`/hubs/${hub.id}`} className="hub-card">
+                    <div className="hub-card-top">
+                      <div className="hub-card-icon">
+                        <RectangleStackIcon />
+                      </div>
                     </div>
-                    <div className="dash-hub-card-bottom-row">
-                      <span className="dash-hub-card-badge">
-                        <DocumentIcon className="dash-hub-card-badge-icon" />
-                        {hub.sources_count ?? 0} DOCS
-                      </span>
-                      <span className="dash-hub-card-time">
-                        Updated {formatRelativeTime(hub.last_accessed_at)}
-                      </span>
+                    <h3 className="hub-card-title">{hub.name}</h3>
+                    <p className="hub-card-description">{hub.description || 'No description'}</p>
+                    <div className="hub-card-footer">
+                      <div className="hub-card-stats">
+                        <span className="hub-stat">
+                          <DocumentIcon className="hub-stat-icon" aria-hidden="true" />
+                          <span className="hub-stat-value">{hub.sources_count ?? 0} {(hub.sources_count ?? 0) === 1 ? 'Doc' : 'Docs'}</span>
+                        </span>
+                        <span className="hub-stat">
+                          <UserIcon className="hub-stat-icon" aria-hidden="true" />
+                          <span className="hub-stat-value">{hub.members_count ?? 0} {(hub.members_count ?? 0) === 1 ? 'Member' : 'Members'}</span>
+                        </span>
+                      </div>
+                      <div className="hub-card-footer-bottom">
+                        <span className="hub-card-time">
+                          Modified {formatRelativeTime(hub.last_accessed_at)}
+                        </span>
+                        {(hub.member_emails?.length ?? 0) > 0 && (
+                          <div className="hub-card-avatars">
+                            {hub.member_emails!.slice(0, 2).map((email, i) => (
+                              <div key={i} className="hub-avatar hub-avatar--initials" title={email}>
+                                {email.charAt(0).toUpperCase()}
+                              </div>
+                            ))}
+                            {hub.member_emails!.length > 2 && (
+                              <div className="hub-avatar hub-avatar--count">
+                                +{hub.member_emails!.length - 2}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
                     </div>
+                  </Link>
+                ))
+              ) : (
+                <div className="dash-activity-card">
+                  <div className="dash-empty-state">
+                    <RectangleStackIcon className="dash-empty-state-icon" />
+                    <p className="dash-empty-state-text">Create your first hub to get started</p>
+                    <Link href="/" className="dash-empty-state-btn">Go to Hubs</Link>
                   </div>
-                </Link>
-              ))}
+                </div>
+              )}
             </div>
           </div>
 
@@ -171,6 +194,7 @@ export function DashboardHome() {
           <div className="dash-section">
             <div className="dash-section-header">
               <h2 className="dash-section-title">Recent Activity Feed</h2>
+              {activityItems.length > 0 && <Link href="/dashboard?tab=activity" className="dash-section-link">View all activity</Link>}
             </div>
             <div className="dash-activity-card">
               <div className="dash-activity-list">
@@ -194,7 +218,10 @@ export function DashboardHome() {
                     );
                   })
                 ) : (
-                  <p className="muted" style={{ padding: '16px 0' }}>No recent activity yet.</p>
+                  <div className="dash-empty-state">
+                    <ChatBubbleLeftIcon className="dash-empty-state-icon" />
+                    <p className="dash-empty-state-text">Activity will appear here as you use your hubs</p>
+                  </div>
                 )}
               </div>
             </div>
@@ -235,7 +262,10 @@ export function DashboardHome() {
                 </>
               )}
               {closestReminders.length === 0 && (
-                <p className="muted" style={{ padding: '12px 0 0', fontSize: '0.8rem' }}>No reminders yet.</p>
+                <div className="dash-empty-state dash-empty-state--compact">
+                  <BellIcon className="dash-empty-state-icon" />
+                  <p className="dash-empty-state-text">Set up reminders in any hub to see them here</p>
+                </div>
               )}
           </div>
 
@@ -259,6 +289,7 @@ export function DashboardHome() {
                     type="button"
                   >
                     <p className="dash-prompt-text">&ldquo;{prompt.text}&rdquo;</p>
+                    <span className="dash-prompt-hub-badge">{hubNameMap.get(prompt.hubId!) ?? 'Hub'}</span>
                   </button>
                 ))}
               </div>

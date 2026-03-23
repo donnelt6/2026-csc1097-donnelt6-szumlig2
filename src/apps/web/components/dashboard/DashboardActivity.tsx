@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -15,11 +15,11 @@ import {
   QuestionMarkCircleIcon,
   BookOpenIcon,
   ChatBubbleLeftIcon,
-  ChevronDownIcon,
 } from '@heroicons/react/24/outline';
 import { listActivity, listHubs } from '../../lib/api';
 import { useAuth } from '../auth/AuthProvider';
 import { describeEventParts, formatRelativeTime, getEventTone, getTimeGroup } from '../../lib/utils';
+import { HubDropdown } from './HubDropdown';
 import type { ActivityEvent } from '../../lib/types';
 
 function getEventIcon(event: ActivityEvent): React.ComponentType<React.SVGProps<SVGSVGElement>> {
@@ -39,20 +39,6 @@ export function DashboardActivity() {
   const { user } = useAuth();
   const [filterQuery, setFilterQuery] = useState('');
   const [hubFilter, setHubFilter] = useState('');
-  const [dropdownOpen, setDropdownOpen] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
-
-  // Close dropdown on outside click
-  useEffect(() => {
-    if (!dropdownOpen) return;
-    function handleClick(e: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-        setDropdownOpen(false);
-      }
-    }
-    document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
-  }, [dropdownOpen]);
 
   const { data: hubs } = useQuery({
     queryKey: ['hubs'],
@@ -69,7 +55,6 @@ export function DashboardActivity() {
   const hubNameMap = new Map<string, string>();
   hubs?.forEach((h) => hubNameMap.set(h.id, h.name));
 
-  const selectedHubName = hubFilter ? (hubNameMap.get(hubFilter) ?? 'Hub') : 'All Hubs';
 
   const items = activityEvents ?? [];
   const filtered = filterQuery.trim()
@@ -106,37 +91,12 @@ export function DashboardActivity() {
             onChange={(e) => setFilterQuery(e.target.value)}
           />
         </div>
-        <div className="dash-hub-dropdown" ref={dropdownRef}>
-          <button
-            type="button"
-            className="dash-hub-dropdown-btn"
-            onClick={() => setDropdownOpen((prev) => !prev)}
-          >
-            <span className="dash-hub-dropdown-label">{selectedHubName}</span>
-            <ChevronDownIcon className="dash-hub-dropdown-chevron" />
-          </button>
-          {dropdownOpen && (
-            <div className="dash-hub-dropdown-menu">
-              <button
-                type="button"
-                className={`dash-hub-dropdown-item${!hubFilter ? ' dash-hub-dropdown-item--active' : ''}`}
-                onClick={() => { setHubFilter(''); setDropdownOpen(false); }}
-              >
-                All Hubs
-              </button>
-              {hubs?.map((h) => (
-                <button
-                  key={h.id}
-                  type="button"
-                  className={`dash-hub-dropdown-item${hubFilter === h.id ? ' dash-hub-dropdown-item--active' : ''}`}
-                  onClick={() => { setHubFilter(h.id); setDropdownOpen(false); }}
-                >
-                  {h.name}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
+        <HubDropdown
+          hubs={hubs ?? []}
+          value={hubFilter}
+          onChange={setHubFilter}
+          allOption="All Hubs"
+        />
       </div>
 
       <div className="dash-activity-card">
