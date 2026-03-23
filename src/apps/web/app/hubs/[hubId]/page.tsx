@@ -26,7 +26,7 @@ const REMINDER_TABS = [
 
 const EMPTY_SOURCES: never[] = [];
 
-const VALID_TABS: HubTab[] = ['chat', 'sources', 'members', 'reminders', 'faq', 'guides'];
+const VALID_TABS: HubTab[] = ['chat', 'sources', 'dashboard', 'members', 'settings'];
 
 export default function HubDetail({ params }: { params: { hubId: string } }) {
   const queryClient = useQueryClient();
@@ -113,6 +113,7 @@ export default function HubDetail({ params }: { params: { hubId: string } }) {
           {activeTab === 'chat' && (
             <ChatPanel
               hubId={params.hubId}
+              hubName={hub?.name ?? undefined}
               hubDescription={hub?.description ?? undefined}
               hubRole={hub?.role ?? undefined}
               sources={sources ?? []}
@@ -135,34 +136,46 @@ export default function HubDetail({ params }: { params: { hubId: string } }) {
           {activeTab === 'members' && (
             <MembersPanel hubId={params.hubId} role={hub?.role ?? undefined} />
           )}
-          {activeTab === 'guides' && (
-            <GuidePanel
-              hubId={params.hubId}
-              selectedSourceIds={sourceSelection.selectedIds}
-              hasSelectableSources={sourceSelection.completeCount > 0}
-              canEdit={canUpload}
-            />
+          {activeTab === 'dashboard' && (
+            <div className="hub-dashboard">
+              <section className="hub-dashboard__section">
+                <h3 className="hub-dashboard__section-title">Guides</h3>
+                <GuidePanel
+                  hubId={params.hubId}
+                  selectedSourceIds={sourceSelection.selectedIds}
+                  hasSelectableSources={sourceSelection.completeCount > 0}
+                  canEdit={canUpload}
+                />
+              </section>
+              <section className="hub-dashboard__section">
+                <h3 className="hub-dashboard__section-title">FAQs</h3>
+                <FaqPanel
+                  hubId={params.hubId}
+                  selectedSourceIds={sourceSelection.selectedIds}
+                  hasSelectableSources={sourceSelection.completeCount > 0}
+                  canEdit={canUpload}
+                />
+              </section>
+              <section className="hub-dashboard__section">
+                <h3 className="hub-dashboard__section-title">Reminders</h3>
+                <div className="grid" style={{ gap: '16px' }}>
+                  <TabSwitcher
+                    tabs={REMINDER_TABS}
+                    activeKey={reminderSubTab}
+                    onTabChange={setReminderSubTab}
+                  />
+                  {reminderSubTab === 'suggested' ? (
+                    <ReminderCandidatesPanel hubId={params.hubId} />
+                  ) : (
+                    <RemindersPanel hubId={params.hubId} />
+                  )}
+                </div>
+              </section>
+            </div>
           )}
-          {activeTab === 'faq' && (
-            <FaqPanel
-              hubId={params.hubId}
-              selectedSourceIds={sourceSelection.selectedIds}
-              hasSelectableSources={sourceSelection.completeCount > 0}
-              canEdit={canUpload}
-            />
-          )}
-          {activeTab === 'reminders' && (
-            <div className="grid" style={{ gap: '16px' }}>
-              <TabSwitcher
-                tabs={REMINDER_TABS}
-                activeKey={reminderSubTab}
-                onTabChange={setReminderSubTab}
-              />
-              {reminderSubTab === 'suggested' ? (
-                <ReminderCandidatesPanel hubId={params.hubId} />
-              ) : (
-                <RemindersPanel hubId={params.hubId} />
-              )}
+          {activeTab === 'settings' && (
+            <div className="hub-settings">
+              <p className="muted">Hub settings coming soon.</p>
             </div>
           )}
           {activeTab === 'admin' && (

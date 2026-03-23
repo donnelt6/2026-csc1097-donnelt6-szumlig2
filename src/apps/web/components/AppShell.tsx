@@ -29,8 +29,9 @@ export function AppShell({ children }: AppShellProps) {
   const { searchQuery, setSearchQuery } = useSearch();
 
   const isAuthPage = pathname.startsWith('/auth');
-  const isDashboard = pathname === '/dashboard';
+  const isHome = pathname === '/';
   const isHubRoute = pathname.startsWith('/hubs/');
+  const isOnHub = isHubRoute;
   const hubId = isHubRoute ? params?.hubId ?? null : null;
   const showChrome = !isAuthPage && !loading && !!user;
   const { data: hubs, isLoading: hubsLoading } = useQuery({
@@ -43,21 +44,25 @@ export function AppShell({ children }: AppShellProps) {
     [hubId, hubs]
   );
 
-  const dashboardTab = searchParams.get('tab') ?? 'dashboard';
+  const dashboardTab = searchParams.get('tab') ?? 'home';
   const dashboardTabs = [
-    { key: 'dashboard', label: 'Dashboard' },
+    { key: 'home', label: 'Home' },
     { key: 'calendar', label: 'Calendar' },
     { key: 'activity', label: 'Activity' },
   ] as const;
 
   useLayoutEffect(() => {
+    if (!isOnHub) {
+      setSidebarState('hidden');
+      return;
+    }
     const saved = localStorage.getItem('sidebar-state') as SidebarState | null;
     if (saved && ['open', 'collapsed'].includes(saved)) {
       setSidebarState(saved);
     } else {
       setSidebarState('open');
     }
-  }, []);
+  }, [isOnHub]);
 
   const effectiveSidebarState = sidebarState ?? 'open';
 
@@ -113,7 +118,7 @@ export function AppShell({ children }: AppShellProps) {
                 Caddie
               </a>
             </div>
-            {isDashboard ? (
+            {isHome ? (
               <div className="dash-nav-tabs">
                 {dashboardTabs.map((tab) => (
                   <button
@@ -121,18 +126,29 @@ export function AppShell({ children }: AppShellProps) {
                     className={`dash-nav-tab ${dashboardTab === tab.key ? 'dash-nav-tab--active' : ''}`}
                     onClick={() => {
                       const params = new URLSearchParams(searchParams.toString());
-                      if (tab.key === 'dashboard') {
+                      if (tab.key === 'home') {
                         params.delete('tab');
                       } else {
                         params.set('tab', tab.key);
                       }
                       const qs = params.toString();
-                      router.push(`/dashboard${qs ? `?${qs}` : ''}`, { scroll: false });
+                      router.push(`/${qs ? `?${qs}` : ''}`, { scroll: false });
                     }}
                   >
                     {tab.label}
                   </button>
                 ))}
+              </div>
+            ) : isOnHub ? (
+              <div className="nav-search">
+                <MagnifyingGlassIcon className="nav-search-icon" />
+                <input
+                  type="text"
+                  placeholder="Search conversations..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="nav-search-input"
+                />
               </div>
             ) : (
               <div className="nav-search">
