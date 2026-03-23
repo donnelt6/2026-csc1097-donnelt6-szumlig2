@@ -1,22 +1,30 @@
 'use client';
 
-import { CalendarIcon, ClipboardDocumentListIcon } from '@heroicons/react/24/outline';
+import { Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { DashboardHome } from '../../components/dashboard/DashboardHome';
+import { DashboardCalendar } from '../../components/dashboard/DashboardCalendar';
+import { DashboardActivity } from '../../components/dashboard/DashboardActivity';
+
+function DashboardContent() {
+  const searchParams = useSearchParams();
+  const tab = searchParams.get('tab') ?? 'dashboard';
+
+  return (
+    <main className="page-content page-content--dash">
+      <div className="dash-page">
+        {tab === 'dashboard' && <DashboardHome />}
+        {tab === 'calendar' && <DashboardCalendar />}
+        {tab === 'activity' && <DashboardActivity />}
+      </div>
+    </main>
+  );
+}
 
 export default function DashboardPage() {
   return (
-    <main className="page-content page-content--hubs">
-      <div className="content-inner">
-        <div className="placeholder-page">
-          <div className="placeholder-page-icons">
-            <CalendarIcon className="placeholder-page-icon" />
-            <ClipboardDocumentListIcon className="placeholder-page-icon" />
-          </div>
-          <h2 className="placeholder-page-title">Dashboard</h2>
-          <p className="placeholder-page-desc">
-            Coming soon: Your reminders calendar, guides overview, and activity feed across all hubs.
-          </p>
-        </div>
-      </div>
-    </main>
+    <Suspense>
+      <DashboardContent />
+    </Suspense>
   );
 }

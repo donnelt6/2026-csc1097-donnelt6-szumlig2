@@ -50,6 +50,8 @@ export function ChatPanel({ hubId, hubDescription, sources, sourcesLoading }: Pr
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const initialSessionParam = searchParams.get("session");
+  const initialPromptParam = searchParams.get("prompt");
+  const hasAutoSent = useRef(false);
 
   const [question, setQuestion] = useState("");
   const [sessionList, setSessionList] = useState<ChatSessionSummary[]>([]);
@@ -217,6 +219,17 @@ export function ChatPanel({ hubId, hubDescription, sources, sourcesLoading }: Pr
     };
   }, [hubId]);
 
+  useEffect(() => {
+    if (hasAutoSent.current || isBootstrapping || sourcesLoading || !initialPromptParam) return;
+    hasAutoSent.current = true;
+    setQuestion(initialPromptParam);
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("prompt");
+    params.delete("tab");
+    const query = params.toString();
+    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+  }, [isBootstrapping, sourcesLoading]);
+
   const getSourceName = (sourceId: string): string => {
     const source = sources.find((item) => item.id === sourceId);
     return source?.original_name ?? sourceId.slice(0, 8);
@@ -333,9 +346,9 @@ export function ChatPanel({ hubId, hubDescription, sources, sourcesLoading }: Pr
     element.style.height = `${Math.min(element.scrollHeight, 120)}px`;
   }
 
-  async function submitQuestion(event?: React.FormEvent) {
+  async function submitQuestion(event?: React.FormEvent, overrideQuestion?: string) {
     event?.preventDefault();
-    const trimmed = question.trim();
+    const trimmed = (overrideQuestion ?? question).trim();
     if (!trimmed || isSending || !canAsk) {
       return;
     }

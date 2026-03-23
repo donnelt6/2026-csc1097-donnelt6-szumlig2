@@ -26,8 +26,9 @@ def ask(
     client: Client = Depends(get_supabase_user_client),
     current_user: CurrentUser = Depends(get_current_user),
 ) -> ChatResponse:
+    is_new_session = payload.session_id is None
     try:
-        return store.chat(client, current_user.id, payload)
+        response = store.chat(client, current_user.id, payload)
     except KeyError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Chat session not found.") from exc
     except OpenAIError as exc:
@@ -41,6 +42,9 @@ def ask(
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="OpenAI request failed.") from exc
     except APIError as exc:
         raise_postgrest_error(exc)
+    if is_new_session:
+        store.log_activity(client, str(payload.hub_id), current_user.id, "started", "chat", response.session_id, {"title": response.session_title})
+    return response
 
 
 @router.get("/sessions", response_model=List[ChatSessionSummary])

@@ -37,7 +37,9 @@ def create_hub(
     client: Client = Depends(get_supabase_user_client),
 ) -> Hub:
     try:
-        return store.create_hub(client, current_user.id, payload)
+        hub = store.create_hub(client, current_user.id, payload)
+        store.log_activity(client, hub.id, current_user.id, "created", "hub", hub.id, {"name": hub.name})
+        return hub
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     except APIError as exc:

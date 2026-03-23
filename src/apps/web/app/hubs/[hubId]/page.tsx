@@ -2,6 +2,7 @@
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { ChatPanel } from "../../../components/ChatPanel";
 import { FaqPanel } from "../../../components/FaqPanel";
 import { GuidePanel } from "../../../components/GuidePanel";
@@ -13,6 +14,7 @@ import { ReminderCandidatesPanel } from "../../../components/ReminderCandidatesP
 import { listHubs, listSources, trackHubAccess } from "../../../lib/api";
 import { useSourceSelection } from "../../../lib/useSourceSelection";
 import { useHubTab } from "../../../lib/HubTabContext";
+import type { HubTab } from "../../../lib/HubTabContext";
 
 const REMINDER_TABS = [
   { key: 'suggested', label: 'Suggested' },
@@ -21,11 +23,24 @@ const REMINDER_TABS = [
 
 const EMPTY_SOURCES: never[] = [];
 
+const VALID_TABS: HubTab[] = ['chat', 'sources', 'members', 'reminders', 'faq', 'guides'];
+
 export default function HubDetail({ params }: { params: { hubId: string } }) {
   const queryClient = useQueryClient();
+  const searchParams = useSearchParams();
   const hasTrackedAccess = useRef(false);
-  const { activeTab } = useHubTab();
+  const { activeTab, setActiveTab } = useHubTab();
   const [reminderSubTab, setReminderSubTab] = useState('suggested');
+
+  // Switch to the tab specified in ?tab= URL param (e.g. from dashboard prompt links)
+  useEffect(() => {
+    const tabParam = searchParams.get('tab') as HubTab | null;
+    if (tabParam && VALID_TABS.includes(tabParam)) {
+      setActiveTab(tabParam);
+    } else {
+      setActiveTab('chat');
+    }
+  }, [params.hubId]);
 
   const { data: hubs } = useQuery({ queryKey: ["hubs"], queryFn: listHubs });
   const hub = hubs?.find((h) => h.id === params.hubId);

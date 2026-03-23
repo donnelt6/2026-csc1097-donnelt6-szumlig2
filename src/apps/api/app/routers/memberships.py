@@ -101,6 +101,7 @@ def invite_member(
         _require_accepted(member)
         _require_owner(member)
         invited = store.invite_member(client, hub_id, payload)
+        store.log_activity(client, str(hub_id), current_user.id, "invited", "member", invited.user_id, {"email": payload.email, "role": payload.role.value})
         return HubInviteResponse(member=invited)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
@@ -119,7 +120,9 @@ def accept_invite(
     client: Client = Depends(get_supabase_user_client),
 ) -> HubMember:
     try:
-        return store.accept_invite(client, hub_id, current_user.id)
+        accepted = store.accept_invite(client, hub_id, current_user.id)
+        store.log_activity(client, str(hub_id), current_user.id, "joined", "member", current_user.id)
+        return accepted
     except KeyError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except APIError as exc:
@@ -171,3 +174,4 @@ def remove_member(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except APIError as exc:
         raise_postgrest_error(exc)
+    store.log_activity(client, str(hub_id), current_user.id, "removed", "member", str(user_id))

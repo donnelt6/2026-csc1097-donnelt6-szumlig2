@@ -42,11 +42,12 @@ def create_source(
 ) -> SourceEnqueueResponse:
     try:
         source, upload_url = store.create_source(client, payload)
-        return SourceEnqueueResponse(source=source, upload_url=upload_url)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     except APIError as exc:
         raise_postgrest_error(exc)
+    store.log_activity(client, source.hub_id, current_user.id, "created", "source", source.id, {"name": source.original_name, "type": source.type})
+    return SourceEnqueueResponse(source=source, upload_url=upload_url)
 
 
 @router.post(
@@ -60,7 +61,6 @@ def create_web_source(
     client: Client = Depends(get_supabase_user_client),
     current_user: CurrentUser = Depends(get_current_user),
 ) -> Source:
-    _ = current_user
     try:
         source = store.create_web_source(client, payload)
     except ValueError as exc:
@@ -71,6 +71,7 @@ def create_web_source(
     if not source.storage_path:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Source storage path missing")
     celery_app.send_task("ingest_web_source", args=[source.id, source.hub_id, payload.url, source.storage_path])
+    store.log_activity(client, source.hub_id, current_user.id, "created", "source", source.id, {"name": source.original_name, "type": "web"})
     return source
 
 
@@ -85,7 +86,6 @@ def create_youtube_source(
     client: Client = Depends(get_supabase_user_client),
     current_user: CurrentUser = Depends(get_current_user),
 ) -> Source:
-    _ = current_user
     try:
         source = store.create_youtube_source(client, payload)
     except ValueError as exc:
@@ -110,6 +110,7 @@ def create_youtube_source(
             video_id,
         ],
     )
+    store.log_activity(client, source.hub_id, current_user.id, "created", "source", source.id, {"name": source.original_name, "type": "youtube"})
     return source
 
 
@@ -236,6 +237,8 @@ def decide_source_suggestion(
     except APIError as exc:
         raise_postgrest_error(exc)
 
+    if accepted_source is not None:
+        store.log_activity(client, accepted_source.hub_id, current_user.id, "created", "source", accepted_source.id, {"name": accepted_source.original_name, "type": suggestion.type.value})
     return SourceSuggestionDecisionResponse(suggestion=suggestion, source=accepted_source)
 
 
@@ -389,13 +392,19 @@ def delete_source(
     client: Client = Depends(get_supabase_user_client),
     current_user: CurrentUser = Depends(get_current_user),
 ) -> None:
-    _ = current_user
+    try:
+        source = store.get_source(client, source_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Source not found") from exc
+    except APIError as exc:
+        raise_postgrest_error(exc)
     try:
         store.delete_source(client, source_id)
     except KeyError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Source not found") from exc
     except APIError as exc:
         raise_postgrest_error(exc)
+    store.log_activity(client, source.hub_id, current_user.id, "deleted", "source", source.id, {"name": source.original_name})
 
 
 @router.post(

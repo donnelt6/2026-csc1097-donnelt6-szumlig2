@@ -1,5 +1,6 @@
 import { getAccessToken } from "./supabaseClient";
 import type {
+  ActivityEvent,
   ChatSessionDetail,
   ChatSessionSummary,
   ChatResponse,
@@ -232,6 +233,14 @@ export async function askQuestion(data: {
     body: JSON.stringify(data),
   });
   return handle<ChatResponse>(res);
+}
+
+export async function listActivity(hubId?: string, limit = 50): Promise<ActivityEvent[]> {
+  const params = new URLSearchParams();
+  if (hubId) params.set("hub_id", hubId);
+  params.set("limit", String(limit));
+  const res = await authedFetch(`${API_BASE}/activity?${params}`, { cache: "no-store" });
+  return handle<ActivityEvent[]>(res);
 }
 
 export async function listFaqs(hubId: string): Promise<FaqEntry[]> {

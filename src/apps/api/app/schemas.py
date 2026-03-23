@@ -506,3 +506,14 @@ class NotificationEvent(BaseModel):
     scheduled_for: datetime
     sent_at: Optional[datetime] = None
     reminder: ReminderSummary
+
+
+class ActivityEvent(BaseModel):
+    id: str
+    hub_id: str
+    user_id: str
+    action: str
+    resource_type: str
+    resource_id: Optional[str] = None
+    metadata: dict = Field(default_factory=dict)
+    created_at: datetime
