@@ -4,8 +4,6 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  DocumentIcon,
-  UserIcon,
   PlusCircleIcon,
   StarIcon as StarOutline,
   EllipsisVerticalIcon,
@@ -13,11 +11,29 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
 } from "@heroicons/react/24/outline";
-import { StarIcon as StarSolid } from "@heroicons/react/24/solid";
+import { DocumentIcon, StarIcon as StarSolid, UserIcon } from "@heroicons/react/24/solid";
 import { listHubs, toggleHubFavourite } from "../lib/api";
-import { formatRelativeTime } from "../lib/utils";
 import type { Hub } from "../lib/types";
 import type { HubsFilterState } from "./HubsToolbar";
+
+function formatRelativeTime(dateString: string | null | undefined): string {
+  if (!dateString) return "Never";
+
+  const now = new Date().getTime();
+  const then = new Date(dateString).getTime();
+  const diffMs = now - then;
+
+  const minutes = Math.floor(diffMs / 60000);
+  const hours = Math.floor(diffMs / 3600000);
+  const days = Math.floor(diffMs / 86400000);
+  const weeks = Math.floor(diffMs / 604800000);
+
+  if (minutes < 1) return "Just now";
+  if (minutes < 60) return `${minutes}m ago`;
+  if (hours < 24) return `${hours}h ago`;
+  if (days < 7) return `${days}d ago`;
+  return `${weeks}w ago`;
+}
 
 interface HubsListProps {
   searchQuery: string;
@@ -129,7 +145,7 @@ export function HubsList({ searchQuery, filters, onHubCountChange, onCreateHub }
               <PlusCircleIcon />
             </div>
             <h3 className="hub-card-create-title">Create New Hub</h3>
-            <p className="hub-card-create-desc">Initialise a new secure documentation environment</p>
+            <p className="hub-card-create-desc">Set up a new space for your docs, sources, and AI chat</p>
           </button>
         )}
 
@@ -143,7 +159,7 @@ export function HubsList({ searchQuery, filters, onHubCountChange, onCreateHub }
                 <button
                   onClick={(e) => toggleFavourite(hub.id, hub.is_favourite ?? false, e)}
                   className="hub-favourite-button"
-                  aria-label={hub.is_favourite ? "Remove from favourites" : "Add to favourites"}
+                  aria-label={hub.is_favourite ? "Remove from starred" : "Add to starred"}
                 >
                   {hub.is_favourite ? (
                     <StarSolid className="hub-favourite-icon filled" />
@@ -205,7 +221,7 @@ export function HubsList({ searchQuery, filters, onHubCountChange, onCreateHub }
         </div>
       )}
 
-      <div className="hubs-pagination" style={totalPages <= 1 ? { visibility: 'hidden' } : undefined}>
+      <div className="hubs-pagination">
           <p className="hubs-pagination-info">
             Showing {currentPage === 1 ? 1 : firstPageHubs + (currentPage - 2) * gridSlots + 1}–{Math.min(currentPage === 1 ? firstPageHubs : firstPageHubs + (currentPage - 1) * gridSlots, hubCount)} of {hubCount} Hubs
           </p>
