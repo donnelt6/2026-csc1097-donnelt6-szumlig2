@@ -6,6 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { ChatPanel } from "../../../components/ChatPanel";
 import { FaqPanel } from "../../../components/FaqPanel";
 import { GuidePanel } from "../../../components/GuidePanel";
+import { HubModerationPanel } from "../../../components/HubModerationPanel";
 import { TabSwitcher } from "../../../components/TabSwitcher";
 import { UploadPanel } from "../../../components/UploadPanel";
 import { MembersPanel } from "../../../components/MembersPanel";
@@ -45,7 +46,8 @@ export default function HubDetail({ params }: { params: { hubId: string } }) {
   const { data: hubs } = useQuery({ queryKey: ["hubs"], queryFn: listHubs });
   const hub = hubs?.find((h) => h.id === params.hubId);
   const hubResolved = !!hub;
-  const canUpload = hub?.role === 'owner' || hub?.role === 'editor';
+  const canUpload = hub?.role === 'owner' || hub?.role === 'admin' || hub?.role === 'editor';
+  const canModerate = hub?.role === 'owner' || hub?.role === 'admin';
 
   const { data: sources, refetch: refetchSources, isLoading: sourcesLoading } = useQuery({
     queryKey: ['sources', params.hubId],
@@ -88,10 +90,16 @@ export default function HubDetail({ params }: { params: { hubId: string } }) {
     }
   }, [hubResolved, params.hubId, queryClient]);
 
+  useEffect(() => {
+    if (activeTab === 'admin' && hubResolved && !canModerate) {
+      setActiveTab('chat');
+    }
+  }, [activeTab, canModerate, hubResolved, setActiveTab]);
+
   return (
     <main className={`page-content page-content--no-hero${activeTab === 'chat' ? ' page-content--fullscreen' : ''}`}>
       <div className="content-inner">
-        {activeTab !== 'chat' && (
+        {activeTab !== 'chat' && activeTab !== 'admin' && (
           <header className="hub-header">
             <h2 className="hub-header__name">{hub?.name ?? "Hub"}</h2>
             {hub?.description && (
@@ -105,6 +113,7 @@ export default function HubDetail({ params }: { params: { hubId: string } }) {
             <ChatPanel
               hubId={params.hubId}
               hubDescription={hub?.description ?? undefined}
+              hubRole={hub?.role ?? undefined}
               sources={sources ?? []}
               sourcesLoading={sourcesLoading}
             />
@@ -154,6 +163,12 @@ export default function HubDetail({ params }: { params: { hubId: string } }) {
                 <RemindersPanel hubId={params.hubId} />
               )}
             </div>
+          )}
+          {activeTab === 'admin' && (
+            <HubModerationPanel
+              hubId={params.hubId}
+              hubRole={hub?.role ?? undefined}
+            />
           )}
         </div>
       </div>

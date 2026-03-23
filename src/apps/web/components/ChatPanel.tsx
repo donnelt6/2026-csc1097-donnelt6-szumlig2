@@ -2,16 +2,17 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { ChevronDownIcon, PaperAirplaneIcon, PlusIcon, TrashIcon } from "@heroicons/react/24/outline";
+import { ChevronDownIcon, FlagIcon, PaperAirplaneIcon, PlusIcon, TrashIcon } from "@heroicons/react/24/outline";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
   askQuestion,
   deleteChatSession,
+  flagMessage,
   getChatSessionMessages,
   listChatSessions,
 } from "../lib/api";
-import type { ChatResponse, Citation, ChatSessionSummary, SessionMessage, Source } from "../lib/types";
+import type { ChatResponse, Citation, ChatSessionSummary, MembershipRole, SessionMessage, Source } from "../lib/types";
 import { SourceSelector } from "./SourceSelector";
 
 const SCOPE_OPTIONS = [
@@ -41,11 +42,12 @@ interface DraftState extends ChatControlState {
 interface Props {
   hubId: string;
   hubDescription?: string;
+  hubRole?: MembershipRole | null;
   sources: Source[];
   sourcesLoading?: boolean;
 }
 
-export function ChatPanel({ hubId, hubDescription, sources, sourcesLoading }: Props) {
+export function ChatPanel({ hubId, hubDescription, hubRole, sources, sourcesLoading }: Props) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -64,6 +66,7 @@ export function ChatPanel({ hubId, hubDescription, sources, sourcesLoading }: Pr
   const [isBootstrapping, setIsBootstrapping] = useState(true);
   const [isLoadingSession, setIsLoadingSession] = useState(false);
   const [isSending, setIsSending] = useState(false);
+  const [flaggingMessageId, setFlaggingMessageId] = useState<string | null>(null);
   const [deletingSessionId, setDeletingSessionId] = useState<string | null>(null);
   const [scopeOpen, setScopeOpen] = useState(false);
   const [activeCitation, setActiveCitation] = useState<Citation | null>(null);
@@ -90,6 +93,7 @@ export function ChatPanel({ hubId, hubDescription, sources, sourcesLoading }: Pr
     [selectedSourceIds, completeSourceIds]
   );
   const canAsk = scope === "global" || !hasSelectableSources || normalizedSelectedSourceIds.length > 0;
+  const canFlagResponses = !!hubRole;
   const activeSessionTitle = useMemo(() => {
     if (activeSessionId === null) {
       return "New Chat";
@@ -466,6 +470,41 @@ export function ChatPanel({ hubId, hubDescription, sources, sourcesLoading }: Pr
     }
   }
 
+  async function handleFlagResponse(messageId: string) {
+    if (!canFlagResponses || flaggingMessageId) {
+      return;
+    }
+    if (typeof window !== "undefined") {
+      const confirmed = window.confirm("Flag this response for owner/admin review?");
+      if (!confirmed) {
+        return;
+      }
+    }
+    setFlaggingMessageId(messageId);
+    try {
+      const result = await flagMessage(messageId, { reason: "incorrect" });
+      setMessages((current) =>
+        current.map((pair) => {
+          if (!pair.response || pair.response.message_id !== messageId) {
+            return pair;
+          }
+          return {
+            ...pair,
+            response: {
+              ...pair.response,
+              active_flag_id: result.flag_case.id,
+              flag_status: result.flag_case.status,
+            },
+          };
+        })
+      );
+    } catch (error) {
+      setPanelError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setFlaggingMessageId(null);
+    }
+  }
+
   return (
     <>
       <div className="chat">
@@ -620,6 +659,49 @@ export function ChatPanel({ hubId, hubDescription, sources, sourcesLoading }: Pr
                             ))}
                           </div>
                         )}
+                        {canFlagResponses && (
+                          <div className="chat__response-footer">
+                            {(message.response.flag_status === "resolved" || message.response.flag_status === "dismissed") && (
+                              <span className="chat__response-status muted">
+                                {message.response.flag_status === "resolved" ? "Moderated" : "Reviewed and dismissed"}
+                              </span>
+                            )}
+                            <button
+                              className={`chat__flag-button${
+                                message.response.flag_status === "open" || message.response.flag_status === "in_review"
+                                  ? " chat__flag-button--active"
+                                  : ""
+                              }`}
+                              type="button"
+                              onClick={() => void handleFlagResponse(message.response!.message_id)}
+                              disabled={
+                                flaggingMessageId === message.response.message_id ||
+                                message.response.flag_status === "open" ||
+                                message.response.flag_status === "in_review"
+                              }
+                              aria-label={
+                                message.response.flag_status === "open"
+                                  ? "Flagged"
+                                  : message.response.flag_status === "in_review"
+                                    ? "In review"
+                                    : flaggingMessageId === message.response.message_id
+                                      ? "Flagging..."
+                                      : "Flag response"
+                              }
+                              title={
+                                message.response.flag_status === "open"
+                                  ? "Flagged"
+                                  : message.response.flag_status === "in_review"
+                                    ? "In review"
+                                    : flaggingMessageId === message.response.message_id
+                                      ? "Flagging..."
+                                      : "Flag response"
+                              }
+                            >
+                              <FlagIcon className="chat__flag-button-icon" />
+                            </button>
+                          </div>
+                        )}
                       </>
                     )}
                   </div>
@@ -718,6 +800,8 @@ function convertSessionMessagesToPairs(messages: SessionMessage[]): MessagePair[
       message_id: message.id,
       session_id: "",
       session_title: "",
+      active_flag_id: message.active_flag_id,
+      flag_status: message.flag_status,
     };
   }
   return pairs;
