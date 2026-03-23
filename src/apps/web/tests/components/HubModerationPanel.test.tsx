@@ -10,6 +10,7 @@ import {
   listFlaggedChats,
   regenerateFlaggedChat,
 } from "../../lib/api";
+import type { FlagCase, FlaggedChatDetail, FlaggedChatQueueItem, MessageRevision } from "../../lib/types";
 import { renderWithQueryClient } from "../test-utils";
 
 vi.mock("../../lib/api", () => ({
@@ -21,7 +22,7 @@ vi.mock("../../lib/api", () => ({
   regenerateFlaggedChat: vi.fn(),
 }));
 
-function buildDetail(flagId: string, overrides: Record<string, unknown> = {}) {
+function buildDetail(flagId: string, overrides: Partial<FlaggedChatDetail> = {}): FlaggedChatDetail {
   return {
     case: {
       id: flagId,
@@ -79,7 +80,7 @@ describe("HubModerationPanel", () => {
   });
 
   it("selects a regenerated revision after same-case refetch", async () => {
-    const queue = [
+    const queue: FlaggedChatQueueItem[] = [
       {
         id: "flag-1",
         hub_id: "hub-1",
@@ -99,22 +100,23 @@ describe("HubModerationPanel", () => {
     vi.mocked(listFlaggedChats).mockResolvedValue(queue);
     vi.mocked(getFlaggedChat).mockImplementation(async () => detailState);
     vi.mocked(regenerateFlaggedChat).mockImplementation(async () => {
+      const revision: MessageRevision = {
+        id: "revision-2",
+        message_id: "message-1",
+        flag_case_id: "flag-1",
+        revision_type: "regenerated",
+        content: "Generated draft",
+        citations: [],
+        created_at: "2026-03-22T10:05:00Z",
+        applied_at: null,
+      };
       detailState = buildDetail("flag-1", {
         revisions: [
           ...detailState.revisions,
-          {
-            id: "revision-2",
-            message_id: "message-1",
-            flag_case_id: "flag-1",
-            revision_type: "regenerated",
-            content: "Generated draft",
-            citations: [],
-            created_at: "2026-03-22T10:05:00Z",
-            applied_at: null,
-          },
+          revision,
         ],
       });
-      return detailState.revisions[1];
+      return revision;
     });
 
     renderWithQueryClient(<HubModerationPanel hubId="hub-1" hubRole="owner" />);
@@ -132,7 +134,7 @@ describe("HubModerationPanel", () => {
   });
 
   it("keeps a newly saved manual revision selected after refetch", async () => {
-    const queue = [
+    const queue: FlaggedChatQueueItem[] = [
       {
         id: "flag-1",
         hub_id: "hub-1",
@@ -175,7 +177,7 @@ describe("HubModerationPanel", () => {
     vi.mocked(listFlaggedChats).mockResolvedValue(queue);
     vi.mocked(getFlaggedChat).mockImplementation(async () => detailState);
     vi.mocked(createFlaggedChatRevision).mockImplementation(async (_hubId, _flagId, data) => {
-      const revision = {
+      const revision: MessageRevision = {
         id: "revision-2",
         message_id: "message-1",
         flag_case_id: "flag-1",
@@ -211,7 +213,7 @@ describe("HubModerationPanel", () => {
   });
 
   it("resets draft state when switching to a different flag case", async () => {
-    const queue = [
+    const queue: FlaggedChatQueueItem[] = [
       {
         id: "flag-1",
         hub_id: "hub-1",
@@ -241,7 +243,7 @@ describe("HubModerationPanel", () => {
         reviewed_at: null,
       },
     ];
-    const detailsByFlagId = {
+    const detailsByFlagId: Record<"flag-1" | "flag-2", FlaggedChatDetail> = {
       "flag-1": buildDetail("flag-1", {
         revisions: [
           {
@@ -291,12 +293,14 @@ describe("HubModerationPanel", () => {
         ],
       }),
     };
+    const resolvedCase: FlagCase = buildDetail("flag-1").case;
+    const revisionOne: MessageRevision = detailsByFlagId["flag-1"].revisions[1];
     vi.mocked(listFlaggedChats).mockResolvedValue(queue);
     vi.mocked(getFlaggedChat).mockImplementation(async (_hubId, flagId) => detailsByFlagId[flagId as "flag-1" | "flag-2"]);
-    vi.mocked(applyFlaggedChatRevision).mockResolvedValue(buildDetail("flag-1").case);
-    vi.mocked(createFlaggedChatRevision).mockResolvedValue(detailsByFlagId["flag-1"].revisions[1]);
-    vi.mocked(dismissFlaggedChat).mockResolvedValue(buildDetail("flag-1").case);
-    vi.mocked(regenerateFlaggedChat).mockResolvedValue(detailsByFlagId["flag-1"].revisions[1]);
+    vi.mocked(applyFlaggedChatRevision).mockResolvedValue(resolvedCase);
+    vi.mocked(createFlaggedChatRevision).mockResolvedValue(revisionOne);
+    vi.mocked(dismissFlaggedChat).mockResolvedValue(resolvedCase);
+    vi.mocked(regenerateFlaggedChat).mockResolvedValue(revisionOne);
 
     renderWithQueryClient(<HubModerationPanel hubId="hub-1" hubRole="owner" />);
 
