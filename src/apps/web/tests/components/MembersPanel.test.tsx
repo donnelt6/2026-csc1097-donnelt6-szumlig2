@@ -1,6 +1,6 @@
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { MembersPanel } from "../../components/MembersPanel";
 import { listMembers, transferHubOwnership } from "../../lib/api";
 import { renderWithQueryClient } from "../test-utils";
@@ -20,6 +20,10 @@ vi.mock("../../components/auth/AuthProvider", () => ({
 }));
 
 describe("MembersPanel", () => {
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
   it("does not expose direct owner assignment controls", async () => {
     vi.mocked(listMembers).mockResolvedValue([
       {
@@ -113,7 +117,12 @@ describe("MembersPanel", () => {
     renderWithQueryClient(<MembersPanel hubId="hub-1" role="owner" />);
 
     const user = userEvent.setup();
-    await waitFor(() => expect(screen.getByLabelText("Target admin")).toBeInTheDocument());
+    await waitFor(() => {
+      const options = Array.from((screen.getByLabelText("Target admin") as HTMLSelectElement).options).map(
+        (option) => option.value
+      );
+      expect(options).toContain("admin-1");
+    });
     await user.selectOptions(screen.getByLabelText("Target admin"), "admin-1");
     await user.click(screen.getByRole("button", { name: "Transfer ownership" }));
 
