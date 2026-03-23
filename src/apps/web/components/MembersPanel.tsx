@@ -205,7 +205,17 @@ export function MembersPanel({ hubId, role }: Props) {
               className="button"
               type="button"
               disabled={!transferTargetId || transferMutation.isPending}
-              onClick={() => transferMutation.mutate(transferTargetId)}
+              onClick={() => {
+                if (typeof window !== "undefined") {
+                  const confirmed = window.confirm(
+                    "Transfer ownership to this admin? You will become an admin, and you cannot undo this change from this screen."
+                  );
+                  if (!confirmed) {
+                    return;
+                  }
+                }
+                transferMutation.mutate(transferTargetId);
+              }}
             >
               {transferMutation.isPending ? "Transferring..." : "Transfer ownership"}
             </button>

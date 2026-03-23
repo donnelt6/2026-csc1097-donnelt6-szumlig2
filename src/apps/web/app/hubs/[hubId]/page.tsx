@@ -12,10 +12,12 @@ import { UploadPanel } from "../../../components/UploadPanel";
 import { MembersPanel } from "../../../components/MembersPanel";
 import { RemindersPanel } from "../../../components/RemindersPanel";
 import { ReminderCandidatesPanel } from "../../../components/ReminderCandidatesPanel";
-import { listHubs, listSources, trackHubAccess } from "../../../lib/api";
+import { listSources, trackHubAccess } from "../../../lib/api";
+import { useCurrentHub } from "../../../lib/CurrentHubContext";
 import { useSourceSelection } from "../../../lib/useSourceSelection";
 import { useHubTab } from "../../../lib/HubTabContext";
 import type { HubTab } from "../../../lib/HubTabContext";
+import type { Hub } from "../../../lib/types";
 
 const REMINDER_TABS = [
   { key: 'suggested', label: 'Suggested' },
@@ -31,6 +33,7 @@ export default function HubDetail({ params }: { params: { hubId: string } }) {
   const searchParams = useSearchParams();
   const hasTrackedAccess = useRef(false);
   const { activeTab, setActiveTab } = useHubTab();
+  const { currentHub: hub } = useCurrentHub();
   const [reminderSubTab, setReminderSubTab] = useState('suggested');
 
   // Switch to the tab specified in ?tab= URL param (e.g. from dashboard prompt links)
@@ -43,8 +46,6 @@ export default function HubDetail({ params }: { params: { hubId: string } }) {
     }
   }, [params.hubId]);
 
-  const { data: hubs } = useQuery({ queryKey: ["hubs"], queryFn: listHubs });
-  const hub = hubs?.find((h) => h.id === params.hubId);
   const hubResolved = !!hub;
   const canUpload = hub?.role === 'owner' || hub?.role === 'admin' || hub?.role === 'editor';
   const canModerate = hub?.role === 'owner' || hub?.role === 'admin';
@@ -67,7 +68,7 @@ export default function HubDetail({ params }: { params: { hubId: string } }) {
       const timestamp = new Date().toISOString();
 
       const updateCache = () => {
-        queryClient.setQueryData(["hubs"], (oldHubs: typeof hubs) => {
+        queryClient.setQueryData(["hubs"], (oldHubs: Hub[] | undefined) => {
           if (!oldHubs) return oldHubs;
           return oldHubs.map((h) =>
             h.id === params.hubId

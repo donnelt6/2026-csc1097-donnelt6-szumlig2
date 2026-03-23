@@ -2,17 +2,13 @@ import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { HubPanels } from "../../components/navigation/HubPanels";
-import { listHubs } from "../../lib/api";
+import { CurrentHubProvider } from "../../lib/CurrentHubContext";
 import { renderWithQueryClient } from "../test-utils";
 
 const setActiveTabMock = vi.fn();
 
 vi.mock("next/navigation", () => ({
   useParams: () => ({ hubId: "hub-1" }),
-}));
-
-vi.mock("../../lib/api", () => ({
-  listHubs: vi.fn(),
 }));
 
 vi.mock("../../lib/HubTabContext", async () => {
@@ -31,51 +27,38 @@ describe("HubPanels", () => {
     vi.clearAllMocks();
   });
 
-  it("shows the admin tab for hub moderators", async () => {
-    vi.mocked(listHubs).mockResolvedValue([
-      {
-        id: "hub-1",
-        owner_id: "owner-1",
-        name: "Hub One",
-        created_at: "2026-03-22T10:00:00Z",
-        role: "admin",
-      },
-    ]);
+  function renderHubPanels(role: "owner" | "admin" | "viewer") {
+    return renderWithQueryClient(
+      <CurrentHubProvider
+        value={{
+          currentHub: {
+            id: "hub-1",
+            owner_id: "owner-1",
+            name: "Hub One",
+            created_at: "2026-03-22T10:00:00Z",
+            role,
+          },
+          isLoading: false,
+        }}
+      >
+        <HubPanels />
+      </CurrentHubProvider>
+    );
+  }
 
-    renderWithQueryClient(<HubPanels />);
+  it("shows the admin tab for hub moderators", async () => {
+    renderHubPanels("admin");
 
     await waitFor(() => expect(screen.getByRole("button", { name: "Admin" })).toBeInTheDocument());
   });
 
   it("hides the admin tab for non-moderators", async () => {
-    vi.mocked(listHubs).mockResolvedValue([
-      {
-        id: "hub-1",
-        owner_id: "owner-1",
-        name: "Hub One",
-        created_at: "2026-03-22T10:00:00Z",
-        role: "viewer",
-      },
-    ]);
-
-    renderWithQueryClient(<HubPanels />);
-
-    await waitFor(() => expect(listHubs).toHaveBeenCalled());
+    renderHubPanels("viewer");
     expect(screen.queryByRole("button", { name: "Admin" })).not.toBeInTheDocument();
   });
 
   it("switches to the admin tab when selected", async () => {
-    vi.mocked(listHubs).mockResolvedValue([
-      {
-        id: "hub-1",
-        owner_id: "owner-1",
-        name: "Hub One",
-        created_at: "2026-03-22T10:00:00Z",
-        role: "owner",
-      },
-    ]);
-
-    renderWithQueryClient(<HubPanels />);
+    renderHubPanels("owner");
 
     const user = userEvent.setup();
     await waitFor(() => expect(screen.getByRole("button", { name: "Admin" })).toBeInTheDocument());

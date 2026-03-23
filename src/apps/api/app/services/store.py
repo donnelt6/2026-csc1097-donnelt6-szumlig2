@@ -558,6 +558,9 @@ class SupabaseStore:
         user_id: str,
         role: AssignableMembershipRole,
     ) -> HubMember:
+        target_member = self.get_member_role(client, hub_id, user_id)
+        if target_member.role == MembershipRole.owner:
+            raise ValueError("Transfer ownership before removing or changing the owner.")
         response = (
             client.table("hub_members")
             .update({"role": role.value})
@@ -594,6 +597,9 @@ class SupabaseStore:
         return HubMember(**member_response.data[0])
 
     def remove_member(self, client: Client, hub_id: str, user_id: str) -> None:
+        target_member = self.get_member_role(client, hub_id, user_id)
+        if target_member.role == MembershipRole.owner:
+            raise ValueError("Transfer ownership before removing or changing the owner.")
         response = (
             client.table("hub_members")
             .delete()
@@ -603,6 +609,51 @@ class SupabaseStore:
         )
         if not response.data:
             raise KeyError("Member not found")
+
+    def _service_chat_session_rows(self, session_ids: List[str]) -> Dict[str, Dict[str, Any]]:
+        if not session_ids:
+            return {}
+        response = (
+            self.service_client.table("chat_sessions")
+            .select("id, hub_id, title, scope, source_ids, created_at, last_message_at, deleted_at")
+            .in_("id", session_ids)
+            .execute()
+        )
+        return {str(row["id"]): row for row in (response.data or [])}
+
+    def _service_message_rows(self, message_ids: List[str]) -> Dict[str, Dict[str, Any]]:
+        if not message_ids:
+            return {}
+        response = (
+            self.service_client.table("messages")
+            .select("id,session_id,role,content,citations,created_at")
+            .in_("id", message_ids)
+            .execute()
+        )
+        return {str(row["id"]): row for row in (response.data or [])}
+
+    def _flagged_question_rows(
+        self,
+        session_ids: List[str],
+        flagged_message_ids: set[str],
+    ) -> Dict[str, Dict[str, Any]]:
+        question_rows: Dict[str, Dict[str, Any]] = {}
+        for session_id in session_ids:
+            rows = self._list_session_messages(
+                self.service_client,
+                session_id,
+                fields="id, role, content, citations, created_at",
+            )
+            previous: Optional[Dict[str, Any]] = None
+            for row in rows:
+                message_id = str(row["id"])
+                if message_id in flagged_message_ids:
+                    if previous is not None and str(previous.get("role") or "") == "user":
+                        question_rows[message_id] = previous
+                    previous = row
+                    continue
+                previous = row
+        return question_rows
 
     def update_hub_access(self, client: Client, hub_id: str, user_id: str) -> None:
         response = (
@@ -1093,18 +1144,20 @@ class SupabaseStore:
 
         hubs_response = self.service_client.table("hubs").select("id,name").eq("id", str(hub_id)).limit(1).execute()
         hub_name = str((hubs_response.data or [{}])[0].get("name") or "Hub")
+        flag_rows = response.data or []
+        session_rows = self._service_chat_session_rows([str(row["session_id"]) for row in flag_rows])
+        message_rows = self._service_message_rows([str(row["message_id"]) for row in flag_rows])
+        question_rows = self._flagged_question_rows(
+            list({str(row["session_id"]) for row in flag_rows}),
+            {str(row["message_id"]) for row in flag_rows},
+        )
 
         items: List[FlaggedChatQueueItem] = []
-        for row in response.data or []:
-            try:
-                session_row = self._get_chat_session_row(
-                    self.service_client,
-                    str(row["session_id"]),
-                    include_deleted=True,
-                )
-                message_row = self._service_message_row(str(row["message_id"]))
-                question_row = self._question_for_flagged_message(str(row["session_id"]), str(row["message_id"]))
-            except KeyError:
+        for row in flag_rows:
+            session_row = session_rows.get(str(row["session_id"]))
+            message_row = message_rows.get(str(row["message_id"]))
+            question_row = question_rows.get(str(row["message_id"]))
+            if session_row is None or message_row is None or question_row is None:
                 continue
             items.append(
                 FlaggedChatQueueItem(

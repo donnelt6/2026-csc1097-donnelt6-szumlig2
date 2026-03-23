@@ -12,12 +12,20 @@ import {
   getChatSessionMessages,
   listChatSessions,
 } from "../lib/api";
-import type { ChatResponse, Citation, ChatSessionSummary, MembershipRole, SessionMessage, Source } from "../lib/types";
+import type { ChatResponse, Citation, ChatSessionSummary, FlagReason, MembershipRole, SessionMessage, Source } from "../lib/types";
 import { SourceSelector } from "./SourceSelector";
 
 const SCOPE_OPTIONS = [
   { value: "hub" as const, label: "Hub only" },
   { value: "global" as const, label: "Hub + global" },
+];
+
+const FLAG_REASON_OPTIONS: Array<{ value: FlagReason; label: string }> = [
+  { value: "incorrect", label: "Incorrect" },
+  { value: "unsupported", label: "Unsupported" },
+  { value: "harmful", label: "Harmful" },
+  { value: "outdated", label: "Outdated" },
+  { value: "other", label: "Other" },
 ];
 
 type ChatScope = "hub" | "global";
@@ -67,6 +75,7 @@ export function ChatPanel({ hubId, hubDescription, hubRole, sources, sourcesLoad
   const [isLoadingSession, setIsLoadingSession] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [flaggingMessageId, setFlaggingMessageId] = useState<string | null>(null);
+  const [flagReason, setFlagReason] = useState<FlagReason>("incorrect");
   const [deletingSessionId, setDeletingSessionId] = useState<string | null>(null);
   const [scopeOpen, setScopeOpen] = useState(false);
   const [activeCitation, setActiveCitation] = useState<Citation | null>(null);
@@ -482,7 +491,7 @@ export function ChatPanel({ hubId, hubDescription, hubRole, sources, sourcesLoad
     }
     setFlaggingMessageId(messageId);
     try {
-      const result = await flagMessage(messageId, { reason: "incorrect" });
+      const result = await flagMessage(messageId, { reason: flagReason });
       setMessages((current) =>
         current.map((pair) => {
           if (!pair.response || pair.response.message_id !== messageId) {
@@ -665,6 +674,20 @@ export function ChatPanel({ hubId, hubDescription, hubRole, sources, sourcesLoad
                               <span className="chat__response-status muted">
                                 {message.response.flag_status === "resolved" ? "Moderated" : "Reviewed and dismissed"}
                               </span>
+                            )}
+                            {(message.response.flag_status !== "open" && message.response.flag_status !== "in_review") && (
+                              <select
+                                value={flagReason}
+                                onChange={(event) => setFlagReason(event.target.value as FlagReason)}
+                                aria-label="Flag reason"
+                                disabled={flaggingMessageId === message.response.message_id}
+                              >
+                                {FLAG_REASON_OPTIONS.map((option) => (
+                                  <option key={option.value} value={option.value}>
+                                    {option.label}
+                                  </option>
+                                ))}
+                              </select>
                             )}
                             <button
                               className={`chat__flag-button${

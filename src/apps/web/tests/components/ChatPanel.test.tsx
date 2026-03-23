@@ -405,9 +405,10 @@ describe("ChatPanel", () => {
     await user.click(screen.getByRole("button", { name: "Send message" }));
 
     await waitFor(() => expect(screen.getByRole("button", { name: "Flag response" })).toBeInTheDocument());
+    await user.selectOptions(screen.getByLabelText("Flag reason"), "outdated");
     await user.click(screen.getByRole("button", { name: "Flag response" }));
 
-    await waitFor(() => expect(flagMessage).toHaveBeenCalledWith("message-1", { reason: "incorrect" }));
+    await waitFor(() => expect(flagMessage).toHaveBeenCalledWith("message-1", { reason: "outdated" }));
     expect(screen.getByRole("button", { name: "Flagged" })).toBeDisabled();
   });
 });

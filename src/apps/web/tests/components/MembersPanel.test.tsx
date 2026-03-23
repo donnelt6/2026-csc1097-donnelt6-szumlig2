@@ -1,7 +1,8 @@
 import { screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { MembersPanel } from "../../components/MembersPanel";
-import { listMembers } from "../../lib/api";
+import { listMembers, transferHubOwnership } from "../../lib/api";
 import { renderWithQueryClient } from "../test-utils";
 
 vi.mock("../../lib/api", () => ({
@@ -88,5 +89,34 @@ describe("MembersPanel", () => {
     const options = Array.from(transferSelect.options).map((option) => option.text);
     expect(options).toContain("admin@example.com");
     expect(options).not.toContain("viewer@example.com");
+  });
+
+  it("requires confirmation before transferring ownership", async () => {
+    vi.mocked(listMembers).mockResolvedValue([
+      {
+        hub_id: "hub-1",
+        user_id: "owner-1",
+        role: "owner",
+        accepted_at: "2026-03-22T10:00:00Z",
+        email: "owner@example.com",
+      },
+      {
+        hub_id: "hub-1",
+        user_id: "admin-1",
+        role: "admin",
+        accepted_at: "2026-03-22T10:00:00Z",
+        email: "admin@example.com",
+      },
+    ]);
+    vi.stubGlobal("confirm", vi.fn(() => false));
+
+    renderWithQueryClient(<MembersPanel hubId="hub-1" role="owner" />);
+
+    const user = userEvent.setup();
+    await waitFor(() => expect(screen.getByLabelText("Target admin")).toBeInTheDocument());
+    await user.selectOptions(screen.getByLabelText("Target admin"), "admin-1");
+    await user.click(screen.getByRole("button", { name: "Transfer ownership" }));
+
+    expect(transferHubOwnership).not.toHaveBeenCalled();
   });
 });

@@ -132,6 +132,27 @@ class FakeTable:
             rows = [dict(row) for row in self.client.hubs]
             for key, value in self._eq_filters.items():
                 rows = [row for row in rows if str(row.get(key)) == str(value)]
+            for key, values in self._in_filters.items():
+                rows = [row for row in rows if str(row.get(key)) in {str(item) for item in values}]
+            if self._limit is not None:
+                rows = rows[: self._limit]
+            return FakeResponse(rows)
+        if self.name == "chat_sessions" and self._op == "select":
+            rows = [dict(row) for row in self.client.chat_sessions]
+            for key, value in self._eq_filters.items():
+                rows = [row for row in rows if str(row.get(key)) == str(value)]
+            for key, values in self._in_filters.items():
+                rows = [row for row in rows if str(row.get(key)) in {str(item) for item in values}]
+            if self._limit is not None:
+                rows = rows[: self._limit]
+            return FakeResponse(rows)
+        if self.name == "messages" and self._op == "select":
+            rows = [dict(row) for row in self.client.messages]
+            for key, value in self._eq_filters.items():
+                rows = [row for row in rows if str(row.get(key)) == str(value)]
+            for key, values in self._in_filters.items():
+                rows = [row for row in rows if str(row.get(key)) in {str(item) for item in values}]
+            rows.sort(key=lambda row: str(row.get("created_at") or ""), reverse=self._order_desc)
             if self._limit is not None:
                 rows = rows[: self._limit]
             return FakeResponse(rows)
@@ -144,6 +165,8 @@ class FakeServiceClient:
         self.flag_case_inserts: list[dict] = []
         self.message_revision_inserts: list[dict] = []
         self.hubs: list[dict] = []
+        self.chat_sessions: list[dict] = []
+        self.messages: list[dict] = []
         self.rpc_calls: list[tuple[str, dict]] = []
         self.raise_unique_on_flag_insert = False
         self.race_existing_case: dict = {}
@@ -412,32 +435,32 @@ def test_list_flagged_chat_queue_includes_deleted_sessions(fake_service_client, 
         }
     ]
     fake_service_client.hubs = [{"id": "hub-1", "name": "Hub One"}]
-    include_deleted_calls: list[bool] = []
     monkeypatch.setattr(store_module.store, "_require_moderation_access", lambda _user_id, _hub_id: None)
-    monkeypatch.setattr(
-        store_module.store,
-        "_get_chat_session_row",
-        lambda _client, _session_id, include_deleted=False: include_deleted_calls.append(include_deleted) or {
-            "id": "session-deleted",
-            "title": "Deleted chat",
+    fake_service_client.chat_sessions = [{"id": "session-deleted", "title": "Deleted chat"}]
+    fake_service_client.messages = [
+        {
+            "id": "question-1",
+            "session_id": "session-deleted",
+            "role": "user",
+            "content": "Question content",
+            "citations": [],
+            "created_at": "2026-03-22T09:59:00Z",
         },
-    )
-    monkeypatch.setattr(
-        store_module.store,
-        "_service_message_row",
-        lambda _message_id: {"content": "Answer content"},
-    )
-    monkeypatch.setattr(
-        store_module.store,
-        "_question_for_flagged_message",
-        lambda _session_id, _message_id: {"content": "Question content"},
-    )
+        {
+            "id": "message-1",
+            "session_id": "session-deleted",
+            "role": "assistant",
+            "content": "Answer content",
+            "citations": [],
+            "created_at": "2026-03-22T10:00:00Z",
+        },
+    ]
 
     items = store_module.store.list_flagged_chat_queue("user-1", "hub-1")
 
     assert len(items) == 1
     assert items[0].id == "flag-1"
-    assert include_deleted_calls == [True]
+    assert items[0].session_title == "Deleted chat"
 
 
 def test_list_flagged_chat_queue_skips_unreadable_cases(fake_service_client, monkeypatch) -> None:
@@ -465,15 +488,25 @@ def test_list_flagged_chat_queue_skips_unreadable_cases(fake_service_client, mon
     ]
     fake_service_client.hubs = [{"id": "hub-1", "name": "Hub One"}]
     monkeypatch.setattr(store_module.store, "_require_moderation_access", lambda _user_id, _hub_id: None)
-
-    def fake_get_chat_session_row(_client, session_id, include_deleted=False):
-        if session_id == "missing-session":
-            raise KeyError("Chat session not found")
-        return {"id": session_id, "title": "Available chat"}
-
-    monkeypatch.setattr(store_module.store, "_get_chat_session_row", fake_get_chat_session_row)
-    monkeypatch.setattr(store_module.store, "_service_message_row", lambda _message_id: {"content": "Answer"})
-    monkeypatch.setattr(store_module.store, "_question_for_flagged_message", lambda _session_id, _message_id: {"content": "Question"})
+    fake_service_client.chat_sessions = [{"id": "session-2", "title": "Available chat"}]
+    fake_service_client.messages = [
+        {
+            "id": "question-2",
+            "session_id": "session-2",
+            "role": "user",
+            "content": "Question",
+            "citations": [],
+            "created_at": "2026-03-22T09:59:00Z",
+        },
+        {
+            "id": "message-2",
+            "session_id": "session-2",
+            "role": "assistant",
+            "content": "Answer",
+            "citations": [],
+            "created_at": "2026-03-22T10:00:00Z",
+        },
+    ]
 
     items = store_module.store.list_flagged_chat_queue("user-1", "hub-1")
 

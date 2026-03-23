@@ -8,6 +8,7 @@ import type {
   FlagCase,
   FlagCaseStatus,
   FlagMessageResponse,
+  FlagReason,
   FlaggedChatDetail,
   FlaggedChatQueueItem,
   HistoryMessage,
@@ -252,7 +253,7 @@ export async function listActivity(hubId?: string, limit = 50): Promise<Activity
 
 export async function flagMessage(
   messageId: string,
-  data: { reason: "incorrect" | "unsupported" | "harmful" | "outdated" | "other"; notes?: string }
+  data: { reason: FlagReason; notes?: string }
 ): Promise<FlagMessageResponse> {
   const res = await authedFetch(`${API_BASE}/messages/${messageId}/flag`, {
     method: "POST",
