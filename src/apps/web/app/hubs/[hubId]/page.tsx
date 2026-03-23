@@ -37,6 +37,8 @@ export default function HubDetail({ params }: { params: { hubId: string } }) {
     const tabParam = searchParams.get('tab') as HubTab | null;
     if (tabParam && VALID_TABS.includes(tabParam)) {
       setActiveTab(tabParam);
+    } else {
+      setActiveTab('chat');
     }
   }, [params.hubId]);
 

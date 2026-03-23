@@ -230,6 +230,7 @@ def decide_candidate(
             message=message,
         )
         reminder = store.create_reminder(client, current_user.id, create_payload)
+        store.log_activity(client, reminder.hub_id, current_user.id, "created", "reminder", reminder.id, {"message": reminder.message})
 
     # Persist review status and user feedback (accept/decline edits).
     try:
