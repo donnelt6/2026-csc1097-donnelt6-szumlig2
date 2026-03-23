@@ -74,9 +74,11 @@ def create_reminder(
     if due_at <= datetime.now(timezone.utc):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Reminder due time must be in the future.")
     try:
-        return store.create_reminder(client, current_user.id, payload)
+        reminder = store.create_reminder(client, current_user.id, payload)
     except APIError as exc:
         raise_postgrest_error(exc)
+    store.log_activity(client, reminder.hub_id, current_user.id, "created", "reminder", reminder.id, {"message": reminder.message})
+    return reminder
 
 
 # Update reminder timing/status (complete, cancel, snooze, edit).
@@ -91,7 +93,6 @@ def update_reminder(
     client: Client = Depends(get_supabase_user_client),
     current_user: CurrentUser = Depends(get_current_user),
 ) -> Reminder:
-    _ = current_user
     updates: dict = {}
     now = datetime.now(timezone.utc)
 
@@ -125,11 +126,14 @@ def update_reminder(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No updates provided.")
 
     try:
-        return store.update_reminder(client, str(reminder_id), updates)
+        reminder = store.update_reminder(client, str(reminder_id), updates)
     except KeyError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Reminder not found") from exc
     except APIError as exc:
         raise_postgrest_error(exc)
+    if payload.action in (ReminderUpdateAction.complete, ReminderUpdateAction.cancel):
+        store.log_activity(client, reminder.hub_id, current_user.id, payload.action.value, "reminder", reminder.id, {"message": reminder.message})
+    return reminder
 
 
 # Delete a reminder (user-scoped).

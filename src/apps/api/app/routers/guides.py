@@ -64,6 +64,7 @@ def generate_guide(
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invite not accepted yet.")
         _require_editor(member.role)
         entry = store.generate_guide(client, current_user.id, payload)
+        store.log_activity(client, str(payload.hub_id), current_user.id, "generated", "guide", entry.id, {"title": entry.title})
         return GuideGenerateResponse(entry=entry)
     except KeyError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc

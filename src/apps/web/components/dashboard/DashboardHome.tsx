@@ -9,15 +9,35 @@ import {
   MagnifyingGlassIcon,
   RectangleStackIcon,
   DocumentIcon,
-  FunnelIcon,
-  CheckIcon,
+  DocumentMinusIcon,
   SparklesIcon,
+  UserPlusIcon,
+  UserMinusIcon,
+  BellIcon,
+  BellSlashIcon,
+  QuestionMarkCircleIcon,
+  BookOpenIcon,
+  ChatBubbleLeftIcon,
 } from '@heroicons/react/24/outline';
-import { listHubs, listReminders } from '../../lib/api';
-import { formatRelativeTime } from '../../lib/utils';
+import { listActivity, listHubs, listReminders } from '../../lib/api';
+import { useAuth } from '../auth/AuthProvider';
+import { describeEventParts, formatRelativeTime, getEventTone } from '../../lib/utils';
 import { MiniCalendar } from './MiniCalendar';
+import type { ActivityEvent } from '../../lib/types';
+
+function getEventIcon(event: ActivityEvent): React.ComponentType<React.SVGProps<SVGSVGElement>> {
+  if (event.resource_type === 'source') return event.action === 'deleted' ? DocumentMinusIcon : DocumentIcon;
+  if (event.resource_type === 'member') return event.action === 'removed' ? UserMinusIcon : UserPlusIcon;
+  if (event.resource_type === 'reminder' && (event.action === 'cancel')) return BellSlashIcon;
+  const map: Record<string, React.ComponentType<React.SVGProps<SVGSVGElement>>> = {
+    hub: RectangleStackIcon, reminder: BellIcon, faq: QuestionMarkCircleIcon,
+    guide: BookOpenIcon, chat: ChatBubbleLeftIcon,
+  };
+  return map[event.resource_type] || RectangleStackIcon;
+}
 
 export function DashboardHome() {
+  const { user } = useAuth();
   const router = useRouter();
   const [heroSearch, setHeroSearch] = useState('');
 
@@ -28,12 +48,14 @@ export function DashboardHome() {
   const { data: hubs } = useQuery({
     queryKey: ['hubs'],
     queryFn: listHubs,
+    staleTime: 0,
   });
 
   // Fetch ALL reminders (no status filter) so calendar shows everything
   const { data: reminders } = useQuery({
     queryKey: ['dashboard-reminders'],
     queryFn: () => listReminders({}),
+    staleTime: 0,
   });
 
   const recentHubs = hubs?.slice(0, 4) ?? [];
@@ -64,11 +86,13 @@ export function DashboardHome() {
     }
   };
 
-  // Build activity items from all hubs with last_accessed_at
-  const activityItems = (hubs ?? [])
-    .filter((h) => h.last_accessed_at)
-    .sort((a, b) => new Date(b.last_accessed_at!).getTime() - new Date(a.last_accessed_at!).getTime())
-    .slice(0, 5);
+  const { data: activityEvents } = useQuery({
+    queryKey: ['dashboard-activity'],
+    queryFn: () => listActivity(undefined, 10),
+    staleTime: 0,
+  });
+
+  const activityItems = activityEvents ?? [];
 
   // Suggested prompts
   const suggestedPrompts = [
@@ -147,27 +171,28 @@ export function DashboardHome() {
           <div className="dash-section">
             <div className="dash-section-header">
               <h2 className="dash-section-title">Recent Activity Feed</h2>
-              <button className="dash-filter-btn" type="button" aria-label="Filter activity">
-                <FunnelIcon className="dash-filter-icon" />
-              </button>
             </div>
             <div className="dash-activity-card">
               <div className="dash-activity-list">
                 {activityItems.length > 0 ? (
-                  activityItems.map((hub) => (
-                    <Link key={hub.id} href={`/hubs/${hub.id}`} className="dash-activity-item">
-                      <div className="dash-activity-avatar">
-                        {hub.member_emails?.[0]?.charAt(0).toUpperCase() ?? hub.name.charAt(0).toUpperCase()}
-                      </div>
-                      <div className="dash-activity-content">
-                        <p className="dash-activity-text">
-                          You accessed <strong>{hub.name}</strong>
-                        </p>
-                      </div>
-                      <span className="dash-activity-time">{formatRelativeTime(hub.last_accessed_at)}</span>
-                      <CheckIcon className="dash-activity-check" />
-                    </Link>
-                  ))
+                  activityItems.slice(0, 5).map((event) => {
+                    const Icon = getEventIcon(event);
+                    const tone = getEventTone(event);
+                    return (
+                      <Link key={event.id} href={`/hubs/${event.hub_id}`} className="dash-activity-item">
+                        <div className={`dash-activity-avatar${tone !== 'neutral' ? ` dash-activity-avatar--${tone}` : ''}`}>
+                          <Icon className="dash-activity-type-icon" />
+                        </div>
+                        <div className="dash-activity-content">
+                          <p className="dash-activity-text">
+                            {(() => { const { action, subject } = describeEventParts(event, user?.id); return <>{action}{subject && <> <strong>{subject}</strong></>}</>; })()}
+                          </p>
+                          <p className="dash-activity-hub">{hubNameMap.get(event.hub_id) ?? 'Hub'}</p>
+                        </div>
+                        <span className="dash-activity-time">{formatRelativeTime(event.created_at)}</span>
+                      </Link>
+                    );
+                  })
                 ) : (
                   <p className="muted" style={{ padding: '16px 0' }}>No recent activity yet.</p>
                 )}

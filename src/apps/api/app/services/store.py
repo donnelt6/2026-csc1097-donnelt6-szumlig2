@@ -51,6 +51,7 @@ from ..schemas import (
     WebSourceCreate,
     YouTubeSourceCreate,
     SessionMessage,
+    ActivityEvent,
 )
 
 
@@ -1799,6 +1800,48 @@ class SupabaseStore:
                 )
             )
         return events
+
+    def log_activity(
+        self,
+        client: Client,
+        hub_id: str,
+        user_id: str,
+        action: str,
+        resource_type: str,
+        resource_id: Optional[str] = None,
+        metadata: Optional[dict] = None,
+    ) -> None:
+        row: Dict[str, Any] = {
+            "hub_id": hub_id,
+            "user_id": user_id,
+            "action": action,
+            "resource_type": resource_type,
+        }
+        if resource_id is not None:
+            row["resource_id"] = resource_id
+        if metadata:
+            row["metadata"] = metadata
+        try:
+            client.table("activity_events").insert(row).execute()
+        except Exception:
+            pass
+
+    def list_activity(
+        self,
+        client: Client,
+        hub_id: Optional[str] = None,
+        limit: int = 50,
+    ) -> List[ActivityEvent]:
+        query = client.table("activity_events").select("*")
+        if hub_id:
+            query = query.eq("hub_id", hub_id)
+        response = (
+            query
+            .order("created_at", desc=True)
+            .limit(limit)
+            .execute()
+        )
+        return [ActivityEvent(**row) for row in response.data]
 
     def _answer_with_web_search(
         self,

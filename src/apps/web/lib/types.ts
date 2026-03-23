@@ -94,6 +94,17 @@ export interface ChatSessionDetail {
   messages: SessionMessage[];
 }
 
+export interface ActivityEvent {
+  id: string;
+  hub_id: string;
+  user_id: string;
+  action: string;
+  resource_type: string;
+  resource_id?: string;
+  metadata: Record<string, unknown>;
+  created_at: string;
+}
+
 export interface FaqEntry {
   id: string;
   hub_id: string;
