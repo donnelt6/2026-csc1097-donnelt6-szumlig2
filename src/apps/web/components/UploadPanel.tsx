@@ -384,7 +384,7 @@ export function UploadPanel({
           </div>
         </div>
       ) : (
-        <p className="sources__permission-notice">You only have view access. Ask the hub owner to grant edit permissions.</p>
+        <p className="sources__permission-notice">You only have view access. Ask the hub owner to grant admin or editor permissions.</p>
       )}
       {statusMessage && <p className={`sources__status sources__status--${statusMessage.type}`}>{statusMessage.text}</p>}
       <SuggestedSourcesPanel hubId={hubId} canReview={canReviewSuggestions} onAccepted={onRefresh} />
