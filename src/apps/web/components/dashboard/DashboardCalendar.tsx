@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { PlusIcon, ChevronDownIcon, ClockIcon } from '@heroicons/react/24/outline';
 import { createReminder, listHubs, listReminders } from '../../lib/api';
 import { MiniCalendar } from './MiniCalendar';
+import { buildHubNameMap } from './dashboardUtils';
 
 const HOURS = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0'));
 const MINUTES = Array.from({ length: 12 }, (_, i) => String(i * 5).padStart(2, '0'));
@@ -57,8 +58,7 @@ export function DashboardCalendar() {
     queryFn: () => listReminders({}),
   });
 
-  const hubNameMap = new Map<string, string>();
-  hubs?.forEach((h) => hubNameMap.set(h.id, h.name));
+  const hubNameMap = buildHubNameMap(hubs);
 
   const monthReminders = reminders?.filter((r) => {
     const d = new Date(r.due_at);

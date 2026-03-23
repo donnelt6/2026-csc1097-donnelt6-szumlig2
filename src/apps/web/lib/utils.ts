@@ -1,10 +1,5 @@
 import type { ActivityEvent } from './types';
 
-export function describeEvent(event: ActivityEvent, currentUserId?: string): string {
-  const { action, subject } = describeEventParts(event, currentUserId);
-  return subject ? `${action} ${subject}` : action;
-}
-
 export function describeEventParts(event: ActivityEvent, currentUserId?: string): { action: string; subject: string } {
   const name = (event.metadata?.name as string) || (event.metadata?.title as string) || '';
   const msg = (event.metadata?.message as string) || '';

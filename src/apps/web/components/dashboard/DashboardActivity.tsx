@@ -3,35 +3,13 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
-import {
-  MagnifyingGlassIcon,
-  RectangleStackIcon,
-  DocumentIcon,
-  DocumentMinusIcon,
-  UserPlusIcon,
-  UserMinusIcon,
-  BellIcon,
-  BellSlashIcon,
-  QuestionMarkCircleIcon,
-  BookOpenIcon,
-  ChatBubbleLeftIcon,
-} from '@heroicons/react/24/outline';
+import { MagnifyingGlassIcon } from '@heroicons/react/24/outline';
 import { listActivity, listHubs } from '../../lib/api';
 import { useAuth } from '../auth/AuthProvider';
 import { describeEventParts, formatRelativeTime, getEventTone, getTimeGroup } from '../../lib/utils';
 import { HubDropdown } from './HubDropdown';
+import { getEventIcon, buildHubNameMap } from './dashboardUtils';
 import type { ActivityEvent } from '../../lib/types';
-
-function getEventIcon(event: ActivityEvent): React.ComponentType<React.SVGProps<SVGSVGElement>> {
-  if (event.resource_type === 'source') return event.action === 'deleted' ? DocumentMinusIcon : DocumentIcon;
-  if (event.resource_type === 'member') return event.action === 'removed' ? UserMinusIcon : UserPlusIcon;
-  if (event.resource_type === 'reminder' && (event.action === 'cancel')) return BellSlashIcon;
-  const map: Record<string, React.ComponentType<React.SVGProps<SVGSVGElement>>> = {
-    hub: RectangleStackIcon, reminder: BellIcon, faq: QuestionMarkCircleIcon,
-    guide: BookOpenIcon, chat: ChatBubbleLeftIcon,
-  };
-  return map[event.resource_type] || RectangleStackIcon;
-}
 
 const TIME_GROUP_ORDER = ['Today', 'Yesterday', 'This Week', 'Earlier'];
 
@@ -52,9 +30,7 @@ export function DashboardActivity() {
     staleTime: 0,
   });
 
-  const hubNameMap = new Map<string, string>();
-  hubs?.forEach((h) => hubNameMap.set(h.id, h.name));
-
+  const hubNameMap = buildHubNameMap(hubs);
 
   const items = activityEvents ?? [];
   const filtered = filterQuery.trim()
@@ -126,7 +102,7 @@ export function DashboardActivity() {
               </div>
             ))
           ) : (
-            <p className="muted" style={{ padding: '24px 0', textAlign: 'center' }}>
+            <p className="dash-activity-empty">
               {isLoading ? 'Loading activity...' : filterQuery || hubFilter ? 'No activity matches your filter.' : 'No recent activity yet.'}
             </p>
           )}
