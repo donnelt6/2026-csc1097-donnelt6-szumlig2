@@ -5,6 +5,7 @@ import { useParams, usePathname, useRouter, useSearchParams } from 'next/navigat
 import { useQuery } from '@tanstack/react-query';
 import { Bars3Icon, MagnifyingGlassIcon } from '@heroicons/react/24/outline';
 import { Sidebar } from './navigation/Sidebar';
+import { ThemeToggle } from './navigation/ThemeToggle';
 import { ProfileMenu } from './navigation/ProfileMenu';
 import { NotificationsMenu } from './navigation/NotificationsMenu';
 import { useAuth } from './auth/AuthProvider';
@@ -96,16 +97,20 @@ export function AppShell({ children }: AppShellProps) {
   return (
     <CurrentHubProvider value={{ currentHub, isLoading: isHubRoute && hubsLoading }}>
       <div className={`app-shell sidebar-${effectiveSidebarState}${!isHydrated ? ' no-transition' : ''}`}>
-        <div
-          className={`mobile-overlay ${mobileMenuOpen ? 'is-visible' : ''}`}
-          onClick={closeMobileMenu}
-        />
-        <Sidebar
-          state={effectiveSidebarState}
-          onStateChange={handleStateChange}
-          mobileOpen={mobileMenuOpen}
-          onMobileClose={closeMobileMenu}
-        />
+        {isOnHub && (
+          <>
+            <div
+              className={`mobile-overlay ${mobileMenuOpen ? 'is-visible' : ''}`}
+              onClick={closeMobileMenu}
+            />
+            <Sidebar
+              state={effectiveSidebarState}
+              onStateChange={handleStateChange}
+              mobileOpen={mobileMenuOpen}
+              onMobileClose={closeMobileMenu}
+            />
+          </>
+        )}
         <header className="site-nav">
           <div className="nav-content">
             <div className="nav-brand">
@@ -165,6 +170,7 @@ export function AppShell({ children }: AppShellProps) {
               </div>
             )}
             <div className="nav-actions">
+              {!isOnHub && <ThemeToggle compact />}
               <NotificationsMenu />
               <ProfileMenu />
             </div>

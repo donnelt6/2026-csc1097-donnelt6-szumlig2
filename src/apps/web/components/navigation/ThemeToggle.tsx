@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { SunIcon, MoonIcon } from '@heroicons/react/24/outline';
 
-export function ThemeToggle() {
+export function ThemeToggle({ compact }: { compact?: boolean } = {}) {
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
   const [mounted, setMounted] = useState(false);
 
@@ -44,19 +44,19 @@ export function ThemeToggle() {
   if (!mounted) {
     return (
       <button
-        className="theme-toggle"
+        className={`theme-toggle${compact ? ' theme-toggle--compact' : ''}`}
         aria-label="Toggle theme"
         disabled
       >
         <MoonIcon className="theme-toggle-icon" />
-        <span className="sidebar-item-text">Theme</span>
+        {!compact && <span className="sidebar-item-text">Theme</span>}
       </button>
     );
   }
 
   return (
     <button
-      className="theme-toggle"
+      className={`theme-toggle${compact ? ' theme-toggle--compact' : ''}`}
       onClick={toggle}
       aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
     >
@@ -65,7 +65,7 @@ export function ThemeToggle() {
       ) : (
         <MoonIcon className="theme-toggle-icon" />
       )}
-      <span className="sidebar-item-text">{theme === 'dark' ? 'Light mode' : 'Dark mode'}</span>
+      {!compact && <span className="sidebar-item-text">{theme === 'dark' ? 'Light mode' : 'Dark mode'}</span>}
     </button>
   );
 }

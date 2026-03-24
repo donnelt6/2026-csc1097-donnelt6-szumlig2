@@ -655,6 +655,13 @@ a {
   flex-shrink: 0;
 }
 
+.theme-toggle--compact {
+  width: auto;
+  padding: 8px;
+  border-radius: 8px;
+  gap: 0;
+}
+
 /* Mobile Menu */
 
 .mobile-menu-button {
@@ -736,6 +743,7 @@ a {
 
 .sidebar-hidden .nav-brand {
   display: flex;
+  margin-right: 16px;
 }
 
 .brand {

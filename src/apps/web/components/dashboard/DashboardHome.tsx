@@ -29,14 +29,14 @@ export function DashboardHome() {
   const [calMonth, setCalMonth] = useState(now.getMonth());
   const [calYear, setCalYear] = useState(now.getFullYear());
 
-  const { data: hubs } = useQuery({
+  const { data: hubs, isLoading: hubsLoading } = useQuery({
     queryKey: ['hubs'],
     queryFn: listHubs,
     staleTime: 0,
   });
 
   // Fetch ALL reminders (no status filter) so calendar shows everything
-  const { data: reminders } = useQuery({
+  const { data: reminders, isLoading: remindersLoading } = useQuery({
     queryKey: ['dashboard-reminders'],
     queryFn: () => listReminders({}),
     staleTime: 0,
@@ -69,7 +69,7 @@ export function DashboardHome() {
     }
   };
 
-  const { data: activityEvents } = useQuery({
+  const { data: activityEvents, isLoading: activityLoading } = useQuery({
     queryKey: ['dashboard-activity'],
     queryFn: () => listActivity(undefined, 10),
     staleTime: 0,
@@ -160,7 +160,7 @@ export function DashboardHome() {
                     </div>
                   </Link>
                 ))
-              ) : (
+              ) : !hubsLoading ? (
                 <div className="dash-activity-card">
                   <div className="dash-empty-state">
                     <RectangleStackIcon className="dash-empty-state-icon" />
@@ -168,7 +168,7 @@ export function DashboardHome() {
                     <Link href="/hubs" className="dash-empty-state-btn">Go to Hubs</Link>
                   </div>
                 </div>
-              )}
+              ) : null}
             </div>
           </div>
 
@@ -199,12 +199,12 @@ export function DashboardHome() {
                       </Link>
                     );
                   })
-                ) : (
+                ) : !activityLoading ? (
                   <div className="dash-empty-state">
                     <ChatBubbleLeftIcon className="dash-empty-state-icon" />
                     <p className="dash-empty-state-text">Activity will appear here as you use your hubs</p>
                   </div>
-                )}
+                ) : null}
               </div>
             </div>
           </div>
@@ -243,7 +243,7 @@ export function DashboardHome() {
                   </div>
                 </>
               )}
-              {closestReminders.length === 0 && (
+              {closestReminders.length === 0 && !remindersLoading && (
                 <div className="dash-empty-state dash-empty-state--compact">
                   <BellIcon className="dash-empty-state-icon" />
                   <p className="dash-empty-state-text">Set up reminders in any hub to see them here</p>
