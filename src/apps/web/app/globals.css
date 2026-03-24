@@ -3449,53 +3449,48 @@ textarea {
   flex-wrap: wrap;
 }
 
-.chat__response-footer {
-  display: flex;
-  justify-content: flex-end;
-  align-items: center;
-  gap: 8px;
-  margin-top: 10px;
-}
-
 .chat__response-status {
-  font-size: 0.8rem;
-  text-align: right;
+  font-size: 0.75rem;
+  color: var(--muted);
+  margin-left: auto;
 }
 
-.chat__flag-button {
-  display: inline-flex;
+.chat__report-btn {
+  margin-left: auto;
+}
+
+.chat__report-btn--active {
+  color: var(--accent) !important;
+}
+
+.chat__report-btn--active:disabled {
+  opacity: 0.7;
+  cursor: default;
+}
+
+.chat__report-reasons {
+  display: flex;
   align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.chat__report-reason {
+  padding: 3px 10px;
   border-radius: 9999px;
   border: 1px solid var(--border);
-  background: var(--control-bg);
+  background: transparent;
   color: var(--text-secondary);
+  font-size: 0.7rem;
+  font-family: var(--font-sans);
   cursor: pointer;
   transition: all var(--transition-fast);
 }
 
-.chat__flag-button:hover:not(:disabled) {
-  border-color: var(--accent);
-  color: var(--accent);
-  background: var(--accent-glow);
-}
-
-.chat__flag-button:disabled {
-  cursor: default;
-  opacity: 0.8;
-}
-
-.chat__flag-button--active {
-  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
-  color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
-}
-
-.chat__flag-button-icon {
-  width: 15px;
-  height: 15px;
+.chat__report-reason:hover {
+  border-color: var(--danger);
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 8%, transparent);
 }
 
 .chat__citation-chip {
@@ -3547,12 +3542,6 @@ textarea {
   gap: 2px;
   margin-top: 8px;
   padding-top: 6px;
-  opacity: 0;
-  transition: opacity var(--transition-fast);
-}
-
-.chat__bubble--ai:hover .chat__actions {
-  opacity: 1;
 }
 
 .chat__action-btn {

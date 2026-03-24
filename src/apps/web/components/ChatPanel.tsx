@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
-import { ChevronDownIcon, ClipboardDocumentIcon, FlagIcon, HandThumbUpIcon, HandThumbDownIcon, PaperAirplaneIcon } from "@heroicons/react/24/outline";
+import { ChevronDownIcon, ClipboardDocumentIcon, FlagIcon, PaperAirplaneIcon } from "@heroicons/react/24/outline";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
@@ -159,7 +159,7 @@ export function ChatPanel({ hubId, hubName, hubDescription, hubRole, sources, so
   const [isLoadingSession, setIsLoadingSession] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [flaggingMessageId, setFlaggingMessageId] = useState<string | null>(null);
-  const [flagReason, setFlagReason] = useState<FlagReason>("incorrect");
+  const [reportMenuMessageId, setReportMenuMessageId] = useState<string | null>(null);
   const [deletingSessionId, setDeletingSessionId] = useState<string | null>(null);
   const [scopeOpen, setScopeOpen] = useState(false);
   const [activeCitation, setActiveCitation] = useState<Citation | null>(null);
@@ -533,19 +533,14 @@ export function ChatPanel({ hubId, hubName, hubDescription, hubRole, sources, so
   }
 
 
-  async function handleFlagResponse(messageId: string) {
+  async function handleFlagResponse(messageId: string, reason: FlagReason) {
     if (!canFlagResponses || flaggingMessageId) {
       return;
     }
-    if (typeof window !== "undefined") {
-      const confirmed = window.confirm("Flag this response for owner/admin review?");
-      if (!confirmed) {
-        return;
-      }
-    }
+    setReportMenuMessageId(null);
     setFlaggingMessageId(messageId);
     try {
-      const result = await flagMessage(messageId, { reason: flagReason });
+      const result = await flagMessage(messageId, { reason });
       setMessages((current) =>
         current.map((pair) => {
           if (!pair.response || pair.response.message_id !== messageId) {
@@ -686,63 +681,6 @@ export function ChatPanel({ hubId, hubName, hubDescription, hubRole, sources, so
                             </div>
                           </div>
                         )}
-                        {canFlagResponses && (
-                          <div className="chat__response-footer">
-                            {(message.response.flag_status === "resolved" || message.response.flag_status === "dismissed") && (
-                              <span className="chat__response-status muted">
-                                {message.response.flag_status === "resolved" ? "Moderated" : "Reviewed and dismissed"}
-                              </span>
-                            )}
-                            {(message.response.flag_status !== "open" && message.response.flag_status !== "in_review") && (
-                              <select
-                                value={flagReason}
-                                onChange={(event) => setFlagReason(event.target.value as FlagReason)}
-                                aria-label="Flag reason"
-                                disabled={flaggingMessageId === message.response.message_id}
-                              >
-                                {FLAG_REASON_OPTIONS.map((option) => (
-                                  <option key={option.value} value={option.value}>
-                                    {option.label}
-                                  </option>
-                                ))}
-                              </select>
-                            )}
-                            <button
-                              className={`chat__flag-button${
-                                message.response.flag_status === "open" || message.response.flag_status === "in_review"
-                                  ? " chat__flag-button--active"
-                                  : ""
-                              }`}
-                              type="button"
-                              onClick={() => void handleFlagResponse(message.response!.message_id)}
-                              disabled={
-                                flaggingMessageId === message.response.message_id ||
-                                message.response.flag_status === "open" ||
-                                message.response.flag_status === "in_review"
-                              }
-                              aria-label={
-                                message.response.flag_status === "open"
-                                  ? "Flagged"
-                                  : message.response.flag_status === "in_review"
-                                    ? "In review"
-                                    : flaggingMessageId === message.response.message_id
-                                      ? "Flagging..."
-                                      : "Flag response"
-                              }
-                              title={
-                                message.response.flag_status === "open"
-                                  ? "Flagged"
-                                  : message.response.flag_status === "in_review"
-                                    ? "In review"
-                                    : flaggingMessageId === message.response.message_id
-                                      ? "Flagging..."
-                                      : "Flag response"
-                              }
-                            >
-                              <FlagIcon className="chat__flag-button-icon" />
-                            </button>
-                          </div>
-                        )}
                         <div className="chat__actions">
                           <button
                             type="button"
@@ -753,12 +691,62 @@ export function ChatPanel({ hubId, hubName, hubDescription, hubRole, sources, so
                             <ClipboardDocumentIcon className="chat__action-icon" />
                             <span>Copy</span>
                           </button>
-                          <button type="button" className="chat__action-btn" aria-label="Helpful">
-                            <HandThumbUpIcon className="chat__action-icon" />
-                          </button>
-                          <button type="button" className="chat__action-btn" aria-label="Not helpful">
-                            <HandThumbDownIcon className="chat__action-icon" />
-                          </button>
+                          {canFlagResponses && (
+                            <>
+                              {(message.response.flag_status === "resolved" || message.response.flag_status === "dismissed") && (
+                                <span className="chat__response-status">
+                                  {message.response.flag_status === "resolved" ? "Moderated" : "Dismissed"}
+                                </span>
+                              )}
+                              {reportMenuMessageId === message.response.message_id ? (
+                                <div className="chat__report-reasons">
+                                  {FLAG_REASON_OPTIONS.map((option) => (
+                                    <button
+                                      key={option.value}
+                                      type="button"
+                                      className="chat__report-reason"
+                                      onClick={() => void handleFlagResponse(message.response!.message_id, option.value)}
+                                    >
+                                      {option.label}
+                                    </button>
+                                  ))}
+                                  <button
+                                    type="button"
+                                    className="chat__action-btn"
+                                    onClick={() => setReportMenuMessageId(null)}
+                                  >
+                                    Cancel
+                                  </button>
+                                </div>
+                              ) : (
+                                <button
+                                  type="button"
+                                  className={`chat__action-btn chat__report-btn${
+                                    message.response.flag_status === "open" || message.response.flag_status === "in_review"
+                                      ? " chat__report-btn--active"
+                                      : ""
+                                  }`}
+                                  onClick={() => setReportMenuMessageId(message.response!.message_id)}
+                                  disabled={
+                                    flaggingMessageId === message.response.message_id ||
+                                    message.response.flag_status === "open" ||
+                                    message.response.flag_status === "in_review"
+                                  }
+                                >
+                                  <FlagIcon className="chat__action-icon" />
+                                  <span>
+                                    {message.response.flag_status === "open"
+                                      ? "Flagged"
+                                      : message.response.flag_status === "in_review"
+                                        ? "In review"
+                                        : flaggingMessageId === message.response.message_id
+                                          ? "Reporting..."
+                                          : "Report"}
+                                  </span>
+                                </button>
+                              )}
+                            </>
+                          )}
                         </div>
                       </>
                     )}
