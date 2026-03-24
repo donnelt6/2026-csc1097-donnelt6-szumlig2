@@ -1,9 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueries } from '@tanstack/react-query';
 
 import {
   MagnifyingGlassIcon,
@@ -14,7 +14,8 @@ import {
   BellIcon,
   ChatBubbleLeftIcon,
 } from '@heroicons/react/24/outline';
-import { listActivity, listHubs, listReminders } from '../../lib/api';
+import { listActivity, listHubs, listReminders, listChatSessions } from '../../lib/api';
+import type { ChatSessionSummary } from '../../lib/types';
 import { useAuth } from '../auth/AuthProvider';
 import { describeEventParts, formatRelativeTime, getEventTone } from '../../lib/utils';
 import { MiniCalendar } from './MiniCalendar';
@@ -62,12 +63,69 @@ export function DashboardHome() {
   });
   const closestReminders = sortedReminders.slice(0, 4);
 
-  const handleHeroSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (heroSearch.trim()) {
-      router.push(`/?search=${encodeURIComponent(heroSearch.trim())}`);
-    }
-  };
+  const searchRef = useRef<HTMLDivElement>(null);
+  const [searchFocused, setSearchFocused] = useState(false);
+
+  // Fetch chat sessions for each hub
+  const sessionQueries = useQueries({
+    queries: (hubs ?? []).map((hub) => ({
+      queryKey: ['chat-sessions', hub.id],
+      queryFn: () => listChatSessions(hub.id),
+      staleTime: 30_000,
+    })),
+  });
+
+  const allChats = useMemo(() => {
+    if (!hubs) return [];
+    const chats: (ChatSessionSummary & { hubName: string })[] = [];
+    sessionQueries.forEach((q, i) => {
+      if (q.data) {
+        q.data.forEach((session) => {
+          chats.push({ ...session, hubName: hubs[i].name });
+        });
+      }
+    });
+    return chats;
+  }, [hubs, sessionQueries]);
+
+  const normalizedSearch = heroSearch.trim().toLowerCase();
+  const searchWords = normalizedSearch.split(/\s+/).filter(Boolean);
+
+  const hubResults = useMemo(() => {
+    if (!searchWords.length || !hubs) return [];
+    const scored = hubs.map((h) => {
+      const text = `${h.name ?? ''} ${h.description ?? ''}`.toLowerCase();
+      const matched = searchWords.filter((w) => text.includes(w)).length;
+      return { hub: h, matched };
+    }).filter((r) => r.matched > 0);
+    scored.sort((a, b) => b.matched - a.matched);
+    return scored.map((r) => r.hub).slice(0, 5);
+  }, [searchWords.join(' '), hubs]);
+
+  const chatResults = useMemo(() => {
+    if (!searchWords.length) return [];
+    const scored = allChats.map((c) => {
+      const text = `${c.title ?? ''} ${c.hubName ?? ''}`.toLowerCase();
+      const matched = searchWords.filter((w) => text.includes(w)).length;
+      return { chat: c, matched };
+    }).filter((r) => r.matched > 0);
+    scored.sort((a, b) => b.matched - a.matched);
+    return scored.map((r) => r.chat).slice(0, 5);
+  }, [searchWords.join(' '), allChats]);
+
+  const hasResults = hubResults.length > 0 || chatResults.length > 0;
+  const showDropdown = searchFocused && searchWords.length > 0;
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    const handleClick = (e: MouseEvent) => {
+      if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
+        setSearchFocused(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
 
   const { data: activityEvents, isLoading: activityLoading } = useQuery({
     queryKey: ['dashboard-activity'],
@@ -94,16 +152,66 @@ export function DashboardHome() {
       {/* Hero */}
       <div className="dash-hero">
         <h1 className="dash-hero-title">Discover your knowledge archive.</h1>
-        <form className="dash-hero-search-form" onSubmit={handleHeroSearch}>
-          <MagnifyingGlassIcon className="dash-hero-search-icon" />
-          <input
-            type="text"
-            className="dash-hero-search-input"
-            placeholder="Search across all document hubs, sources, and teams..."
-            value={heroSearch}
-            onChange={(e) => setHeroSearch(e.target.value)}
-          />
-        </form>
+        <div className="dash-hero-search-wrap" ref={searchRef}>
+          <div className="dash-hero-search-form">
+            <MagnifyingGlassIcon className="dash-hero-search-icon" />
+            <input
+              type="text"
+              className="dash-hero-search-input"
+              placeholder="Search across all your hubs and chats..."
+              value={heroSearch}
+              onChange={(e) => setHeroSearch(e.target.value)}
+              onFocus={() => setSearchFocused(true)}
+            />
+          </div>
+          {showDropdown && (
+            <div className="dash-hero-search-dropdown">
+              {hubResults.length > 0 && (
+                <div className="dash-hero-search-group">
+                  <span className="dash-hero-search-group-label">Hubs</span>
+                  {hubResults.map((hub) => (
+                    <Link
+                      key={hub.id}
+                      href={`/hubs/${hub.id}`}
+                      className="dash-hero-search-item"
+                      onClick={() => setSearchFocused(false)}
+                    >
+                      <RectangleStackIcon className="dash-hero-search-item-icon" />
+                      <div className="dash-hero-search-item-info">
+                        <span className="dash-hero-search-item-name">{hub.name}</span>
+                        {hub.description && (
+                          <span className="dash-hero-search-item-meta">{hub.description}</span>
+                        )}
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              )}
+              {chatResults.length > 0 && (
+                <div className="dash-hero-search-group">
+                  <span className="dash-hero-search-group-label">Chats</span>
+                  {chatResults.map((chat) => (
+                    <Link
+                      key={chat.id}
+                      href={`/hubs/${chat.hub_id}?tab=chat&session=${chat.id}`}
+                      className="dash-hero-search-item"
+                      onClick={() => setSearchFocused(false)}
+                    >
+                      <ChatBubbleLeftIcon className="dash-hero-search-item-icon" />
+                      <div className="dash-hero-search-item-info">
+                        <span className="dash-hero-search-item-name">{chat.title}</span>
+                        <span className="dash-hero-search-item-meta">{chat.hubName}</span>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              )}
+              {!hasResults && (
+                <div className="dash-hero-search-empty">No results found.</div>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Two-column layout */}
