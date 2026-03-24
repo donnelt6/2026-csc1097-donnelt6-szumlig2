@@ -178,8 +178,11 @@ export function HubAppearanceModal({
                       onClick={() => onColorKeyChange(option.key)}
                       aria-pressed={active}
                       aria-label={`Select ${option.label} color`}
+                      style={{ ["--hub-color-outline" as string]: option.value }}
                     >
-                      <span className="hub-color-tile__swatch hub-color-tile__swatch--compact" style={{ backgroundColor: option.value }} />
+                      <span className="hub-color-tile__swatch hub-color-tile__swatch--compact" style={{ backgroundColor: option.value }}>
+                        {active ? <span className="hub-color-tile__check" aria-hidden="true" /> : null}
+                      </span>
                     </button>
                   );
                 })}
