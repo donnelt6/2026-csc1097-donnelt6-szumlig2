@@ -36,6 +36,15 @@
   --hub-create-border-hover: rgba(255, 255, 255, 0.42);
   --hub-card-title-hover: var(--accent);
   --hubs-pagination-bg: #14181d;
+  --hub-modal-title: #f8fafc;
+  --hub-modal-title-placeholder: rgba(248, 250, 252, 0.62);
+  --hub-modal-title-hover: #ffffff;
+  --hub-icon-tile-compact-bg: #1a2028;
+  --hub-icon-tile-compact-hover-bg: #202833;
+  --hub-icon-tile-compact-active-bg: rgba(59, 130, 246, 0.16);
+  --hub-icon-tile-compact-active-border: #3b82f6;
+  --hub-icon-tile-compact-icon: #cbd5e1;
+  --hub-icon-tile-compact-active-icon: #93c5fd;
 
   --gradient-start: #3b82f6;
   --gradient-mid: #2563eb;
@@ -92,6 +101,15 @@
   --hub-create-border-hover: rgba(15, 23, 42, 0.26);
   --hub-card-title-hover: var(--text);
   --hubs-pagination-bg: #fafbfd;
+  --hub-modal-title: #000000;
+  --hub-modal-title-placeholder: rgba(0, 0, 0, 0.62);
+  --hub-modal-title-hover: color-mix(in srgb, #000 88%, var(--accent));
+  --hub-icon-tile-compact-bg: #f2f5f9;
+  --hub-icon-tile-compact-hover-bg: #edf1f6;
+  --hub-icon-tile-compact-active-bg: #eef7ff;
+  --hub-icon-tile-compact-active-border: #2da8ff;
+  --hub-icon-tile-compact-icon: #475569;
+  --hub-icon-tile-compact-active-icon: #2493e0;
 
   --gradient-start: #3b82f6;
   --gradient-mid: #2563eb;
@@ -1213,6 +1231,9 @@ a {
   display: flex;
   flex-direction: column;
   min-height: 0;
+}
+
+.hubs-page.hubs-page--with-pagination {
   background: linear-gradient(
     to bottom,
     transparent 0,
@@ -2134,22 +2155,22 @@ textarea {
   font-size: clamp(1.75rem, 2.15vw, 2.35rem);
   font-weight: 800;
   line-height: 1;
-  color: #000;
+  color: var(--hub-modal-title);
   box-shadow: none;
   transition: color var(--transition-fast), opacity var(--transition-fast);
 }
 
 .modal__editable-title::placeholder {
-  color: color-mix(in srgb, #000 62%, transparent);
+  color: var(--hub-modal-title-placeholder);
 }
 
 .modal__editable-title:hover {
-  color: color-mix(in srgb, #000 88%, var(--accent));
+  color: var(--hub-modal-title-hover);
 }
 
 .modal__editable-title:focus {
   outline: none;
-  color: #000;
+  color: var(--hub-modal-title);
 }
 
 .modal__picker-label {
@@ -2303,7 +2324,7 @@ textarea {
   padding: 0;
   aspect-ratio: 1 / 1;
   border-radius: 6px;
-  background: #f2f5f9;
+  background: var(--hub-icon-tile-compact-bg);
   border: 1px solid transparent;
   box-shadow: none;
 }
@@ -2311,12 +2332,12 @@ textarea {
 .hub-icon-tile--compact:hover {
   transform: none;
   border-color: transparent;
-  background: #edf1f6;
+  background: var(--hub-icon-tile-compact-hover-bg);
 }
 
 .hub-icon-tile--compact.hub-icon-tile--active {
-  background: #eef7ff;
-  border-color: #2da8ff;
+  background: var(--hub-icon-tile-compact-active-bg);
+  border-color: var(--hub-icon-tile-compact-active-border);
   box-shadow: none;
 }
 
@@ -2325,11 +2346,11 @@ textarea {
   height: 100%;
   border-radius: inherit;
   background: transparent;
-  color: #475569;
+  color: var(--hub-icon-tile-compact-icon);
 }
 
 .hub-icon-tile--compact.hub-icon-tile--active .hub-icon-tile__icon--compact {
-  color: #2493e0;
+  color: var(--hub-icon-tile-compact-active-icon);
 }
 
 .hub-icon-tile--compact .hub-icon-tile__icon--compact svg {

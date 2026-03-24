@@ -41,6 +41,7 @@ export default function HomePage() {
   const [selectedIconKey, setSelectedIconKey] = useState<HubIconKey>(DEFAULT_HUB_ICON_KEY);
   const [selectedColorKey, setSelectedColorKey] = useState<HubColorKey>(DEFAULT_HUB_COLOR_KEY);
   const [hubCount, setHubCount] = useState(0);
+  const [paginationVisible, setPaginationVisible] = useState(false);
   const [filters, setFilters] = useState<HubsFilterState>({
     sortField: "accessed",
     sortDirection: "desc",
@@ -160,7 +161,7 @@ export default function HomePage() {
       )}
 
       <main className="page-content page-content--hubs">
-        <div className="content-inner hubs-page">
+        <div className={`content-inner hubs-page${paginationVisible ? " hubs-page--with-pagination" : ""}`}>
           <div className="hubs-page-header">
             <div className="hubs-page-title-row">
               <div className="hubs-page-title-section">
@@ -181,6 +182,7 @@ export default function HomePage() {
             searchQuery={searchQuery}
             filters={filters}
             onHubCountChange={setHubCount}
+            onPaginationVisibleChange={setPaginationVisible}
             onCreateHub={() => setCreateModalOpen(true)}
           />
         </div>

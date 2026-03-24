@@ -30,10 +30,11 @@ interface HubsListProps {
   searchQuery: string;
   filters: HubsFilterState;
   onHubCountChange?: (count: number) => void;
+  onPaginationVisibleChange?: (visible: boolean) => void;
   onCreateHub?: () => void;
 }
 
-export function HubsList({ searchQuery, filters, onHubCountChange, onCreateHub }: HubsListProps) {
+export function HubsList({ searchQuery, filters, onHubCountChange, onPaginationVisibleChange, onCreateHub }: HubsListProps) {
   const queryClient = useQueryClient();
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [editingHub, setEditingHub] = useState<Hub | null>(null);
@@ -156,6 +157,10 @@ export function HubsList({ searchQuery, filters, onHubCountChange, onCreateHub }
   useEffect(() => {
     onHubCountChange?.(hubCount);
   }, [hubCount, onHubCountChange]);
+
+  useEffect(() => {
+    onPaginationVisibleChange?.(totalPages > 1);
+  }, [onPaginationVisibleChange, totalPages]);
 
   useEffect(() => {
     const handleWindowClick = () => setOpenMenuId(null);
@@ -345,7 +350,7 @@ export function HubsList({ searchQuery, filters, onHubCountChange, onCreateHub }
         </div>
       )}
 
-      {hubCount > 0 && (
+      {totalPages > 1 && (
       <div className="hubs-pagination">
           <p className="hubs-pagination-info">
             Showing {currentPage === 1 ? 1 : firstPageHubs + (currentPage - 2) * gridSlots + 1}–{Math.min(currentPage === 1 ? firstPageHubs : firstPageHubs + (currentPage - 1) * gridSlots, hubCount)} of {hubCount} Hubs
