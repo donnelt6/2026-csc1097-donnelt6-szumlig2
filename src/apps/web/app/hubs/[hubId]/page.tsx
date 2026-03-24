@@ -1,9 +1,10 @@
 'use client';
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { ChatPanel } from "../../../components/ChatPanel";
+import type { ChatPanelHandle } from "../../../components/ChatPanel";
 import { FaqPanel } from "../../../components/FaqPanel";
 import { GuidePanel } from "../../../components/GuidePanel";
 import { HubModerationPanel } from "../../../components/HubModerationPanel";
@@ -14,7 +15,6 @@ import { RemindersPanel } from "../../../components/RemindersPanel";
 import { ReminderCandidatesPanel } from "../../../components/ReminderCandidatesPanel";
 import { listSources, trackHubAccess } from "../../../lib/api";
 import { useCurrentHub } from "../../../lib/CurrentHubContext";
-import { useSourceSelection } from "../../../lib/useSourceSelection";
 import { useHubTab } from "../../../lib/HubTabContext";
 import type { HubTab } from "../../../lib/HubTabContext";
 import type { Hub } from "../../../lib/types";
@@ -56,7 +56,13 @@ export default function HubDetail({ params }: { params: { hubId: string } }) {
     refetchInterval: activeTab === 'sources' ? 4000 : false,
   });
 
-  const sourceSelection = useSourceSelection(params.hubId, sources ?? EMPTY_SOURCES);
+  const chatPanelRef = useRef<ChatPanelHandle>(null);
+  const [chatSourceIds, setChatSourceIds] = useState<string[]>([]);
+  const completeSourceIds = (sources ?? EMPTY_SOURCES).filter((s) => s.status === 'complete').map((s) => s.id);
+  const handleChatSourceChange = useCallback((ids: string[]) => setChatSourceIds(ids), []);
+  const handleToggleSource = useCallback((sourceId: string) => chatPanelRef.current?.toggleSource(sourceId), []);
+  const handleSelectAllSources = useCallback(() => chatPanelRef.current?.selectAllSources(), []);
+  const handleClearSourceSelection = useCallback(() => chatPanelRef.current?.clearSourceSelection(), []);
 
   useEffect(() => {
     hasTrackedAccess.current = false;
@@ -110,18 +116,18 @@ export default function HubDetail({ params }: { params: { hubId: string } }) {
         )}
 
         <div className="hub-tab-content">
-          {activeTab === 'chat' && (
+          <div style={{ display: activeTab === 'chat' ? 'contents' : 'none' }}>
             <ChatPanel
+              ref={chatPanelRef}
               hubId={params.hubId}
               hubName={hub?.name ?? undefined}
               hubDescription={hub?.description ?? undefined}
               hubRole={hub?.role ?? undefined}
               sources={sources ?? []}
               sourcesLoading={sourcesLoading}
-              initialSourceIds={sourceSelection.selectedIds}
-              onSourceSelectionChange={sourceSelection.setSelectedIds}
+              onSourceSelectionChange={handleChatSourceChange}
             />
-          )}
+          </div>
           {activeTab === 'sources' && (
             <UploadPanel
               hubId={params.hubId}
@@ -129,10 +135,10 @@ export default function HubDetail({ params }: { params: { hubId: string } }) {
               onRefresh={() => refetchSources()}
               canUpload={canUpload}
               canReviewSuggestions={canUpload}
-              selectedSourceIds={sourceSelection.selectedIds}
-              onToggleSource={sourceSelection.toggleSource}
-              onSelectAllSources={sourceSelection.selectAll}
-              onClearSourceSelection={sourceSelection.clearAll}
+              selectedSourceIds={chatSourceIds}
+              onToggleSource={handleToggleSource}
+              onSelectAllSources={handleSelectAllSources}
+              onClearSourceSelection={handleClearSourceSelection}
             />
           )}
           {activeTab === 'members' && (
@@ -144,8 +150,8 @@ export default function HubDetail({ params }: { params: { hubId: string } }) {
                 <h3 className="hub-dashboard__section-title">Guides</h3>
                 <GuidePanel
                   hubId={params.hubId}
-                  selectedSourceIds={sourceSelection.selectedIds}
-                  hasSelectableSources={sourceSelection.completeCount > 0}
+                  selectedSourceIds={chatSourceIds}
+                  hasSelectableSources={completeSourceIds.length > 0}
                   canEdit={canUpload}
                 />
               </section>
@@ -153,8 +159,8 @@ export default function HubDetail({ params }: { params: { hubId: string } }) {
                 <h3 className="hub-dashboard__section-title">FAQs</h3>
                 <FaqPanel
                   hubId={params.hubId}
-                  selectedSourceIds={sourceSelection.selectedIds}
-                  hasSelectableSources={sourceSelection.completeCount > 0}
+                  selectedSourceIds={chatSourceIds}
+                  hasSelectableSources={completeSourceIds.length > 0}
                   canEdit={canUpload}
                 />
               </section>

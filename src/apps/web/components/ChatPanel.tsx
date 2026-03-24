@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { ChevronDownIcon, ClipboardDocumentIcon, FlagIcon, PaperAirplaneIcon } from "@heroicons/react/24/outline";
@@ -49,6 +49,12 @@ interface DraftState extends ChatControlState {
   messages: MessagePair[];
 }
 
+export interface ChatPanelHandle {
+  toggleSource: (sourceId: string) => void;
+  selectAllSources: () => void;
+  clearSourceSelection: () => void;
+}
+
 interface Props {
   hubId: string;
   hubName?: string;
@@ -56,7 +62,6 @@ interface Props {
   hubRole?: MembershipRole | null;
   sources: Source[];
   sourcesLoading?: boolean;
-  initialSourceIds?: string[];
   onSourceSelectionChange?: (selectedIds: string[]) => void;
 }
 
@@ -138,7 +143,7 @@ function SourceExcerpt({
   );
 }
 
-export function ChatPanel({ hubId, hubName, hubDescription, hubRole, sources, sourcesLoading, initialSourceIds, onSourceSelectionChange }: Props) {
+export const ChatPanel = forwardRef<ChatPanelHandle, Props>(function ChatPanel({ hubId, hubName, hubDescription, hubRole, sources, sourcesLoading, onSourceSelectionChange }, ref) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const router = useRouter();
@@ -170,6 +175,7 @@ export function ChatPanel({ hubId, hubName, hubDescription, hubRole, sources, so
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const modalCloseRef = useRef<HTMLButtonElement>(null);
   const previousCompleteSourceIdsRef = useRef<string[]>([]);
+  const sessionSourceCacheRef = useRef<Map<string | null, string[]>>(new Map());
 
   const userInitial = useMemo(() => {
     const name = user?.email ?? user?.user_metadata?.full_name ?? "U";
@@ -207,13 +213,18 @@ export function ChatPanel({ hubId, hubName, hubDescription, hubRole, sources, so
       messages.length === 0 &&
       selectedSourceIds.length === 0
     ) {
-      const fallback = initialSourceIds && initialSourceIds.length > 0
-        ? initialSourceIds.filter((id) => completeSourceIds.includes(id))
-        : completeSourceIds;
-      setSelectedSourceIds(fallback);
+      setSelectedSourceIds(completeSourceIds);
     }
     previousCompleteSourceIdsRef.current = completeSourceIds;
   }, [activeSessionId, completeSourceIds, messages.length, selectedSourceIds.length]);
+
+  useEffect(() => {
+    sessionSourceCacheRef.current.set(activeSessionId, selectedSourceIds);
+  }, [activeSessionId, selectedSourceIds]);
+
+  useEffect(() => {
+    onSourceSelectionChange?.(selectedSourceIds);
+  }, [selectedSourceIds, onSourceSelectionChange]);
 
   useEffect(() => {
     if (activeSessionId !== null) {
@@ -255,9 +266,12 @@ export function ChatPanel({ hubId, hubName, hubDescription, hubRole, sources, so
         }
         setSessionList(sessions);
 
-        if (initialSessionParam) {
+        const cachedSessionId = localStorage.getItem(`caddie:last-session:${hubId}`);
+        const preferredSessionId = initialSessionParam ?? cachedSessionId;
+
+        if (preferredSessionId && sessions.some((s) => s.id === preferredSessionId)) {
           try {
-            const detail = await getChatSessionMessages(initialSessionParam, hubId);
+            const detail = await getChatSessionMessages(preferredSessionId, hubId);
             if (cancelled) {
               return;
             }
@@ -275,11 +289,11 @@ export function ChatPanel({ hubId, hubName, hubDescription, hubRole, sources, so
           return;
         }
 
-        activateDraft(buildDraftState(draftState, completeSourceIds, initialSourceIds), false);
+        activateDraft(buildDraftState(draftState, completeSourceIds), false);
       } catch (error) {
         if (!cancelled) {
           setPanelError(error instanceof Error ? error.message : String(error));
-          activateDraft(buildDraftState(draftState, completeSourceIds, initialSourceIds), false);
+          activateDraft(buildDraftState(draftState, completeSourceIds), false);
         }
       } finally {
         if (!cancelled) {
@@ -322,14 +336,16 @@ export function ChatPanel({ hubId, hubName, hubDescription, hubRole, sources, so
   }
 
   function hydrateSession(session: ChatSessionSummary, sessionMessages: SessionMessage[]) {
-    const activeSelection = initialSourceIds
-      ? initialSourceIds.filter((id) => completeSourceIds.includes(id))
-      : [...session.source_ids];
+    const cached = sessionSourceCacheRef.current.get(session.id);
+    const activeSelection = cached
+      ? cached.filter((id) => completeSourceIds.includes(id))
+      : session.source_ids.filter((id) => completeSourceIds.includes(id));
     const nextControls = {
       scope: session.scope,
       selectedSourceIds: activeSelection,
     };
     setActiveSessionId(session.id);
+    localStorage.setItem(`caddie:last-session:${hubId}`, session.id);
     setPersistedSessionControls({ scope: session.scope, selectedSourceIds: [...session.source_ids] });
     setMessages(convertSessionMessagesToPairs(sessionMessages));
     setScope(nextControls.scope);
@@ -363,7 +379,7 @@ export function ChatPanel({ hubId, hubName, hubDescription, hubRole, sources, so
       if (fallbackSession) {
         await openSession(fallbackSession.id, fallbackSession, true);
       } else {
-        activateDraft(buildDraftState(draftState, completeSourceIds, initialSourceIds), true);
+        activateDraft(buildDraftState(draftState, completeSourceIds), true);
       }
       setPanelError(error instanceof Error ? error.message : String(error));
     } finally {
@@ -374,12 +390,17 @@ export function ChatPanel({ hubId, hubName, hubDescription, hubRole, sources, so
   }
 
   function activateDraft(nextDraft: DraftState, clearQuery: boolean) {
+    const cached = sessionSourceCacheRef.current.get(null);
     setDraftState(nextDraft);
     setActiveSessionId(null);
     setPersistedSessionControls(null);
     setMessages(nextDraft.messages);
     setScope(nextDraft.scope);
-    setSelectedSourceIds(nextDraft.selectedSourceIds);
+    setSelectedSourceIds(
+      cached
+        ? cached.filter((id) => completeSourceIds.includes(id))
+        : nextDraft.selectedSourceIds
+    );
     setPanelError(null);
     if (clearQuery) {
       syncSessionQuery(null);
@@ -390,13 +411,8 @@ export function ChatPanel({ hubId, hubName, hubDescription, hubRole, sources, so
   useEffect(() => {
     if (isBootstrapping) return;
     if (currentSessionParam === "new") {
-      const fallbackIds = initialSourceIds && initialSourceIds.length > 0
-        ? initialSourceIds.filter((id) => completeSourceIds.includes(id))
-        : completeSourceIds;
-      const carryOver = normalizedSelectedSourceIds.length > 0
-        ? normalizedSelectedSourceIds
-        : fallbackIds;
-      activateDraft({ messages: [], scope, selectedSourceIds: [...carryOver] }, false);
+      sessionSourceCacheRef.current.delete(null);
+      activateDraft({ messages: [], scope, selectedSourceIds: [...completeSourceIds] }, false);
       return;
     }
     if (currentSessionParam && currentSessionParam !== activeSessionId) {
@@ -412,25 +428,26 @@ export function ChatPanel({ hubId, hubName, hubDescription, hubRole, sources, so
     if (!completeSourceIds.includes(sourceId)) {
       return;
     }
-    setSelectedSourceIds((current) => {
-      const next = current.includes(sourceId)
+    setSelectedSourceIds((current) =>
+      current.includes(sourceId)
         ? current.filter((id) => id !== sourceId)
-        : [...current, sourceId];
-      onSourceSelectionChange?.(next);
-      return next;
-    });
+        : [...current, sourceId]
+    );
   }
 
   function handleSelectAllSources() {
-    const next = [...completeSourceIds];
-    setSelectedSourceIds(next);
-    onSourceSelectionChange?.(next);
+    setSelectedSourceIds([...completeSourceIds]);
   }
 
   function handleClearSourceSelection() {
     setSelectedSourceIds([]);
-    onSourceSelectionChange?.([]);
   }
+
+  useImperativeHandle(ref, () => ({
+    toggleSource: handleToggleSource,
+    selectAllSources: handleSelectAllSources,
+    clearSourceSelection: handleClearSourceSelection,
+  }), [completeSourceIds]);
 
   function handleTextareaChange(event: React.ChangeEvent<HTMLTextAreaElement>) {
     setQuestion(event.target.value);
@@ -839,7 +856,7 @@ export function ChatPanel({ hubId, hubName, hubDescription, hubRole, sources, so
       )}
     </>
   );
-}
+});
 
 function convertSessionMessagesToPairs(messages: SessionMessage[]): MessagePair[] {
   const pairs: MessagePair[] = [];
@@ -872,17 +889,14 @@ function convertSessionMessagesToPairs(messages: SessionMessage[]): MessagePair[
   return pairs;
 }
 
-function buildDraftState(currentDraft: DraftState | null, completeSourceIds: string[], initialSourceIds?: string[]): DraftState {
+function buildDraftState(currentDraft: DraftState | null, completeSourceIds: string[]): DraftState {
   if (currentDraft) {
     return currentDraft;
   }
-  const fallback = initialSourceIds && initialSourceIds.length > 0
-    ? initialSourceIds.filter((id) => completeSourceIds.includes(id))
-    : completeSourceIds;
   return {
     messages: [],
     scope: "hub",
-    selectedSourceIds: [...fallback],
+    selectedSourceIds: [...completeSourceIds],
   };
 }
 
