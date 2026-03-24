@@ -6,6 +6,39 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
+HUB_ICON_KEYS = {
+    "stack",
+    "book",
+    "chat",
+    "cap",
+    "briefcase",
+    "beaker",
+    "folder",
+    "rocket",
+    "globe",
+    "bolt",
+    "sparkles",
+    "shield",
+}
+
+HUB_COLOR_KEYS = {
+    "slate",
+    "violet",
+    "cyan",
+    "blue",
+    "emerald",
+    "amber",
+    "rose",
+    "orange",
+    "pink",
+    "indigo",
+    "teal",
+    "red",
+}
+
+DEFAULT_HUB_ICON_KEY = "stack"
+DEFAULT_HUB_COLOR_KEY = "slate"
+
 
 class HubScope(str, Enum):
     hub = "hub"
@@ -34,7 +67,10 @@ class Hub(BaseModel):
     owner_id: str
     name: str
     description: Optional[str] = None
+    icon_key: Optional[str] = None
+    color_key: Optional[str] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
+    archived_at: Optional[datetime] = None
     last_accessed_at: Optional[datetime] = None
     role: Optional[MembershipRole] = None
     members_count: Optional[int] = None
@@ -46,6 +82,15 @@ class Hub(BaseModel):
 class HubCreate(StrictModel):
     name: str = Field(..., min_length=1, max_length=120)
     description: Optional[str] = Field(default=None, max_length=500)
+    icon_key: Optional[str] = Field(default=None)
+    color_key: Optional[str] = Field(default=None)
+
+
+class HubUpdate(StrictModel):
+    name: Optional[str] = Field(default=None, min_length=1, max_length=120)
+    description: Optional[str] = Field(default=None, max_length=500)
+    icon_key: Optional[str] = Field(default=None)
+    color_key: Optional[str] = Field(default=None)
 
 
 class CurrentUser(BaseModel):

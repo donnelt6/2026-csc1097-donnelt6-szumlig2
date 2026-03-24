@@ -8,6 +8,7 @@ from urllib.parse import parse_qs, urlparse, urlunparse
 from typing import Any, Dict, List, Optional, Tuple
 
 from openai import OpenAI
+from postgrest.exceptions import APIError
 from supabase import Client, create_client
 
 from ..core.config import get_settings
@@ -20,6 +21,8 @@ from ..schemas import (
     ChatSessionSummary,
     Citation,
     CreateRevisionRequest,
+    DEFAULT_HUB_COLOR_KEY,
+    DEFAULT_HUB_ICON_KEY,
     FaqEntry,
     FaqGenerateRequest,
     FlagCase,
@@ -35,8 +38,11 @@ from ..schemas import (
     GuideStepCreateRequest,
     GuideStepProgressUpdate,
     GuideStepWithProgress,
+    HUB_COLOR_KEYS,
+    HUB_ICON_KEYS,
     Hub,
     HubCreate,
+    HubUpdate,
     HubInviteRequest,
     HubMember,
     HubScope,
@@ -107,18 +113,51 @@ class SupabaseStore:
         self.llm_client = OpenAI(api_key=settings.openai_api_key)
 
     def list_hubs(self, client: Client, user_id: str) -> List[Hub]:
-        response = (
-            client.table("hub_members")
-            .select("role, last_accessed_at, is_favourite, hubs (id, owner_id, name, description, created_at, members_count, sources_count)")
-            .eq("user_id", user_id)
-            .not_.is_("accepted_at", "null")
-            .order("last_accessed_at", desc=True)
-            .execute()
+        select_with_appearance = (
+            "role, last_accessed_at, is_favourite, "
+            "hubs (id, owner_id, name, description, icon_key, color_key, created_at, archived_at, members_count, sources_count)"
         )
+        select_without_appearance = (
+            "role, last_accessed_at, is_favourite, "
+            "hubs (id, owner_id, name, description, created_at, archived_at, members_count, sources_count)"
+        )
+        select_without_archival = (
+            "role, last_accessed_at, is_favourite, "
+            "hubs (id, owner_id, name, description, icon_key, color_key, created_at, members_count, sources_count)"
+        )
+        select_without_appearance_or_archival = (
+            "role, last_accessed_at, is_favourite, "
+            "hubs (id, owner_id, name, description, created_at, members_count, sources_count)"
+        )
+        select_candidates = [
+            select_with_appearance,
+            select_without_appearance,
+            select_without_archival,
+            select_without_appearance_or_archival,
+        ]
+        response = None
+        for select_fields in select_candidates:
+            try:
+                response = (
+                    client.table("hub_members")
+                    .select(select_fields)
+                    .eq("user_id", user_id)
+                    .not_.is_("accepted_at", "null")
+                    .order("last_accessed_at", desc=True)
+                    .execute()
+                )
+                break
+            except APIError as exc:
+                if not _is_missing_hub_optional_column_error(exc):
+                    raise
+        if response is None:
+            raise RuntimeError("Failed to list hubs.")
         hubs: List[Hub] = []
         hub_ids: List[str] = []
         for row in response.data:
             hub_row = row.get("hubs") or {}
+            hub_row.setdefault("icon_key", DEFAULT_HUB_ICON_KEY)
+            hub_row.setdefault("color_key", DEFAULT_HUB_COLOR_KEY)
             hub_row["role"] = row.get("role")
             hub_row["last_accessed_at"] = row.get("last_accessed_at")
             hub_row["is_favourite"] = row.get("is_favourite")
@@ -153,12 +192,15 @@ class SupabaseStore:
 
     def create_hub(self, client: Client, user_id: str, payload: HubCreate) -> Hub:
         _ = client
+        self._validate_hub_appearance(payload.icon_key, payload.color_key)
         response = self.service_client.rpc(
             "create_hub_with_owner_membership",
             {
                 "p_owner_id": str(user_id),
                 "p_name": payload.name,
                 "p_description": payload.description,
+                "p_icon_key": payload.icon_key,
+                "p_color_key": payload.color_key,
             },
         ).execute()
         data = response.data or []
@@ -167,6 +209,67 @@ class SupabaseStore:
         if not data:
             raise RuntimeError("Failed to create hub.")
         return Hub(**data[0])
+
+    def update_hub(self, client: Client, hub_id: str, payload: HubUpdate) -> Hub:
+        update_payload = payload.model_dump(exclude_none=True)
+        if not update_payload:
+            raise ValueError("No hub changes provided.")
+        self._validate_hub_appearance(payload.icon_key, payload.color_key)
+
+        update_response = (
+            client.table("hubs")
+            .update(update_payload)
+            .eq("id", str(hub_id))
+            .execute()
+        )
+        if not update_response.data:
+            raise KeyError("Hub not found")
+        response = (
+            client.table("hubs")
+            .select("id, owner_id, name, description, icon_key, color_key, created_at, archived_at, members_count, sources_count")
+            .eq("id", str(hub_id))
+            .execute()
+        )
+        if not response.data:
+            raise KeyError("Hub not found")
+        return Hub(**response.data[0])
+
+    def archive_hub(self, client: Client, hub_id: str) -> Hub:
+        existing = client.table("hubs").select("id").eq("id", str(hub_id)).execute()
+        if not existing.data:
+            raise KeyError("Hub not found")
+        now = datetime.now(timezone.utc).isoformat()
+        client.table("hubs").update({"archived_at": now}).eq("id", str(hub_id)).execute()
+        response = (
+            client.table("hubs")
+            .select("id, owner_id, name, description, icon_key, color_key, created_at, archived_at, members_count, sources_count")
+            .eq("id", str(hub_id))
+            .execute()
+        )
+        if not response.data:
+            raise KeyError("Hub not found")
+        return Hub(**response.data[0])
+
+    def unarchive_hub(self, client: Client, hub_id: str) -> Hub:
+        existing = client.table("hubs").select("id").eq("id", str(hub_id)).execute()
+        if not existing.data:
+            raise KeyError("Hub not found")
+        client.table("hubs").update({"archived_at": None}).eq("id", str(hub_id)).execute()
+        response = (
+            client.table("hubs")
+            .select("id, owner_id, name, description, icon_key, color_key, created_at, archived_at, members_count, sources_count")
+            .eq("id", str(hub_id))
+            .execute()
+        )
+        if not response.data:
+            raise KeyError("Hub not found")
+        return Hub(**response.data[0])
+
+    def _validate_hub_appearance(self, icon_key: Optional[str], color_key: Optional[str]) -> None:
+        if icon_key is not None and icon_key not in HUB_ICON_KEYS:
+            raise ValueError("Invalid hub icon.")
+        if color_key is not None and color_key not in HUB_COLOR_KEYS:
+            raise ValueError("Invalid hub color.")
 
     def create_source(self, client: Client, payload: SourceCreate) -> Tuple[Source, str]:
         source_id = str(uuid.uuid4())
@@ -3199,6 +3302,13 @@ def _get_attr(obj: Any, name: str, default: Any = None) -> Any:
     if isinstance(obj, dict):
         return obj.get(name, default)
     return getattr(obj, name, default)
+
+
+def _is_missing_hub_optional_column_error(exc: APIError) -> bool:
+    message = (getattr(exc, "message", "") or str(exc)).lower()
+    if "column" not in message or "does not exist" not in message:
+        return False
+    return "icon_key" in message or "archived_at" in message
 
 
 def _extract_response_text(response: Any) -> str:

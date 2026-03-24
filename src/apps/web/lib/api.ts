@@ -68,11 +68,47 @@ export async function listHubs(): Promise<Hub[]> {
   return handle<Hub[]>(res);
 }
 
-export async function createHub(data: { name: string; description?: string }): Promise<Hub> {
+export async function createHub(data: {
+  name: string;
+  description?: string;
+  icon_key?: string;
+  color_key?: string;
+}): Promise<Hub> {
   const res = await authedFetch(`${API_BASE}/hubs`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
+  });
+  return handle<Hub>(res);
+}
+
+export async function updateHub(
+  hubId: string,
+  data: {
+    name?: string;
+    description?: string;
+    icon_key?: string;
+    color_key?: string;
+  }
+): Promise<Hub> {
+  const res = await authedFetch(`${API_BASE}/hubs/${hubId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  return handle<Hub>(res);
+}
+
+export async function archiveHub(hubId: string): Promise<Hub> {
+  const res = await authedFetch(`${API_BASE}/hubs/${hubId}/archive`, {
+    method: "POST",
+  });
+  return handle<Hub>(res);
+}
+
+export async function unarchiveHub(hubId: string): Promise<Hub> {
+  const res = await authedFetch(`${API_BASE}/hubs/${hubId}/unarchive`, {
+    method: "POST",
   });
   return handle<Hub>(res);
 }

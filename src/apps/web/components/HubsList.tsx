@@ -2,35 +2,76 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  DocumentIcon,
-  UserIcon,
   PlusCircleIcon,
   StarIcon as StarOutline,
   EllipsisVerticalIcon,
-  RectangleStackIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
+  SwatchIcon,
+  ArchiveBoxIcon,
 } from "@heroicons/react/24/outline";
-import { StarIcon as StarSolid } from "@heroicons/react/24/solid";
-import { listHubs, toggleHubFavourite } from "../lib/api";
-import { formatRelativeTime } from "../lib/utils";
+import { DocumentIcon, StarIcon as StarSolid, UserIcon } from "@heroicons/react/24/solid";
+import { archiveHub, listHubs, toggleHubFavourite, unarchiveHub, updateHub } from "../lib/api";
+import {
+  DEFAULT_HUB_COLOR_KEY,
+  DEFAULT_HUB_ICON_KEY,
+  resolveHubAppearance,
+  type HubColorKey,
+  type HubIconKey,
+} from "../lib/hubAppearance";
 import type { Hub } from "../lib/types";
+import { formatRelativeTime } from "../lib/utils";
 import type { HubsFilterState } from "./HubsToolbar";
+import { HubAppearanceModal } from "./HubAppearanceModal";
 
 interface HubsListProps {
   searchQuery: string;
   filters: HubsFilterState;
   onHubCountChange?: (count: number) => void;
+  onPaginationVisibleChange?: (visible: boolean) => void;
   onCreateHub?: () => void;
 }
 
-export function HubsList({ searchQuery, filters, onHubCountChange, onCreateHub }: HubsListProps) {
+export function HubsList({ searchQuery, filters, onHubCountChange, onPaginationVisibleChange, onCreateHub }: HubsListProps) {
   const queryClient = useQueryClient();
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [editingHub, setEditingHub] = useState<Hub | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editDescription, setEditDescription] = useState("");
+  const [editIconKey, setEditIconKey] = useState<HubIconKey>(DEFAULT_HUB_ICON_KEY);
+  const [editColorKey, setEditColorKey] = useState<HubColorKey>(DEFAULT_HUB_COLOR_KEY);
   const { data, isLoading, error } = useQuery({
     queryKey: ["hubs"],
     queryFn: listHubs,
+  });
+  const updateAppearanceMutation = useMutation({
+    mutationFn: (payload: { hubId: string; name: string; description: string; icon_key: string; color_key: string }) =>
+      updateHub(payload.hubId, {
+        name: payload.name,
+        description: payload.description,
+        icon_key: payload.icon_key,
+        color_key: payload.color_key,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["hubs"] });
+      setEditingHub(null);
+    },
+  });
+  const archiveHubMutation = useMutation({
+    mutationFn: (hubId: string) => archiveHub(hubId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["hubs"] });
+      setOpenMenuId(null);
+    },
+  });
+  const unarchiveHubMutation = useMutation({
+    mutationFn: (hubId: string) => unarchiveHub(hubId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["hubs"] });
+      setOpenMenuId(null);
+    },
   });
 
   const { sortField, sortDirection, selectedRoles, typeTab, statusTab } = filters;
@@ -61,8 +102,8 @@ export function HubsList({ searchQuery, filters, onHubCountChange, onCreateHub }
     if (selectedRoles.size > 0 && hub.role && !selectedRoles.has(hub.role)) return false;
     if (typeTab === "pinned" && !hub.is_favourite) return false;
     if (typeTab === "shared" && hub.role === "owner") return false;
-    // "archived" status tab is placeholder — no hubs to show yet
-    if (statusTab === "archived") return false;
+    if (statusTab === "active" && hub.archived_at) return false;
+    if (statusTab === "archived" && !hub.archived_at) return false;
     return true;
   });
 
@@ -117,7 +158,58 @@ export function HubsList({ searchQuery, filters, onHubCountChange, onCreateHub }
     onHubCountChange?.(hubCount);
   }, [hubCount, onHubCountChange]);
 
+  useEffect(() => {
+    onPaginationVisibleChange?.(totalPages > 1);
+  }, [onPaginationVisibleChange, totalPages]);
+
+  useEffect(() => {
+    const handleWindowClick = () => setOpenMenuId(null);
+    window.addEventListener("click", handleWindowClick);
+    return () => window.removeEventListener("click", handleWindowClick);
+  }, []);
+
+  const openAppearanceEditor = (hub: Hub, event: React.MouseEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setOpenMenuId(null);
+    setEditingHub(hub);
+    setEditName(hub.name ?? "");
+    setEditDescription(hub.description ?? "");
+    setEditIconKey((hub.icon_key as HubIconKey | null) ?? DEFAULT_HUB_ICON_KEY);
+    setEditColorKey((hub.color_key as HubColorKey | null) ?? DEFAULT_HUB_COLOR_KEY);
+  };
+
+  const submitAppearanceUpdate = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!editingHub) return;
+    updateAppearanceMutation.mutate({
+      hubId: editingHub.id,
+      name: editName.trim(),
+      description: editDescription.trim(),
+      icon_key: editIconKey,
+      color_key: editColorKey,
+    });
+  };
+
+  const toggleArchiveHub = (hub: Hub, event: React.MouseEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const isArchived = Boolean(hub.archived_at);
+    const confirmed = window.confirm(
+      isArchived
+        ? `Unarchive "${hub.name}"? It will appear in Active again.`
+        : `Archive "${hub.name}"? You can still view it in Archived.`
+    );
+    if (!confirmed) return;
+    if (isArchived) {
+      unarchiveHubMutation.mutate(hub.id);
+      return;
+    }
+    archiveHubMutation.mutate(hub.id);
+  };
+
   return (
+    <>
     <div className="hubs-list-container">
       {isLoading && <p className="muted">Loading hubs...</p>}
       {error && <p className="muted">Failed to load hubs: {(error as Error).message}</p>}
@@ -129,21 +221,34 @@ export function HubsList({ searchQuery, filters, onHubCountChange, onCreateHub }
               <PlusCircleIcon />
             </div>
             <h3 className="hub-card-create-title">Create New Hub</h3>
-            <p className="hub-card-create-desc">Initialise a new secure documentation environment</p>
+            <p className="hub-card-create-desc">Set up a new space for your docs, sources, and AI chat</p>
           </button>
         )}
 
-        {paginatedHubs?.map((hub: Hub) => (
+        {paginatedHubs?.map((hub: Hub) => {
+          const appearance = resolveHubAppearance(hub.icon_key, hub.color_key);
+          const HubIcon = appearance.icon.icon;
+          const canEditAppearance = hub.role === "owner" || hub.role === "admin";
+          const canArchiveHub = hub.role === "owner";
+          const canOpenMenu = canEditAppearance || canArchiveHub;
+
+          return (
           <Link key={hub.id} href={`/hubs/${hub.id}`} className="hub-card">
             <div className="hub-card-top">
-              <div className="hub-card-icon">
-                <RectangleStackIcon />
+              <div
+                className="hub-card-icon"
+                style={appearance.badgeStyle}
+                data-testid={`hub-icon-${hub.id}`}
+                data-icon-key={appearance.icon.key}
+                data-color-key={appearance.color.key}
+              >
+                <HubIcon />
               </div>
               <div className="hub-card-actions">
                 <button
                   onClick={(e) => toggleFavourite(hub.id, hub.is_favourite ?? false, e)}
                   className="hub-favourite-button"
-                  aria-label={hub.is_favourite ? "Remove from favourites" : "Add to favourites"}
+                  aria-label={hub.is_favourite ? "Remove from starred" : "Add to starred"}
                 >
                   {hub.is_favourite ? (
                     <StarSolid className="hub-favourite-icon filled" />
@@ -151,13 +256,52 @@ export function HubsList({ searchQuery, filters, onHubCountChange, onCreateHub }
                     <StarOutline className="hub-favourite-icon" />
                   )}
                 </button>
-                <button
-                  className="hub-menu-button"
-                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
-                  aria-label="Hub options"
-                >
-                  <EllipsisVerticalIcon className="hub-menu-icon" />
-                </button>
+                {canOpenMenu && (
+                  <div className="hub-card-menu">
+                    <button
+                      className="hub-menu-button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setOpenMenuId((prev) => (prev === hub.id ? null : hub.id));
+                      }}
+                      aria-label={`Hub options for ${hub.name}`}
+                      aria-expanded={openMenuId === hub.id}
+                    >
+                      <EllipsisVerticalIcon className="hub-menu-icon" />
+                    </button>
+                    {openMenuId === hub.id && (
+                      <div
+                        className="hub-card-menu__dropdown"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                        }}
+                    >
+                        {canEditAppearance && (
+                          <button
+                          type="button"
+                          className="hub-card-menu__item"
+                          onClick={(e) => openAppearanceEditor(hub, e)}
+                        >
+                          <span>Edit hub</span>
+                          <SwatchIcon className="hub-card-menu__item-icon" />
+                        </button>
+                        )}
+                        {canArchiveHub && (
+                          <button
+                            type="button"
+                            className="hub-card-menu__item hub-card-menu__item--danger"
+                            onClick={(e) => toggleArchiveHub(hub, e)}
+                          >
+                            <span>{hub.archived_at ? "Unarchive hub" : "Archive hub"}</span>
+                            <ArchiveBoxIcon className="hub-card-menu__item-icon" />
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -196,7 +340,8 @@ export function HubsList({ searchQuery, filters, onHubCountChange, onCreateHub }
               </div>
             </div>
           </Link>
-        ))}
+          );
+        })}
       </div>
 
       {!isLoading && filteredHubs?.length === 0 && (
@@ -205,7 +350,8 @@ export function HubsList({ searchQuery, filters, onHubCountChange, onCreateHub }
         </div>
       )}
 
-      <div className="hubs-pagination" style={totalPages <= 1 ? { visibility: 'hidden' } : undefined}>
+      {totalPages > 1 && (
+      <div className="hubs-pagination">
           <p className="hubs-pagination-info">
             Showing {currentPage === 1 ? 1 : firstPageHubs + (currentPage - 2) * gridSlots + 1}–{Math.min(currentPage === 1 ? firstPageHubs : firstPageHubs + (currentPage - 1) * gridSlots, hubCount)} of {hubCount} Hubs
           </p>
@@ -235,6 +381,29 @@ export function HubsList({ searchQuery, filters, onHubCountChange, onCreateHub }
             </button>
           </div>
       </div>
+      )}
     </div>
+    {editingHub && (
+      <HubAppearanceModal
+        mode="edit"
+        title={`Edit ${editingHub.name}`}
+        subtitle="Update the hub name, description, icon, and colour shown on Your Hubs."
+        submitLabel="Save hub"
+        isSubmitting={updateAppearanceMutation.isPending}
+        onClose={() => setEditingHub(null)}
+        onSubmit={submitAppearanceUpdate}
+        name={editName}
+        description={editDescription}
+        onNameChange={setEditName}
+        onDescriptionChange={setEditDescription}
+        iconKey={editIconKey}
+        colorKey={editColorKey}
+        onIconKeyChange={setEditIconKey}
+        onColorKeyChange={setEditColorKey}
+        nameMax={120}
+        descriptionMax={500}
+      />
+    )}
+    </>
   );
 }

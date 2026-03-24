@@ -177,6 +177,20 @@ export const ChatPanel = forwardRef<ChatPanelHandle, Props>(function ChatPanel({
   const previousCompleteSourceIdsRef = useRef<string[]>([]);
   const sessionSourceCacheRef = useRef<Map<string | null, string[]>>(new Map());
 
+  const readSessionSourceCache = (sessionId: string | null): string[] | null => {
+    const inMemory = sessionSourceCacheRef.current.get(sessionId);
+    if (inMemory) return inMemory;
+    if (sessionId === null) return null;
+    try {
+      const raw = localStorage.getItem(`caddie:session-sources:${sessionId}`);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : null;
+    } catch {
+      return null;
+    }
+  };
+
   const userInitial = useMemo(() => {
     const name = user?.email ?? user?.user_metadata?.full_name ?? "U";
     return name.trim()[0]?.toUpperCase() ?? "U";
@@ -220,6 +234,11 @@ export const ChatPanel = forwardRef<ChatPanelHandle, Props>(function ChatPanel({
 
   useEffect(() => {
     sessionSourceCacheRef.current.set(activeSessionId, selectedSourceIds);
+    if (activeSessionId !== null) {
+      try {
+        localStorage.setItem(`caddie:session-sources:${activeSessionId}`, JSON.stringify(selectedSourceIds));
+      } catch {}
+    }
   }, [activeSessionId, selectedSourceIds]);
 
   useEffect(() => {
@@ -336,7 +355,7 @@ export const ChatPanel = forwardRef<ChatPanelHandle, Props>(function ChatPanel({
   }
 
   function hydrateSession(session: ChatSessionSummary, sessionMessages: SessionMessage[]) {
-    const cached = sessionSourceCacheRef.current.get(session.id);
+    const cached = readSessionSourceCache(session.id);
     const activeSelection = cached
       ? cached.filter((id) => completeSourceIds.includes(id))
       : session.source_ids.filter((id) => completeSourceIds.includes(id));
