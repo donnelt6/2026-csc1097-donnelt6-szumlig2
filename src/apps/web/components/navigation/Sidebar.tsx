@@ -21,6 +21,7 @@ import {
 import { ThemeToggle } from './ThemeToggle';
 import { useHubTab } from '../../lib/HubTabContext';
 import { useCurrentHub } from '../../lib/CurrentHubContext';
+import { useSearch } from '../../lib/SearchContext';
 import { listChatSessions, deleteChatSession, renameChatSession } from '../../lib/api';
 import type { ChatSessionSummary } from '../../lib/types';
 
@@ -47,6 +48,7 @@ export function Sidebar({ state, onStateChange, mobileOpen, onMobileClose, onCre
   const searchParams = useSearchParams();
   const { activeTab, setActiveTab } = useHubTab();
   const { currentHub } = useCurrentHub();
+  const { searchQuery } = useSearch();
 
   const hubId = params?.hubId ?? null;
   const isOnHub = pathname.startsWith('/hubs/');
@@ -59,6 +61,10 @@ export function Sidebar({ state, onStateChange, mobileOpen, onMobileClose, onCre
     enabled: !!hubId && showChatSessions,
     staleTime: 0,
   });
+
+  const filteredSessions = searchQuery.trim()
+    ? sessions.filter((s: ChatSessionSummary) => s.title.toLowerCase().includes(searchQuery.toLowerCase()))
+    : sessions;
 
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState('');
@@ -206,7 +212,7 @@ export function Sidebar({ state, onStateChange, mobileOpen, onMobileClose, onCre
           </button>
           <p className="sidebar-section-title">Recent Chats</p>
           <ul className="sidebar-nav-list sidebar-chat-list">
-            {sessions.map((session: ChatSessionSummary) => (
+            {filteredSessions.map((session: ChatSessionSummary) => (
               <li key={session.id} className="sidebar-chat-item">
                 {editingSessionId === session.id ? (
                   <input

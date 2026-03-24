@@ -114,7 +114,7 @@ export function DashboardHome() {
             <span className="dash-section-label">JUMP BACK IN</span>
             <div className="dash-section-header">
               <h2 className="dash-section-title">Recent Hubs</h2>
-              {recentHubs.length > 0 && <Link href="/" className="dash-section-link">View all hubs</Link>}
+              {recentHubs.length > 0 && <Link href="/hubs" className="dash-section-link">View all hubs</Link>}
             </div>
             <div className="dash-recent-hubs">
               {recentHubs.length > 0 ? (
@@ -165,7 +165,7 @@ export function DashboardHome() {
                   <div className="dash-empty-state">
                     <RectangleStackIcon className="dash-empty-state-icon" />
                     <p className="dash-empty-state-text">Create your first hub to get started</p>
-                    <Link href="/" className="dash-empty-state-btn">Go to Hubs</Link>
+                    <Link href="/hubs" className="dash-empty-state-btn">Go to Hubs</Link>
                   </div>
                 </div>
               )}
@@ -176,7 +176,7 @@ export function DashboardHome() {
           <div className="dash-section">
             <div className="dash-section-header">
               <h2 className="dash-section-title">Recent Activity Feed</h2>
-              {activityItems.length > 0 && <Link href="/dashboard?tab=activity" className="dash-section-link">View all activity</Link>}
+              {activityItems.length > 0 && <Link href="/?tab=activity" className="dash-section-link">View all activity</Link>}
             </div>
             <div className="dash-activity-card">
               <div className="dash-activity-list">

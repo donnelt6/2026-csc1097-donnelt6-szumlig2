@@ -52,10 +52,7 @@ export function AppShell({ children }: AppShellProps) {
   ] as const;
 
   useLayoutEffect(() => {
-    if (!isOnHub) {
-      setSidebarState('hidden');
-      return;
-    }
+    if (!isOnHub) return;
     const saved = localStorage.getItem('sidebar-state') as SidebarState | null;
     if (saved && ['open', 'collapsed'].includes(saved)) {
       setSidebarState(saved);
@@ -64,7 +61,9 @@ export function AppShell({ children }: AppShellProps) {
     }
   }, [isOnHub]);
 
-  const effectiveSidebarState = sidebarState ?? 'open';
+  const effectiveSidebarState = isOnHub
+    ? (sidebarState ?? 'open')
+    : 'hidden';
 
   const handleStateChange = useCallback((state: SidebarState) => {
     setSidebarState(state);
