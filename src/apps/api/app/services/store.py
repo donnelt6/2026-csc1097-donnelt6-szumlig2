@@ -273,6 +273,16 @@ class SupabaseStore:
             raise KeyError("Source not found")
         return Source(**response.data[0])
 
+    def list_source_chunks(self, client: Client, source_id: str) -> List[dict]:
+        response = (
+            client.table("source_chunks")
+            .select("chunk_index, text")
+            .eq("source_id", str(source_id))
+            .order("chunk_index")
+            .execute()
+        )
+        return response.data or []
+
     def delete_source(self, client: Client, source_id: str) -> None:
         source = self.get_source(client, source_id)
         response = client.table("sources").delete().eq("id", str(source_id)).execute()
@@ -657,7 +667,7 @@ class SupabaseStore:
 
     def update_hub_access(self, client: Client, hub_id: str, user_id: str) -> None:
         response = (
-            client.table("hub_members")
+            self.service_client.table("hub_members")
             .update({"last_accessed_at": datetime.now(timezone.utc).isoformat()})
             .eq("hub_id", str(hub_id))
             .eq("user_id", str(user_id))

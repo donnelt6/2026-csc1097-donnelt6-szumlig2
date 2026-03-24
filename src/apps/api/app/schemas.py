@@ -201,6 +201,11 @@ class SourceStatusResponse(BaseModel):
     failure_reason: Optional[str] = None
 
 
+class SourceChunk(BaseModel):
+    chunk_index: int
+    text: str
+
+
 class SourceFailureRequest(StrictModel):
     failure_reason: str = Field(..., min_length=1, max_length=500)
 

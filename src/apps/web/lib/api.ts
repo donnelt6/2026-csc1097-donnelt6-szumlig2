@@ -169,6 +169,11 @@ export async function refreshSource(sourceId: string): Promise<{ status: string 
   return handle(res);
 }
 
+export async function listSourceChunks(sourceId: string): Promise<{ chunk_index: number; text: string }[]> {
+  const res = await authedFetch(`${API_BASE}/sources/${sourceId}/chunks`, { cache: "no-store" });
+  return handle(res);
+}
+
 export async function deleteSource(sourceId: string): Promise<void> {
   const res = await authedFetch(`${API_BASE}/sources/${sourceId}`, {
     method: "DELETE",

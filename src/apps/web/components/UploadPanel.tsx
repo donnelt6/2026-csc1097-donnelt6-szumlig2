@@ -9,6 +9,7 @@ import {
   DocumentPlusIcon,
   MagnifyingGlassIcon,
   XMarkIcon,
+  EyeIcon,
 } from "@heroicons/react/24/outline";
 import {
   createSource,
@@ -18,6 +19,7 @@ import {
   deleteSource,
   enqueueSource,
   failSource,
+  listSourceChunks,
   refreshSource,
 } from "../lib/api";
 import { SuggestedSourcesPanel } from "./SuggestedSourcesPanel";
@@ -67,6 +69,9 @@ export function UploadPanel({
   const [pageSize, setPageSize] = useState(10);
   const [page, setPage] = useState(0);
   const [isDeletingFailed, setIsDeletingFailed] = useState(false);
+  const [viewingSource, setViewingSource] = useState<Source | null>(null);
+  const [viewChunks, setViewChunks] = useState<{ chunk_index: number; text: string }[]>([]);
+  const [isLoadingChunks, setIsLoadingChunks] = useState(false);
 
   useEffect(() => {
     if (!statusMessage) return;
@@ -280,6 +285,20 @@ export function UploadPanel({
       setStatusMessage({ text: (err as Error).message, type: "error" });
     } finally {
       setReprocessingSourceId(null);
+    }
+  };
+
+  const handleViewChunks = async (source: Source) => {
+    setViewingSource(source);
+    setViewChunks([]);
+    setIsLoadingChunks(true);
+    try {
+      const chunks = await listSourceChunks(source.id);
+      setViewChunks(chunks);
+    } catch {
+      setViewChunks([]);
+    } finally {
+      setIsLoadingChunks(false);
     }
   };
 
@@ -536,6 +555,16 @@ export function UploadPanel({
                   </div>
                 </div>
                 <div className="sources__card-right">
+                  {source.status === "complete" && (
+                    <button
+                      className="button--small sources__view-btn"
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); handleViewChunks(source); }}
+                    >
+                      <EyeIcon className="sources__view-icon" />
+                      View
+                    </button>
+                  )}
                   {source.status === "failed" && (
                     <div className="sources__card-actions">
                       {isRemoteSource ? (
@@ -612,6 +641,31 @@ export function UploadPanel({
           onPageChange={setPage}
           onPageSizeChange={(size) => { setPageSize(size); setPage(0); }}
         />
+      )}
+
+      {viewingSource && (
+        <div className="modal-backdrop" onClick={() => setViewingSource(null)}>
+          <div className="modal sources__chunks-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="sources__chunks-header">
+              <h3 className="sources__chunks-title">{viewingSource.original_name}</h3>
+              <button type="button" className="sources__chunks-close" onClick={() => setViewingSource(null)} aria-label="Close">
+                <XMarkIcon className="sources__chunks-close-icon" />
+              </button>
+            </div>
+            <div className="sources__chunks-body">
+              {isLoadingChunks && <p className="sources__chunks-loading">Loading chunks...</p>}
+              {!isLoadingChunks && viewChunks.length === 0 && (
+                <p className="sources__chunks-empty">No chunks found for this source.</p>
+              )}
+              {!isLoadingChunks && viewChunks.map((chunk) => (
+                <div key={chunk.chunk_index} className="sources__chunk">
+                  <span className="sources__chunk-index">Chunk {chunk.chunk_index + 1}</span>
+                  <p className="sources__chunk-text">{chunk.text}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
