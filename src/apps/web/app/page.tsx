@@ -46,7 +46,7 @@ export default function HomePage() {
     sortDirection: "desc",
     selectedRoles: new Set(),
     typeTab: "all",
-    statusTab: "all",
+    statusTab: "active",
   });
 
   const createMutation = useMutation({

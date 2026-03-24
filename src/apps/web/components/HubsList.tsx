@@ -22,27 +22,9 @@ import {
   type HubIconKey,
 } from "../lib/hubAppearance";
 import type { Hub } from "../lib/types";
+import { formatRelativeTime } from "../lib/utils";
 import type { HubsFilterState } from "./HubsToolbar";
 import { HubAppearanceModal } from "./HubAppearanceModal";
-
-function formatRelativeTime(dateString: string | null | undefined): string {
-  if (!dateString) return "Never";
-
-  const now = new Date().getTime();
-  const then = new Date(dateString).getTime();
-  const diffMs = now - then;
-
-  const minutes = Math.floor(diffMs / 60000);
-  const hours = Math.floor(diffMs / 3600000);
-  const days = Math.floor(diffMs / 86400000);
-  const weeks = Math.floor(diffMs / 604800000);
-
-  if (minutes < 1) return "Just now";
-  if (minutes < 60) return `${minutes}m ago`;
-  if (hours < 24) return `${hours}h ago`;
-  if (days < 7) return `${days}d ago`;
-  return `${weeks}w ago`;
-}
 
 interface HubsListProps {
   searchQuery: string;
@@ -231,8 +213,8 @@ export function HubsList({ searchQuery, filters, onHubCountChange, onCreateHub }
           const appearance = resolveHubAppearance(hub.icon_key, hub.color_key);
           const HubIcon = appearance.icon.icon;
           const canEditAppearance = hub.role === "owner" || hub.role === "admin";
-          const canDeleteHub = hub.role === "owner";
-          const canOpenMenu = canEditAppearance || canDeleteHub;
+          const canArchiveHub = hub.role === "owner";
+          const canOpenMenu = canEditAppearance || canArchiveHub;
 
           return (
           <Link key={hub.id} href={`/hubs/${hub.id}`} className="hub-card">
@@ -290,7 +272,7 @@ export function HubsList({ searchQuery, filters, onHubCountChange, onCreateHub }
                           <SwatchIcon className="hub-card-menu__item-icon" />
                         </button>
                         )}
-                        {canDeleteHub && (
+                        {canArchiveHub && (
                           <button
                             type="button"
                             className="hub-card-menu__item hub-card-menu__item--danger"
