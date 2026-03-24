@@ -11,7 +11,10 @@ export interface Hub {
   owner_id: string;
   name: string;
   description?: string | null;
+  icon_key?: string | null;
+  color_key?: string | null;
   created_at: string;
+  archived_at?: string | null;
   role?: MembershipRole | null;
   members_count?: number | null;
   sources_count?: number | null;

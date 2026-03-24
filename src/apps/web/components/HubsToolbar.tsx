@@ -52,12 +52,12 @@ export function HubsToolbar({ filters, onFiltersChange }: HubsToolbarProps) {
               className={`hubs-tab ${typeTab === tab ? 'hubs-tab--active' : ''}`}
               onClick={() => onFiltersChange({ ...filters, typeTab: tab })}
             >
-              {tab === 'all' ? 'Recent' : tab === 'pinned' ? 'Pinned' : 'Shared'}
+              {tab === 'all' ? 'Recent' : tab === 'pinned' ? 'Starred' : 'Shared'}
             </button>
           ))}
         </div>
         <div className="hubs-toolbar-tabs">
-          {(['all', 'active', 'archived'] as const).map((tab) => (
+          {(['active', 'archived', 'all'] as const).map((tab) => (
             <button
               key={tab}
               className={`hubs-tab ${statusTab === tab ? 'hubs-tab--active' : ''}`}
@@ -70,7 +70,7 @@ export function HubsToolbar({ filters, onFiltersChange }: HubsToolbarProps) {
       </div>
       <div className="hubs-toolbar-right">
         <details className="filter-menu" ref={filterDetailsRef}>
-          <summary className="toolbar-button">
+          <summary className="toolbar-button filter-trigger">
             <FunnelIcon className="toolbar-button-icon" />
             Filter
           </summary>

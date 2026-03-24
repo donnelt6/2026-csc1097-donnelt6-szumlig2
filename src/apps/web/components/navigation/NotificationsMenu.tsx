@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState, useRef, useEffect } from "react";
+import { BellIcon } from "@heroicons/react/24/solid";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { acceptInvite, listInvites, listReminderNotifications } from "../../lib/api";
 import { useAuth } from "../auth/AuthProvider";
@@ -113,12 +114,7 @@ export function NotificationsMenu() {
     <details className="notifications-menu" ref={detailsRef}>
       <summary className="notifications-trigger" aria-label={summaryLabel}>
         <span className="notifications-icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24" role="presentation">
-            <path
-              d="M4 5h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2zm0 2v.01L12 12l8-4.99V7H4zm16 10V9.25l-7.4 4.63a1 1 0 0 1-1.2 0L4 9.25V17h16z"
-              fill="currentColor"
-            />
-          </svg>
+          <BellIcon />
         </span>
         {count > 0 && <span className="notifications-badge">{count}</span>}
       </summary>
