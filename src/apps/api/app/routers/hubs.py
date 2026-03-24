@@ -3,7 +3,7 @@ from postgrest.exceptions import APIError
 from supabase import Client
 
 from ..dependencies import CurrentUser, get_current_user, get_supabase_user_client, rate_limit_user_ip
-from ..schemas import Hub, HubCreate, HubFavouriteToggle
+from ..schemas import Hub, HubCreate, HubFavouriteToggle, HubUpdate
 from ..services.store import store
 from .errors import raise_postgrest_error
 
@@ -46,6 +46,28 @@ def create_hub(
         raise_postgrest_error(exc)
 
 
+@router.patch(
+    "/{hub_id}",
+    response_model=Hub,
+    dependencies=[Depends(rate_limit_user_ip("hubs:write", "rate_limit_write_per_minute"))],
+)
+def update_hub(
+    hub_id: str,
+    payload: HubUpdate,
+    current_user: CurrentUser = Depends(get_current_user),
+    client: Client = Depends(get_supabase_user_client),
+) -> Hub:
+    _ = current_user
+    try:
+        return store.update_hub(client, hub_id, payload)
+    except KeyError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except APIError as exc:
+        raise_postgrest_error(exc)
+
+
 @router.post(
     "/{hub_id}/access",
     status_code=status.HTTP_204_NO_CONTENT,
@@ -77,6 +99,44 @@ def toggle_hub_favourite(
 ) -> None:
     try:
         store.toggle_hub_favourite(client, hub_id, current_user.id, payload.is_favourite)
+    except KeyError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except APIError as exc:
+        raise_postgrest_error(exc)
+
+
+@router.post(
+    "/{hub_id}/archive",
+    response_model=Hub,
+    dependencies=[Depends(rate_limit_user_ip("hubs:write", "rate_limit_write_per_minute"))],
+)
+def archive_hub(
+    hub_id: str,
+    current_user: CurrentUser = Depends(get_current_user),
+    client: Client = Depends(get_supabase_user_client),
+) -> Hub:
+    _ = current_user
+    try:
+        return store.archive_hub(client, hub_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except APIError as exc:
+        raise_postgrest_error(exc)
+
+
+@router.post(
+    "/{hub_id}/unarchive",
+    response_model=Hub,
+    dependencies=[Depends(rate_limit_user_ip("hubs:write", "rate_limit_write_per_minute"))],
+)
+def unarchive_hub(
+    hub_id: str,
+    current_user: CurrentUser = Depends(get_current_user),
+    client: Client = Depends(get_supabase_user_client),
+) -> Hub:
+    _ = current_user
+    try:
+        return store.unarchive_hub(client, hub_id)
     except KeyError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except APIError as exc:

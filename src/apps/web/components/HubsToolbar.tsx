@@ -57,7 +57,7 @@ export function HubsToolbar({ filters, onFiltersChange }: HubsToolbarProps) {
           ))}
         </div>
         <div className="hubs-toolbar-tabs">
-          {(['all', 'active', 'archived'] as const).map((tab) => (
+          {(['active', 'archived', 'all'] as const).map((tab) => (
             <button
               key={tab}
               className={`hubs-tab ${statusTab === tab ? 'hubs-tab--active' : ''}`}
