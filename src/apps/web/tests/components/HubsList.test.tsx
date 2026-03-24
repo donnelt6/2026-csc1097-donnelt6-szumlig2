@@ -152,7 +152,7 @@ describe("HubsList", () => {
     expect(icon).toHaveAttribute("data-color-key", "slate");
   });
 
-  it("opens the appearance editor from the card menu and saves changes", async () => {
+  it("opens the hub editor from the card menu and saves name, description, and appearance changes", async () => {
     const user = userEvent.setup();
     vi.mocked(listHubs).mockResolvedValue([
       {
@@ -169,8 +169,8 @@ describe("HubsList", () => {
     vi.mocked(updateHub).mockResolvedValue({
       id: "hub-1",
       owner_id: "user-1",
-      name: "Launch Hub",
-      description: "Docs",
+      name: "Launch Hub Updated",
+      description: "Updated docs",
       icon_key: "shield",
       color_key: "emerald",
       created_at: "2025-01-01T00:00:00Z",
@@ -181,19 +181,24 @@ describe("HubsList", () => {
 
     await screen.findByText("Launch Hub");
     await user.click(screen.getByLabelText("Hub options for Launch Hub"));
-    await user.click(screen.getByRole("button", { name: "Edit appearance" }));
+    await user.click(screen.getByRole("button", { name: "Edit hub" }));
+    await user.clear(screen.getByLabelText("Hub title"));
+    await user.type(screen.getByLabelText("Hub title"), "Launch Hub Updated");
+    await user.clear(screen.getByPlaceholderText("What is this hub for?"));
+    await user.type(screen.getByPlaceholderText("What is this hub for?"), "Updated docs");
     await user.click(screen.getByLabelText("Select Secure icon"));
-    await user.click(screen.getByRole("tab", { name: "Color" }));
     await user.click(screen.getByLabelText("Select Emerald color"));
-    await user.click(screen.getByRole("button", { name: "Save appearance" }));
+    await user.click(screen.getByRole("button", { name: "Save hub" }));
 
     expect(updateHub).toHaveBeenCalledWith("hub-1", {
+      name: "Launch Hub Updated",
+      description: "Updated docs",
       icon_key: "shield",
       color_key: "emerald",
     });
   });
 
-  it("lets admins open the appearance editor and save changes", async () => {
+  it("lets admins open the hub editor and save changes", async () => {
     const user = userEvent.setup();
     vi.mocked(listHubs).mockResolvedValue([
       {
@@ -210,8 +215,8 @@ describe("HubsList", () => {
     vi.mocked(updateHub).mockResolvedValue({
       id: "hub-admin",
       owner_id: "user-2",
-      name: "Admin Hub",
-      description: "Docs",
+      name: "Admin Hub Updated",
+      description: "Admin docs",
       icon_key: "shield",
       color_key: "emerald",
       created_at: "2025-01-03T00:00:00Z",
@@ -222,13 +227,18 @@ describe("HubsList", () => {
 
     await screen.findByText("Admin Hub");
     await user.click(screen.getByLabelText("Hub options for Admin Hub"));
-    await user.click(screen.getByRole("button", { name: "Edit appearance" }));
+    await user.click(screen.getByRole("button", { name: "Edit hub" }));
+    await user.clear(screen.getByLabelText("Hub title"));
+    await user.type(screen.getByLabelText("Hub title"), "Admin Hub Updated");
+    await user.clear(screen.getByPlaceholderText("What is this hub for?"));
+    await user.type(screen.getByPlaceholderText("What is this hub for?"), "Admin docs");
     await user.click(screen.getByLabelText("Select Secure icon"));
-    await user.click(screen.getByRole("tab", { name: "Color" }));
     await user.click(screen.getByLabelText("Select Emerald color"));
-    await user.click(screen.getByRole("button", { name: "Save appearance" }));
+    await user.click(screen.getByRole("button", { name: "Save hub" }));
 
     expect(updateHub).toHaveBeenCalledWith("hub-admin", {
+      name: "Admin Hub Updated",
+      description: "Admin docs",
       icon_key: "shield",
       color_key: "emerald",
     });

@@ -37,6 +37,8 @@ export function HubsList({ searchQuery, filters, onHubCountChange, onCreateHub }
   const queryClient = useQueryClient();
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [editingHub, setEditingHub] = useState<Hub | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editDescription, setEditDescription] = useState("");
   const [editIconKey, setEditIconKey] = useState<HubIconKey>(DEFAULT_HUB_ICON_KEY);
   const [editColorKey, setEditColorKey] = useState<HubColorKey>(DEFAULT_HUB_COLOR_KEY);
   const { data, isLoading, error } = useQuery({
@@ -44,8 +46,13 @@ export function HubsList({ searchQuery, filters, onHubCountChange, onCreateHub }
     queryFn: listHubs,
   });
   const updateAppearanceMutation = useMutation({
-    mutationFn: (payload: { hubId: string; icon_key: string; color_key: string }) =>
-      updateHub(payload.hubId, { icon_key: payload.icon_key, color_key: payload.color_key }),
+    mutationFn: (payload: { hubId: string; name: string; description: string; icon_key: string; color_key: string }) =>
+      updateHub(payload.hubId, {
+        name: payload.name,
+        description: payload.description,
+        icon_key: payload.icon_key,
+        color_key: payload.color_key,
+      }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["hubs"] });
       setEditingHub(null);
@@ -161,6 +168,8 @@ export function HubsList({ searchQuery, filters, onHubCountChange, onCreateHub }
     event.stopPropagation();
     setOpenMenuId(null);
     setEditingHub(hub);
+    setEditName(hub.name ?? "");
+    setEditDescription(hub.description ?? "");
     setEditIconKey((hub.icon_key as HubIconKey | null) ?? DEFAULT_HUB_ICON_KEY);
     setEditColorKey((hub.color_key as HubColorKey | null) ?? DEFAULT_HUB_COLOR_KEY);
   };
@@ -170,6 +179,8 @@ export function HubsList({ searchQuery, filters, onHubCountChange, onCreateHub }
     if (!editingHub) return;
     updateAppearanceMutation.mutate({
       hubId: editingHub.id,
+      name: editName.trim(),
+      description: editDescription.trim(),
       icon_key: editIconKey,
       color_key: editColorKey,
     });
@@ -263,12 +274,12 @@ export function HubsList({ searchQuery, filters, onHubCountChange, onCreateHub }
                         }}
                     >
                         {canEditAppearance && (
-                        <button
+                          <button
                           type="button"
                           className="hub-card-menu__item"
                           onClick={(e) => openAppearanceEditor(hub, e)}
                         >
-                          <span>Edit appearance</span>
+                          <span>Edit hub</span>
                           <SwatchIcon className="hub-card-menu__item-icon" />
                         </button>
                         )}
@@ -371,15 +382,21 @@ export function HubsList({ searchQuery, filters, onHubCountChange, onCreateHub }
       <HubAppearanceModal
         mode="edit"
         title={`Edit ${editingHub.name}`}
-        subtitle="Update the icon badge and accent color shown on Your Hubs."
-        submitLabel="Save appearance"
+        subtitle="Update the hub name, description, icon, and colour shown on Your Hubs."
+        submitLabel="Save hub"
         isSubmitting={updateAppearanceMutation.isPending}
         onClose={() => setEditingHub(null)}
         onSubmit={submitAppearanceUpdate}
+        name={editName}
+        description={editDescription}
+        onNameChange={setEditName}
+        onDescriptionChange={setEditDescription}
         iconKey={editIconKey}
         colorKey={editColorKey}
         onIconKeyChange={setEditIconKey}
         onColorKeyChange={setEditColorKey}
+        nameMax={120}
+        descriptionMax={500}
       />
     )}
     </>
