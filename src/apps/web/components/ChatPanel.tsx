@@ -57,6 +57,7 @@ interface Props {
   sources: Source[];
   sourcesLoading?: boolean;
   initialSourceIds?: string[];
+  onSourceSelectionChange?: (selectedIds: string[]) => void;
 }
 
 function buildHighlightedParts(snippet: string, quotes: string[]): { text: string; highlighted: boolean }[] {
@@ -137,7 +138,7 @@ function SourceExcerpt({
   );
 }
 
-export function ChatPanel({ hubId, hubName, hubDescription, hubRole, sources, sourcesLoading, initialSourceIds }: Props) {
+export function ChatPanel({ hubId, hubName, hubDescription, hubRole, sources, sourcesLoading, initialSourceIds, onSourceSelectionChange }: Props) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const router = useRouter();
@@ -321,12 +322,15 @@ export function ChatPanel({ hubId, hubName, hubDescription, hubRole, sources, so
   }
 
   function hydrateSession(session: ChatSessionSummary, sessionMessages: SessionMessage[]) {
+    const activeSelection = initialSourceIds
+      ? initialSourceIds.filter((id) => completeSourceIds.includes(id))
+      : [...session.source_ids];
     const nextControls = {
       scope: session.scope,
-      selectedSourceIds: [...session.source_ids],
+      selectedSourceIds: activeSelection,
     };
     setActiveSessionId(session.id);
-    setPersistedSessionControls(nextControls);
+    setPersistedSessionControls({ scope: session.scope, selectedSourceIds: [...session.source_ids] });
     setMessages(convertSessionMessagesToPairs(sessionMessages));
     setScope(nextControls.scope);
     setSelectedSourceIds(nextControls.selectedSourceIds);
@@ -409,21 +413,23 @@ export function ChatPanel({ hubId, hubName, hubDescription, hubRole, sources, so
       return;
     }
     setSelectedSourceIds((current) => {
-      if (current.includes(sourceId)) {
-        return current.filter((id) => id !== sourceId);
-      }
-      const next = current.filter((id) => id !== sourceId);
-      next.push(sourceId);
+      const next = current.includes(sourceId)
+        ? current.filter((id) => id !== sourceId)
+        : [...current, sourceId];
+      onSourceSelectionChange?.(next);
       return next;
     });
   }
 
   function handleSelectAllSources() {
-    setSelectedSourceIds([...completeSourceIds]);
+    const next = [...completeSourceIds];
+    setSelectedSourceIds(next);
+    onSourceSelectionChange?.(next);
   }
 
   function handleClearSourceSelection() {
     setSelectedSourceIds([]);
+    onSourceSelectionChange?.([]);
   }
 
   function handleTextareaChange(event: React.ChangeEvent<HTMLTextAreaElement>) {

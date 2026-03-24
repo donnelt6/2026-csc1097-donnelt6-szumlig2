@@ -119,6 +119,7 @@ export default function HubDetail({ params }: { params: { hubId: string } }) {
               sources={sources ?? []}
               sourcesLoading={sourcesLoading}
               initialSourceIds={sourceSelection.selectedIds}
+              onSourceSelectionChange={sourceSelection.setSelectedIds}
             />
           )}
           {activeTab === 'sources' && (

@@ -3258,7 +3258,7 @@ textarea {
 }
 
 .chat__avatar--ai {
-  background: white;
+  background: var(--bg);
   color: var(--text);
   font-family: var(--font-headline);
   font-weight: var(--font-bold);
