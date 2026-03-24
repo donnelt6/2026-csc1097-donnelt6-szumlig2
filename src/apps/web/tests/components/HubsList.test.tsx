@@ -183,6 +183,7 @@ describe("HubsList", () => {
     await user.click(screen.getByLabelText("Hub options for Launch Hub"));
     await user.click(screen.getByRole("button", { name: "Edit appearance" }));
     await user.click(screen.getByLabelText("Select Secure icon"));
+    await user.click(screen.getByRole("tab", { name: "Color" }));
     await user.click(screen.getByLabelText("Select Emerald color"));
     await user.click(screen.getByRole("button", { name: "Save appearance" }));
 
@@ -223,6 +224,7 @@ describe("HubsList", () => {
     await user.click(screen.getByLabelText("Hub options for Admin Hub"));
     await user.click(screen.getByRole("button", { name: "Edit appearance" }));
     await user.click(screen.getByLabelText("Select Secure icon"));
+    await user.click(screen.getByRole("tab", { name: "Color" }));
     await user.click(screen.getByLabelText("Select Emerald color"));
     await user.click(screen.getByRole("button", { name: "Save appearance" }));
 

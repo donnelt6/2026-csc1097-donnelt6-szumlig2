@@ -48,6 +48,7 @@ describe("HubAppearanceModal", () => {
     renderWithQueryClient(<Wrapper />);
 
     await user.click(screen.getByLabelText("Select Launch icon"));
+    await user.click(screen.getByRole("tab", { name: "Color" }));
     await user.click(screen.getByLabelText("Select Blue color"));
     await user.click(screen.getByRole("button", { name: "Create hub" }));
 
