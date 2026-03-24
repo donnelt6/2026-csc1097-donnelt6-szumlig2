@@ -121,26 +121,37 @@ class SupabaseStore:
             "role, last_accessed_at, is_favourite, "
             "hubs (id, owner_id, name, description, created_at, archived_at, members_count, sources_count)"
         )
-        try:
-            response = (
-                client.table("hub_members")
-                .select(select_with_appearance)
-                .eq("user_id", user_id)
-                .not_.is_("accepted_at", "null")
-                .order("last_accessed_at", desc=True)
-                .execute()
-            )
-        except APIError as exc:
-            if not _is_missing_hub_appearance_column_error(exc):
-                raise
-            response = (
-                client.table("hub_members")
-                .select(select_without_appearance)
-                .eq("user_id", user_id)
-                .not_.is_("accepted_at", "null")
-                .order("last_accessed_at", desc=True)
-                .execute()
-            )
+        select_without_archival = (
+            "role, last_accessed_at, is_favourite, "
+            "hubs (id, owner_id, name, description, icon_key, color_key, created_at, members_count, sources_count)"
+        )
+        select_without_appearance_or_archival = (
+            "role, last_accessed_at, is_favourite, "
+            "hubs (id, owner_id, name, description, created_at, members_count, sources_count)"
+        )
+        select_candidates = [
+            select_with_appearance,
+            select_without_appearance,
+            select_without_archival,
+            select_without_appearance_or_archival,
+        ]
+        response = None
+        for select_fields in select_candidates:
+            try:
+                response = (
+                    client.table("hub_members")
+                    .select(select_fields)
+                    .eq("user_id", user_id)
+                    .not_.is_("accepted_at", "null")
+                    .order("last_accessed_at", desc=True)
+                    .execute()
+                )
+                break
+            except APIError as exc:
+                if not _is_missing_hub_optional_column_error(exc):
+                    raise
+        if response is None:
+            raise RuntimeError("Failed to list hubs.")
         hubs: List[Hub] = []
         hub_ids: List[str] = []
         for row in response.data:
@@ -3079,9 +3090,11 @@ def _get_attr(obj: Any, name: str, default: Any = None) -> Any:
     return getattr(obj, name, default)
 
 
-def _is_missing_hub_appearance_column_error(exc: APIError) -> bool:
+def _is_missing_hub_optional_column_error(exc: APIError) -> bool:
     message = (getattr(exc, "message", "") or str(exc)).lower()
-    return "column" in message and "icon_key" in message and "does not exist" in message
+    if "column" not in message or "does not exist" not in message:
+        return False
+    return "icon_key" in message or "archived_at" in message
 
 
 def _extract_response_text(response: Any) -> str:

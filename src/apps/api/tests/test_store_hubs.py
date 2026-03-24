@@ -333,6 +333,42 @@ def test_list_hubs_falls_back_when_appearance_columns_are_missing(monkeypatch) -
     assert hubs[0].color_key == "slate"
 
 
+def test_list_hubs_falls_back_when_archived_at_column_is_missing(monkeypatch) -> None:
+    fake_service_client = FakeServiceClient()
+    monkeypatch.setattr(store_module.store, "service_client", fake_service_client)
+    client = FallbackClient(
+        responses=[
+            APIError({"message": "column hubs_1.archived_at does not exist", "code": "42703"}),
+            [
+                {
+                    "role": MembershipRole.owner.value,
+                    "last_accessed_at": "2026-03-22T12:00:00Z",
+                    "is_favourite": True,
+                    "hubs": {
+                        "id": "hub-legacy",
+                        "owner_id": "user-1",
+                        "name": "Legacy Hub",
+                        "description": "Docs",
+                        "icon_key": "rocket",
+                        "color_key": "blue",
+                        "created_at": "2026-03-22T12:00:00Z",
+                        "members_count": 2,
+                        "sources_count": 5,
+                    },
+                }
+            ],
+        ]
+    )
+
+    hubs = store_module.store.list_hubs(client, "user-1")
+
+    assert len(hubs) == 1
+    assert hubs[0].id == "hub-legacy"
+    assert hubs[0].icon_key == "rocket"
+    assert hubs[0].color_key == "blue"
+    assert hubs[0].archived_at is None
+
+
 def test_update_hub_updates_then_reads_back_hub(monkeypatch) -> None:
     fake_service_client = FakeServiceClient()
     monkeypatch.setattr(store_module.store, "service_client", fake_service_client)

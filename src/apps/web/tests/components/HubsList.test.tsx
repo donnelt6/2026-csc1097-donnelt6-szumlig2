@@ -192,6 +192,46 @@ describe("HubsList", () => {
     });
   });
 
+  it("lets admins open the appearance editor and save changes", async () => {
+    const user = userEvent.setup();
+    vi.mocked(listHubs).mockResolvedValue([
+      {
+        id: "hub-admin",
+        owner_id: "user-2",
+        name: "Admin Hub",
+        description: "Docs",
+        icon_key: "book",
+        color_key: "violet",
+        created_at: "2025-01-03T00:00:00Z",
+        role: "admin",
+      },
+    ]);
+    vi.mocked(updateHub).mockResolvedValue({
+      id: "hub-admin",
+      owner_id: "user-2",
+      name: "Admin Hub",
+      description: "Docs",
+      icon_key: "shield",
+      color_key: "emerald",
+      created_at: "2025-01-03T00:00:00Z",
+      role: "admin",
+    });
+
+    renderWithQueryClient(<HubsList searchQuery="" filters={defaultFilters} />);
+
+    await screen.findByText("Admin Hub");
+    await user.click(screen.getByLabelText("Hub options for Admin Hub"));
+    await user.click(screen.getByRole("button", { name: "Edit appearance" }));
+    await user.click(screen.getByLabelText("Select Secure icon"));
+    await user.click(screen.getByLabelText("Select Emerald color"));
+    await user.click(screen.getByRole("button", { name: "Save appearance" }));
+
+    expect(updateHub).toHaveBeenCalledWith("hub-admin", {
+      icon_key: "shield",
+      color_key: "emerald",
+    });
+  });
+
   it("only shows the appearance menu for owners and admins", async () => {
     vi.mocked(listHubs).mockResolvedValue([
       {
@@ -312,5 +352,23 @@ describe("HubsList", () => {
     expect(unarchiveHub).toHaveBeenCalledWith("hub-owner");
 
     confirmSpy.mockRestore();
+  });
+
+  it("hides pagination when no hubs match the current filters", async () => {
+    vi.mocked(listHubs).mockResolvedValue([
+      {
+        id: "hub-1",
+        owner_id: "user-1",
+        name: "Onboarding Hub",
+        description: "Docs",
+        created_at: "2025-01-01T00:00:00Z",
+        role: "owner",
+      },
+    ]);
+
+    renderWithQueryClient(<HubsList searchQuery="missing" filters={defaultFilters} />);
+
+    expect(await screen.findByText("No hubs found. Create your first hub to get started.")).toBeInTheDocument();
+    expect(screen.queryByText(/Showing .* of 0 Hubs/)).not.toBeInTheDocument();
   });
 });

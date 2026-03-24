@@ -352,6 +352,7 @@ export function HubsList({ searchQuery, filters, onHubCountChange, onCreateHub }
         </div>
       )}
 
+      {hubCount > 0 && (
       <div className="hubs-pagination">
           <p className="hubs-pagination-info">
             Showing {currentPage === 1 ? 1 : firstPageHubs + (currentPage - 2) * gridSlots + 1}–{Math.min(currentPage === 1 ? firstPageHubs : firstPageHubs + (currentPage - 1) * gridSlots, hubCount)} of {hubCount} Hubs
@@ -382,6 +383,7 @@ export function HubsList({ searchQuery, filters, onHubCountChange, onCreateHub }
             </button>
           </div>
       </div>
+      )}
     </div>
     {editingHub && (
       <HubAppearanceModal
