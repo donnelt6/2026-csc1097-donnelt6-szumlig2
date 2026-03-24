@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef } from "react";
 import { XMarkIcon } from "@heroicons/react/24/outline";
 import {
   DEFAULT_HUB_COLOR_KEY,
@@ -53,8 +53,9 @@ export function HubAppearanceModal({
 }: HubAppearanceModalProps) {
   const appearance = resolveHubAppearance(iconKey ?? DEFAULT_HUB_ICON_KEY, colorKey ?? DEFAULT_HUB_COLOR_KEY);
   const PreviewIcon = appearance.icon.icon;
-  const showTextFields = mode === "create";
-  const [appearancePanel, setAppearancePanel] = useState<"icon" | "color">("icon");
+  const showTextFields = mode === "create" || mode === "edit";
+  const formRef = useRef<HTMLFormElement | null>(null);
+  const modalRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const handleEscape = (event: KeyboardEvent) => {
@@ -66,7 +67,24 @@ export function HubAppearanceModal({
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal modal--hub-appearance" onClick={(event) => event.stopPropagation()}>
+      <div
+        ref={modalRef}
+        className="modal modal--hub-appearance"
+        tabIndex={-1}
+        onClick={(event) => {
+          event.stopPropagation();
+          if (event.target === event.currentTarget) {
+            modalRef.current?.focus();
+          }
+        }}
+        onKeyDown={(event) => {
+          if (!showTextFields || event.key !== "Enter") return;
+          const target = event.target as EventTarget | null;
+          if (target instanceof HTMLTextAreaElement) return;
+          event.preventDefault();
+          formRef.current?.requestSubmit();
+        }}
+      >
         <div className="modal__header modal__header--appearance">
           <div className="modal__hero">
             <div className="modal__hero-preview">
@@ -74,7 +92,7 @@ export function HubAppearanceModal({
                 <PreviewIcon />
               </div>
               <div className="modal__hero-copy">
-                {mode === "create" ? (
+                {showTextFields ? (
                   <div className="modal__editable-title-wrap">
                     <input
                       id="hub-create-title"
@@ -86,6 +104,9 @@ export function HubAppearanceModal({
                       autoFocus
                       aria-label="Hub title"
                     />
+                    {mode === "edit" ? (
+                      <p className="modal__subtitle">{subtitle}</p>
+                    ) : null}
                   </div>
                 ) : (
                   <>
@@ -101,13 +122,16 @@ export function HubAppearanceModal({
           </div>
         </div>
 
-        <form onSubmit={onSubmit}>
+        <form ref={formRef} onSubmit={onSubmit}>
           {showTextFields && (
             <div className="hub-appearance-form-grid">
               <div>
                 <div className="modal__field">
-                  <span className="muted">Description <span className="modal__optional">optional</span></span>
-                  <span className="modal__char-count">{description.length}/{descriptionMax}</span>
+                  <span className="muted">Description</span>
+                  <span className="modal__field-meta">
+                    <span className="modal__optional">optional</span>
+                    <span className="modal__char-count">{description.length}/{descriptionMax}</span>
+                  </span>
                 </div>
                 <textarea
                   value={description}
@@ -121,31 +145,34 @@ export function HubAppearanceModal({
           )}
 
           <div className="hub-appearance-section hub-appearance-section--compact">
-            <div className="hub-appearance-section__bar">
-              <span className="modal__picker-label">Customise appearance</span>
-              <div className="hubs-toolbar-tabs" role="tablist" aria-label="Customise appearance">
-                <button
-                  type="button"
-                  className={`hubs-tab${appearancePanel === "icon" ? " hubs-tab--active" : ""}`}
-                  onClick={() => setAppearancePanel("icon")}
-                  role="tab"
-                  aria-selected={appearancePanel === "icon"}
-                >
-                  Icon
-                </button>
-                <button
-                  type="button"
-                  className={`hubs-tab${appearancePanel === "color" ? " hubs-tab--active" : ""}`}
-                  onClick={() => setAppearancePanel("color")}
-                  role="tab"
-                  aria-selected={appearancePanel === "color"}
-                >
-                  Color
-                </button>
+            <span className="modal__picker-label">Customise appearance</span>
+
+            <div className="hub-appearance-picker">
+              <span className="hub-appearance-picker__label">Colour</span>
+              <div className="hub-color-grid hub-color-grid--compact">
+                {HUB_COLOR_OPTIONS.map((option) => {
+                  const active = option.key === colorKey;
+                  return (
+                    <button
+                      key={option.key}
+                      type="button"
+                      className={`hub-color-tile hub-color-tile--compact${active ? " hub-color-tile--active" : ""}`}
+                      onClick={() => onColorKeyChange(option.key)}
+                      aria-pressed={active}
+                      aria-label={`Select ${option.label} color`}
+                      style={{ ["--hub-color-outline" as string]: option.value }}
+                    >
+                      <span className="hub-color-tile__swatch hub-color-tile__swatch--compact" style={{ backgroundColor: option.value }}>
+                        {active ? <span className="hub-color-tile__check" aria-hidden="true" /> : null}
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
-            {appearancePanel === "icon" ? (
+            <div className="hub-appearance-picker">
+              <span className="hub-appearance-picker__label">Icon</span>
               <div className="hub-icon-grid hub-icon-grid--compact">
                 {HUB_ICON_OPTIONS.map((option) => {
                   const Icon = option.icon;
@@ -159,36 +186,22 @@ export function HubAppearanceModal({
                       aria-pressed={active}
                       aria-label={`Select ${option.label} icon`}
                     >
-                      <span className="hub-icon-tile__icon hub-icon-tile__icon--compact" style={active ? appearance.previewStyle : undefined}>
+                      <span className="hub-icon-tile__icon hub-icon-tile__icon--compact">
                         <Icon />
                       </span>
                     </button>
                   );
                 })}
               </div>
-            ) : (
-              <div className="hub-color-grid hub-color-grid--compact">
-                {HUB_COLOR_OPTIONS.map((option) => {
-                  const active = option.key === colorKey;
-                  return (
-                    <button
-                      key={option.key}
-                      type="button"
-                      className={`hub-color-tile hub-color-tile--compact${active ? " hub-color-tile--active" : ""}`}
-                      onClick={() => onColorKeyChange(option.key)}
-                      aria-pressed={active}
-                      aria-label={`Select ${option.label} color`}
-                    >
-                      <span className="hub-color-tile__swatch hub-color-tile__swatch--compact" style={{ backgroundColor: option.value }} />
-                    </button>
-                  );
-                })}
-              </div>
-            )}
+            </div>
           </div>
 
-          <div className="modal__footer modal__footer--split">
-            <button className="button button--secondary modal__footer-button" type="submit" disabled={isSubmitting}>
+          <div className={`modal__footer modal__footer--split${showTextFields ? " modal__footer--centered" : ""}`}>
+            <button
+              className={`button button--secondary modal__footer-button${showTextFields ? " modal__footer-button--full modal__footer-button--create" : ""}`}
+              type="submit"
+              disabled={isSubmitting}
+            >
               {isSubmitting ? (mode === "create" ? "Creating..." : "Saving...") : submitLabel}
             </button>
           </div>
