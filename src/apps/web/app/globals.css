@@ -1485,9 +1485,9 @@ a {
 }
 
 .hub-card-icon {
-  width: 56px;
-  height: 56px;
-  min-width: 56px;
+  width: 64px;
+  height: 64px;
+  min-width: 64px;
   border-radius: 12px;
   display: flex;
   align-items: center;
@@ -1497,8 +1497,8 @@ a {
 }
 
 .hub-card-icon svg {
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
 }
 
 .hub-card-actions {
@@ -1594,7 +1594,7 @@ a {
 
 .hub-card-title {
   font-family: var(--font-headline);
-  font-size: 1.25rem;
+  font-size: 1.32rem;
   font-weight: var(--font-bold);
   color: var(--text);
   margin: 4px 0 10px;
