@@ -57,6 +57,93 @@ interface Props {
   sourcesLoading?: boolean;
 }
 
+function buildHighlightedParts(snippet: string, quotes: string[]): { text: string; highlighted: boolean }[] {
+  // Find all match ranges (case-insensitive)
+  const lower = snippet.toLowerCase();
+  const ranges: { start: number; end: number }[] = [];
+  for (const quote of quotes) {
+    const q = quote.toLowerCase().trim();
+    if (!q) continue;
+    const idx = lower.indexOf(q);
+    if (idx !== -1) ranges.push({ start: idx, end: idx + q.length });
+  }
+  if (ranges.length === 0) return [{ text: snippet, highlighted: false }];
+
+  // Merge overlapping ranges
+  ranges.sort((a, b) => a.start - b.start);
+  const merged: { start: number; end: number }[] = [ranges[0]];
+  for (let i = 1; i < ranges.length; i++) {
+    const prev = merged[merged.length - 1];
+    if (ranges[i].start <= prev.end) {
+      prev.end = Math.max(prev.end, ranges[i].end);
+    } else {
+      merged.push(ranges[i]);
+    }
+  }
+
+  // Build segments
+  const parts: { text: string; highlighted: boolean }[] = [];
+  let cursor = 0;
+  for (const range of merged) {
+    if (cursor < range.start) parts.push({ text: snippet.slice(cursor, range.start), highlighted: false });
+    parts.push({ text: snippet.slice(range.start, range.end), highlighted: true });
+    cursor = range.end;
+  }
+  if (cursor < snippet.length) parts.push({ text: snippet.slice(cursor), highlighted: false });
+  return parts;
+}
+
+function SourceExcerpt({
+  snippet,
+  relevantQuotes,
+  paraphrasedQuotes,
+}: {
+  snippet: string;
+  relevantQuotes?: string[];
+  paraphrasedQuotes?: string[];
+}) {
+  const quotes = relevantQuotes?.filter(Boolean) ?? [];
+  const paraphrases = paraphrasedQuotes?.filter(Boolean) ?? [];
+  const hasPairs = paraphrases.length > 0 && paraphrases.length === quotes.length;
+
+  if (hasPairs) {
+    // Paired view: each point shows paraphrase + its direct quote
+    return (
+      <div className="chat__modal-excerpt">
+        {paraphrases.map((paraphrase, i) => (
+          <div key={i} className="chat__citation-pair">
+            <p className="chat__citation-paraphrase">{paraphrase}</p>
+            <blockquote className="chat__citation-direct">
+              <span className="chat__direct-label">Direct quote</span>
+              {quotes[i]}
+            </blockquote>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  // Fallback: legacy layout for citations without paired paraphrases
+  const parts = buildHighlightedParts(snippet, quotes);
+
+  return (
+    <div className="chat__modal-excerpt">
+      <div className="chat__modal-source">
+        <span className="chat__modal-section-label">Source context</span>
+        <p className="chat__modal-snippet">
+          {parts.map((part, i) =>
+            part.highlighted ? (
+              <mark key={i} className="chat__snippet-highlight">{part.text}</mark>
+            ) : (
+              <span key={i}>{part.text}</span>
+            ),
+          )}
+        </p>
+      </div>
+    </div>
+  );
+}
+
 export function ChatPanel({ hubId, hubName, hubDescription, hubRole, sources, sourcesLoading }: Props) {
   const { user } = useAuth();
   const router = useRouter();
@@ -745,9 +832,13 @@ export function ChatPanel({ hubId, hubName, hubDescription, hubRole, sources, so
                 Close
               </button>
             </div>
-            <p className="muted" style={{ whiteSpace: "pre-wrap" }}>
-              {activeCitation.snippet}
-            </p>
+            <div className="chat__modal-body">
+              <SourceExcerpt
+                snippet={activeCitation.snippet}
+                relevantQuotes={activeCitation.relevant_quotes}
+                paraphrasedQuotes={activeCitation.paraphrased_quotes}
+              />
+            </div>
           </div>
         </div>
       )}

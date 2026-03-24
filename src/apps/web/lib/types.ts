@@ -69,6 +69,8 @@ export interface Citation {
   source_id: string;
   snippet: string;
   chunk_index?: number;
+  relevant_quotes?: string[];
+  paraphrased_quotes?: string[];
 }
 
 export interface HistoryMessage {

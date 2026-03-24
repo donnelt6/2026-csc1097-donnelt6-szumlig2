@@ -238,6 +238,8 @@ class Citation(BaseModel):
     source_id: str
     snippet: str
     chunk_index: Optional[int] = None
+    relevant_quotes: Optional[List[str]] = None
+    paraphrased_quotes: Optional[List[str]] = None
 
 
 class ChatRequest(StrictModel):
