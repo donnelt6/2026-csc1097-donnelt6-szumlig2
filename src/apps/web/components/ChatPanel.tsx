@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import { ChevronDownIcon, ClipboardDocumentIcon, FlagIcon, HandThumbUpIcon, HandThumbDownIcon, PaperAirplaneIcon } from "@heroicons/react/24/outline";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -55,6 +56,7 @@ interface Props {
   hubRole?: MembershipRole | null;
   sources: Source[];
   sourcesLoading?: boolean;
+  initialSourceIds?: string[];
 }
 
 function buildHighlightedParts(snippet: string, quotes: string[]): { text: string; highlighted: boolean }[] {
@@ -106,30 +108,21 @@ function SourceExcerpt({
   const paraphrases = paraphrasedQuotes?.filter(Boolean) ?? [];
   const hasPairs = paraphrases.length > 0 && paraphrases.length === quotes.length;
 
-  if (hasPairs) {
-    // Paired view: each point shows paraphrase + its direct quote
-    return (
-      <div className="chat__modal-excerpt">
-        {paraphrases.map((paraphrase, i) => (
-          <div key={i} className="chat__citation-pair">
-            <p className="chat__citation-paraphrase">{paraphrase}</p>
-            <blockquote className="chat__citation-direct">
-              <span className="chat__direct-label">Direct quote</span>
-              {quotes[i]}
-            </blockquote>
-          </div>
-        ))}
-      </div>
-    );
-  }
-
-  // Fallback: legacy layout for citations without paired paraphrases
   const parts = buildHighlightedParts(snippet, quotes);
 
   return (
     <div className="chat__modal-excerpt">
+      {hasPairs && paraphrases.map((paraphrase, i) => (
+        <div key={i} className="chat__citation-pair">
+          <p className="chat__citation-paraphrase">{paraphrase}</p>
+          <blockquote className="chat__citation-direct">
+            <span className="chat__direct-label">Direct quote</span>
+            {quotes[i]}
+          </blockquote>
+        </div>
+      ))}
       <div className="chat__modal-source">
-        <span className="chat__modal-section-label">Source context</span>
+        <span className="chat__modal-section-label">Source chunk</span>
         <p className="chat__modal-snippet">
           {parts.map((part, i) =>
             part.highlighted ? (
@@ -144,8 +137,9 @@ function SourceExcerpt({
   );
 }
 
-export function ChatPanel({ hubId, hubName, hubDescription, hubRole, sources, sourcesLoading }: Props) {
+export function ChatPanel({ hubId, hubName, hubDescription, hubRole, sources, sourcesLoading, initialSourceIds }: Props) {
   const { user } = useAuth();
+  const queryClient = useQueryClient();
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -212,7 +206,10 @@ export function ChatPanel({ hubId, hubName, hubDescription, hubRole, sources, so
       messages.length === 0 &&
       selectedSourceIds.length === 0
     ) {
-      setSelectedSourceIds(completeSourceIds);
+      const fallback = initialSourceIds && initialSourceIds.length > 0
+        ? initialSourceIds.filter((id) => completeSourceIds.includes(id))
+        : completeSourceIds;
+      setSelectedSourceIds(fallback);
     }
     previousCompleteSourceIdsRef.current = completeSourceIds;
   }, [activeSessionId, completeSourceIds, messages.length, selectedSourceIds.length]);
@@ -277,11 +274,11 @@ export function ChatPanel({ hubId, hubName, hubDescription, hubRole, sources, so
           return;
         }
 
-        activateDraft(buildDraftState(draftState, completeSourceIds), false);
+        activateDraft(buildDraftState(draftState, completeSourceIds, initialSourceIds), false);
       } catch (error) {
         if (!cancelled) {
           setPanelError(error instanceof Error ? error.message : String(error));
-          activateDraft(buildDraftState(draftState, completeSourceIds), false);
+          activateDraft(buildDraftState(draftState, completeSourceIds, initialSourceIds), false);
         }
       } finally {
         if (!cancelled) {
@@ -362,7 +359,7 @@ export function ChatPanel({ hubId, hubName, hubDescription, hubRole, sources, so
       if (fallbackSession) {
         await openSession(fallbackSession.id, fallbackSession, true);
       } else {
-        activateDraft(buildDraftState(draftState, completeSourceIds), true);
+        activateDraft(buildDraftState(draftState, completeSourceIds, initialSourceIds), true);
       }
       setPanelError(error instanceof Error ? error.message : String(error));
     } finally {
@@ -389,9 +386,12 @@ export function ChatPanel({ hubId, hubName, hubDescription, hubRole, sources, so
   useEffect(() => {
     if (isBootstrapping) return;
     if (currentSessionParam === "new") {
+      const fallbackIds = initialSourceIds && initialSourceIds.length > 0
+        ? initialSourceIds.filter((id) => completeSourceIds.includes(id))
+        : completeSourceIds;
       const carryOver = normalizedSelectedSourceIds.length > 0
         ? normalizedSelectedSourceIds
-        : completeSourceIds;
+        : fallbackIds;
       activateDraft({ messages: [], scope, selectedSourceIds: [...carryOver] }, false);
       return;
     }
@@ -506,6 +506,7 @@ export function ChatPanel({ hubId, hubName, hubDescription, hubRole, sources, so
       setScope(requestScope);
       setSelectedSourceIds(normalizedPersistedSourceIds);
       syncSessionQuery(response.session_id);
+      queryClient.invalidateQueries({ queryKey: ['chat-sessions', hubId] });
 
       if (currentSessionId === null) {
         setDraftState(null);
@@ -877,14 +878,17 @@ function convertSessionMessagesToPairs(messages: SessionMessage[]): MessagePair[
   return pairs;
 }
 
-function buildDraftState(currentDraft: DraftState | null, completeSourceIds: string[]): DraftState {
+function buildDraftState(currentDraft: DraftState | null, completeSourceIds: string[], initialSourceIds?: string[]): DraftState {
   if (currentDraft) {
     return currentDraft;
   }
+  const fallback = initialSourceIds && initialSourceIds.length > 0
+    ? initialSourceIds.filter((id) => completeSourceIds.includes(id))
+    : completeSourceIds;
   return {
     messages: [],
     scope: "hub",
-    selectedSourceIds: [...completeSourceIds],
+    selectedSourceIds: [...fallback],
   };
 }
 

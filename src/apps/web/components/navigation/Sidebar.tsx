@@ -134,6 +134,7 @@ export function Sidebar({ state, onStateChange, mobileOpen, onMobileClose, onCre
 
   const sidebarClasses = [
     'sidebar',
+    state === 'hidden' ? 'sidebar--hidden' : '',
     isCollapsed ? 'sidebar--collapsed' : '',
     mobileOpen ? 'sidebar--mobile-open' : '',
   ].filter(Boolean).join(' ');

@@ -52,7 +52,10 @@ export function AppShell({ children }: AppShellProps) {
   ] as const;
 
   useLayoutEffect(() => {
-    if (!isOnHub) return;
+    if (!isOnHub) {
+      setSidebarState('hidden');
+      return;
+    }
     const saved = localStorage.getItem('sidebar-state') as SidebarState | null;
     if (saved && ['open', 'collapsed'].includes(saved)) {
       setSidebarState(saved);
@@ -107,7 +110,7 @@ export function AppShell({ children }: AppShellProps) {
           <div className="nav-content">
             <div className="nav-brand">
               <button
-                className={`mobile-menu-button ${sidebarHidden ? 'is-visible-desktop' : ''}`}
+                className={`mobile-menu-button ${isOnHub && sidebarHidden ? 'is-visible-desktop' : ''}`}
                 onClick={handleMenuClick}
                 aria-label="Open menu"
               >

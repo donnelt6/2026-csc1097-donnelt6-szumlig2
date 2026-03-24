@@ -1680,7 +1680,8 @@ class SupabaseStore:
                     citations[citation_idx].relevant_quotes = [v[0] for v in verified]
                     citations[citation_idx].paraphrased_quotes = [v[1] for v in verified]
 
-        final_citations = citations if _answer_has_citation(answer, len(context_blocks)) else []
+        has_citations = _answer_has_citation(answer, len(context_blocks)) or bool(quotes)
+        final_citations = citations if has_citations else []
         return answer, final_citations, usage
 
     def chat(self, client: Client, user_id: str, payload: ChatRequest) -> ChatResponse:
