@@ -18,7 +18,7 @@ import {
   TrashIcon,
   ShieldCheckIcon,
 } from '@heroicons/react/24/outline';
-import { ThemeToggle } from './ThemeToggle';
+
 import { useHubTab } from '../../lib/HubTabContext';
 import { useCurrentHub } from '../../lib/CurrentHubContext';
 import { useSearch } from '../../lib/SearchContext';
@@ -38,6 +38,20 @@ interface SidebarProps {
 function formatSessionTimestamp(value: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "";
+
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const minutes = Math.floor(diffMs / 60000);
+  const hours = Math.floor(diffMs / 3600000);
+
+  if (minutes < 1) return "Just now";
+  if (minutes < 60) return `${minutes}m ago`;
+  if (hours < 24) return `${hours}h ago`;
+
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const yesterday = new Date(today.getTime() - 86400000);
+  if (date >= yesterday && date < today) return "Yesterday";
+
   return date.toLocaleDateString("en-IE", { day: "2-digit", month: "short" });
 }
 
@@ -222,7 +236,14 @@ export function Sidebar({ state, onStateChange, mobileOpen, onMobileClose, onCre
                     value={editTitle}
                     onChange={(e) => setEditTitle(e.target.value)}
                     onKeyDown={handleRenameKeyDown}
-                    onBlur={() => void commitRename()}
+                    onBlur={() => {
+                      const id = editingSessionId;
+                      const trimmed = editTitle.trim();
+                      setEditingSessionId(null);
+                      if (id && trimmed) {
+                        void renameChatSession(id, trimmed).then(() => refetch());
+                      }
+                    }}
                     maxLength={80}
                   />
                 ) : (
@@ -241,6 +262,7 @@ export function Sidebar({ state, onStateChange, mobileOpen, onMobileClose, onCre
                         className="sidebar-chat-action"
                         onClick={() => startRename(session)}
                         aria-label={`Rename ${session.title}`}
+                        title="Rename"
                         type="button"
                       >
                         <PencilIcon className="sidebar-chat-action-icon" />
@@ -249,6 +271,7 @@ export function Sidebar({ state, onStateChange, mobileOpen, onMobileClose, onCre
                         className="sidebar-chat-action"
                         onClick={() => void handleDelete(session.id)}
                         aria-label={`Delete ${session.title}`}
+                        title="Delete"
                         type="button"
                       >
                         <TrashIcon className="sidebar-chat-action-icon" />
@@ -280,7 +303,6 @@ export function Sidebar({ state, onStateChange, mobileOpen, onMobileClose, onCre
           <span className="sidebar-item-text">New Hub</span>
         </button>
         <div className="sidebar-footer-links">
-          <ThemeToggle />
         </div>
       </div>
     </aside>

@@ -22,6 +22,7 @@ interface AppShellProps {
 export function AppShell({ children }: AppShellProps) {
   const [sidebarState, setSidebarState] = useState<SidebarState | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [transitionsReady, setTransitionsReady] = useState(false);
   const params = useParams<{ hubId?: string }>();
   const pathname = usePathname();
   const router = useRouter();
@@ -53,16 +54,22 @@ export function AppShell({ children }: AppShellProps) {
   ] as const;
 
   useLayoutEffect(() => {
+    setTransitionsReady(false);
     if (!isOnHub) {
       setSidebarState('hidden');
-      return;
-    }
-    const saved = localStorage.getItem('sidebar-state') as SidebarState | null;
-    if (saved && ['open', 'collapsed'].includes(saved)) {
-      setSidebarState(saved);
     } else {
-      setSidebarState('open');
+      const saved = localStorage.getItem('sidebar-state') as SidebarState | null;
+      if (saved && ['open', 'collapsed'].includes(saved)) {
+        setSidebarState(saved);
+      } else {
+        setSidebarState('open');
+      }
     }
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        setTransitionsReady(true);
+      });
+    });
   }, [isOnHub]);
 
   const effectiveSidebarState = isOnHub
@@ -88,7 +95,6 @@ export function AppShell({ children }: AppShellProps) {
   }, []);
 
   const sidebarHidden = effectiveSidebarState === 'hidden';
-  const isHydrated = sidebarState !== null;
 
   if (!showChrome) {
     return <div className="app-shell app-shell--no-chrome">{children}</div>;
@@ -96,7 +102,7 @@ export function AppShell({ children }: AppShellProps) {
 
   return (
     <CurrentHubProvider value={{ currentHub, isLoading: isHubRoute && hubsLoading }}>
-      <div className={`app-shell sidebar-${effectiveSidebarState}${!isHydrated ? ' no-transition' : ''}`}>
+      <div className={`app-shell sidebar-${effectiveSidebarState}${!transitionsReady ? ' no-transition' : ''}`}>
         {isOnHub && (
           <>
             <div
@@ -170,7 +176,7 @@ export function AppShell({ children }: AppShellProps) {
               </div>
             )}
             <div className="nav-actions">
-              {!isOnHub && <ThemeToggle compact />}
+              <ThemeToggle compact />
               <NotificationsMenu />
               <ProfileMenu />
             </div>
