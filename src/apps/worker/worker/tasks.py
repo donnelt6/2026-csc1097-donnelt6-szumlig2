@@ -667,9 +667,17 @@ def _extract_text(raw: bytes, storage_path: str) -> str:
 
 
 def _extract_pdf(raw: bytes) -> str:
-    # Best-effort extraction; missing text yields empty strings per page.
-    reader = PdfReader(io.BytesIO(raw))
-    pages = [page.extract_text() or "" for page in reader.pages]
+    # Best-effort extraction; skip pages that fail (e.g. scanned/malformed).
+    try:
+        reader = PdfReader(io.BytesIO(raw))
+    except Exception as exc:
+        raise ValueError(f"Could not read PDF: {exc}") from exc
+    pages: list[str] = []
+    for page in reader.pages:
+        try:
+            pages.append(page.extract_text() or "")
+        except Exception:
+            pages.append("")
     return "\n".join(pages)
 
 
