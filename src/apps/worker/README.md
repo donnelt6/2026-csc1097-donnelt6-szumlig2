@@ -15,6 +15,11 @@ Configure `REDIS_URL`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and `OPENAI_
 Reminder delivery uses `DEFAULT_TIMEZONE`.
 For reminder detection, install a spaCy English model (e.g. `python -m spacy download en_core_web_sm`).
 
+## Monitoring notes
+- Run both the worker and beat processes in deployment; treat either process being down as an incident.
+- Watch logs for stable failure prefixes including `worker.ingest.failed`, `worker.web_ingest.failed`, `worker.youtube_ingest.failed`, and `worker.source_suggestions.failed`.
+- Repeated failures on the same task type should block deployment promotion until the underlying source/config issue is understood.
+
 ## Files and purpose
 - `.env.example` - Template for required env vars (no secrets).
 - `README.md` - Setup notes for running the worker locally.

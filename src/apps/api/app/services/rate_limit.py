@@ -1,10 +1,13 @@
 import time
 from dataclasses import dataclass
+import logging
 
 import redis
 from redis.exceptions import RedisError
 
 from ..core.config import get_settings
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -36,6 +39,7 @@ class RateLimiter:
             return RateLimitResult(allowed=count <= limit, remaining=remaining, reset_in_seconds=reset_in)
         except RedisError:
             # Fail open if Redis is unavailable.
+            logger.warning("rate_limit.redis_unavailable", exc_info=True)
             return RateLimitResult(allowed=True, remaining=limit, reset_in_seconds=window_seconds)
 
 

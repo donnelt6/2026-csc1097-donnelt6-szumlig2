@@ -47,7 +47,11 @@ def ask(
     return response
 
 
-@router.get("/sessions", response_model=List[ChatSessionSummary])
+@router.get(
+    "/sessions",
+    response_model=List[ChatSessionSummary],
+    dependencies=[Depends(rate_limit_user_ip("chat:read", "rate_limit_read_per_minute"))],
+)
 def list_sessions(
     hub_id: UUID = Query(...),
     client: Client = Depends(get_supabase_user_client),
@@ -59,7 +63,11 @@ def list_sessions(
         raise_postgrest_error(exc)
 
 
-@router.get("/sessions/{session_id}/messages", response_model=ChatSessionDetail)
+@router.get(
+    "/sessions/{session_id}/messages",
+    response_model=ChatSessionDetail,
+    dependencies=[Depends(rate_limit_user_ip("chat:read", "rate_limit_read_per_minute"))],
+)
 def get_session_messages(
     session_id: UUID,
     hub_id: UUID = Query(...),
@@ -74,7 +82,11 @@ def get_session_messages(
         raise_postgrest_error(exc)
 
 
-@router.patch("/sessions/{session_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.patch(
+    "/sessions/{session_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(rate_limit_user_ip("chat:write", "rate_limit_write_per_minute"))],
+)
 def rename_session(
     session_id: UUID,
     payload: ChatSessionRenameRequest,
@@ -92,7 +104,11 @@ def rename_session(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-@router.delete("/sessions/{session_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/sessions/{session_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(rate_limit_user_ip("chat:write", "rate_limit_write_per_minute"))],
+)
 def delete_session(
     session_id: UUID,
     client: Client = Depends(get_supabase_user_client),
@@ -109,7 +125,11 @@ def delete_session(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-@router.get("/history", response_model=List[HistoryMessage])
+@router.get(
+    "/history",
+    response_model=List[HistoryMessage],
+    dependencies=[Depends(rate_limit_user_ip("chat:read", "rate_limit_read_per_minute"))],
+)
 def chat_history(
     hub_id: UUID = Query(...),
     client: Client = Depends(get_supabase_user_client),

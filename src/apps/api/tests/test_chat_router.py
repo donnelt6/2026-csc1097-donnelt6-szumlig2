@@ -22,6 +22,30 @@ def test_chat_rate_limited(client, monkeypatch) -> None:
 
     resp = client.post("/chat", json={"hub_id": "11111111-1111-1111-1111-111111111111", "question": "Hi"})
     assert resp.status_code == 429
+    assert resp.headers["X-RateLimit-Limit"] == "20"
+    assert resp.headers["Retry-After"] == "10"
+
+
+def test_list_chat_sessions_rate_limited(client, monkeypatch) -> None:
+    rl = rate_limit_module.RateLimitResult(allowed=False, remaining=0, reset_in_seconds=10)
+    monkeypatch.setitem(app.dependency_overrides, get_rate_limiter, lambda: FixedRateLimiter(rl))
+
+    resp = client.get("/chat/sessions", params={"hub_id": "11111111-1111-1111-1111-111111111111"})
+
+    assert resp.status_code == 429
+    assert resp.headers["X-RateLimit-Limit"] == "120"
+    assert resp.headers["Retry-After"] == "10"
+
+
+def test_delete_chat_session_rate_limited(client, monkeypatch) -> None:
+    rl = rate_limit_module.RateLimitResult(allowed=False, remaining=0, reset_in_seconds=10)
+    monkeypatch.setitem(app.dependency_overrides, get_rate_limiter, lambda: FixedRateLimiter(rl))
+
+    resp = client.delete("/chat/sessions/11111111-1111-1111-1111-111111111111")
+
+    assert resp.status_code == 429
+    assert resp.headers["X-RateLimit-Limit"] == "60"
+    assert resp.headers["Retry-After"] == "10"
 
 
 def test_chat_success(client, monkeypatch) -> None:
@@ -89,6 +113,7 @@ def test_list_chat_sessions(client, monkeypatch) -> None:
 
     resp = client.get("/chat/sessions", params={"hub_id": "11111111-1111-1111-1111-111111111111"})
     assert resp.status_code == 200
+    assert resp.headers["X-RateLimit-Limit"] == "120"
     data = resp.json()
     assert data[0]["id"] == "session-1"
     assert data[0]["title"] == "How do I submit assignments?"
@@ -126,6 +151,7 @@ def test_get_chat_session_messages(client, monkeypatch) -> None:
         params={"hub_id": "11111111-1111-1111-1111-111111111111"},
     )
     assert resp.status_code == 200
+    assert resp.headers["X-RateLimit-Limit"] == "120"
     data = resp.json()
     assert data["session"]["id"] == "session-1"
     assert data["messages"][0]["content"] == "How do I submit assignments?"

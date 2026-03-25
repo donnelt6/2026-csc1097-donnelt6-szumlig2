@@ -1,6 +1,7 @@
 """Dependency helpers for Supabase auth + per-request clients."""
 
 from dataclasses import dataclass
+import logging
 from typing import Optional
 
 import httpx
@@ -9,6 +10,8 @@ from supabase import Client, create_client
 
 from .core.config import Settings, get_settings
 from .services.rate_limit import RateLimitResult, RateLimiter, rate_limiter
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -37,14 +40,18 @@ def get_current_user(
         with httpx.Client(timeout=10) as client:
             resp = client.get(url, headers=headers)
     except httpx.HTTPError as exc:
+        logger.warning("api.auth.lookup_unreachable", extra={"supabase_url": settings.supabase_url}, exc_info=True)
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Auth service unreachable.") from exc
     if resp.status_code == status.HTTP_401_UNAUTHORIZED:
+        logger.info("api.auth.invalid_token", extra={"status_code": resp.status_code})
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired token.")
     if not resp.is_success:
+        logger.warning("api.auth.lookup_failed", extra={"status_code": resp.status_code, "supabase_url": settings.supabase_url})
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Auth lookup failed.")
     data = resp.json()
     user_id = data.get("id")
     if not user_id:
+        logger.warning("api.auth.invalid_payload")
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token payload.")
     return CurrentUser(id=user_id, email=data.get("email"))
 
