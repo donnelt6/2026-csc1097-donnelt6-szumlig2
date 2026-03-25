@@ -3,7 +3,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
-import { ChevronDownIcon, ClipboardDocumentIcon, FlagIcon, PaperAirplaneIcon } from "@heroicons/react/24/outline";
+import { ClipboardDocumentIcon, FlagIcon, PaperAirplaneIcon } from "@heroicons/react/24/outline";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
@@ -58,7 +58,6 @@ export interface ChatPanelHandle {
 interface Props {
   hubId: string;
   hubName?: string;
-  hubDescription?: string;
   hubRole?: MembershipRole | null;
   sources: Source[];
   sourcesLoading?: boolean;
@@ -143,7 +142,7 @@ function SourceExcerpt({
   );
 }
 
-export const ChatPanel = forwardRef<ChatPanelHandle, Props>(function ChatPanel({ hubId, hubName, hubDescription, hubRole, sources, sourcesLoading, onSourceSelectionChange }, ref) {
+export const ChatPanel = forwardRef<ChatPanelHandle, Props>(function ChatPanel({ hubId, hubName, hubRole, sources, sourcesLoading, onSourceSelectionChange }, ref) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const router = useRouter();
@@ -156,7 +155,6 @@ export const ChatPanel = forwardRef<ChatPanelHandle, Props>(function ChatPanel({
   const [question, setQuestion] = useState("");
   const [sessionList, setSessionList] = useState<ChatSessionSummary[]>([]);
   const [draftState, setDraftState] = useState<DraftState | null>(null);
-  const [persistedSessionControls, setPersistedSessionControls] = useState<ChatControlState | null>(null);
   const [messages, setMessages] = useState<MessagePair[]>([]);
   const [scope, setScope] = useState<ChatScope>("hub");
   const [selectedSourceIds, setSelectedSourceIds] = useState<string[]>([]);
@@ -166,8 +164,6 @@ export const ChatPanel = forwardRef<ChatPanelHandle, Props>(function ChatPanel({
   const [isSending, setIsSending] = useState(false);
   const [flaggingMessageId, setFlaggingMessageId] = useState<string | null>(null);
   const [reportMenuMessageId, setReportMenuMessageId] = useState<string | null>(null);
-  const [deletingSessionId, setDeletingSessionId] = useState<string | null>(null);
-  const [scopeOpen, setScopeOpen] = useState(false);
   const [activeCitation, setActiveCitation] = useState<Citation | null>(null);
   const [panelError, setPanelError] = useState<string | null>(null);
 
@@ -365,7 +361,6 @@ export const ChatPanel = forwardRef<ChatPanelHandle, Props>(function ChatPanel({
     };
     setActiveSessionId(session.id);
     localStorage.setItem(`caddie:last-session:${hubId}`, session.id);
-    setPersistedSessionControls({ scope: session.scope, selectedSourceIds: [...session.source_ids] });
     setMessages(convertSessionMessagesToPairs(sessionMessages));
     setScope(nextControls.scope);
     setSelectedSourceIds(nextControls.selectedSourceIds);
@@ -412,7 +407,6 @@ export const ChatPanel = forwardRef<ChatPanelHandle, Props>(function ChatPanel({
     const cached = sessionSourceCacheRef.current.get(null);
     setDraftState(nextDraft);
     setActiveSessionId(null);
-    setPersistedSessionControls(null);
     setMessages(nextDraft.messages);
     setScope(nextDraft.scope);
     setSelectedSourceIds(
@@ -541,10 +535,6 @@ export const ChatPanel = forwardRef<ChatPanelHandle, Props>(function ChatPanel({
 
       setSessionList((current) => moveSessionToTop(upsertSessionSummary(current, nextSummary), nextSummary.id));
       setActiveSessionId(response.session_id);
-      setPersistedSessionControls({
-        scope: requestScope,
-        selectedSourceIds: normalizedPersistedSourceIds,
-      });
       setScope(requestScope);
       setSelectedSourceIds(normalizedPersistedSourceIds);
       syncSessionQuery(response.session_id);

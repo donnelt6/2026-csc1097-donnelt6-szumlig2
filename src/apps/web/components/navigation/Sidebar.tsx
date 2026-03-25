@@ -241,7 +241,7 @@ export function Sidebar({ state, onStateChange, mobileOpen, onMobileClose, onCre
                       const trimmed = editTitle.trim();
                       setEditingSessionId(null);
                       if (id && trimmed) {
-                        void renameChatSession(id, trimmed).then(() => refetch());
+                        void renameChatSession(id, trimmed).then(() => refetch()).catch(() => {});
                       }
                     }}
                     maxLength={80}
