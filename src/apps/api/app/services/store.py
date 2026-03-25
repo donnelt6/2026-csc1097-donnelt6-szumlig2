@@ -854,7 +854,7 @@ class SupabaseStore:
     ) -> Dict[str, Any]:
         query = (
             client.table("chat_sessions")
-            .select("id, hub_id, title, scope, source_ids, created_at, last_message_at, deleted_at")
+            .select("id, hub_id, created_by, title, scope, source_ids, created_at, last_message_at, deleted_at")
             .eq("id", str(session_id))
             .limit(1)
         )
@@ -864,6 +864,19 @@ class SupabaseStore:
         if not response.data:
             raise KeyError("Chat session not found")
         return response.data[0]
+
+    def _require_chat_session_owner(
+        self,
+        client: Client,
+        user_id: str,
+        session_id: str,
+        *,
+        include_deleted: bool = False,
+    ) -> Dict[str, Any]:
+        row = self._get_chat_session_row(client, session_id, include_deleted=include_deleted)
+        if str(row.get("created_by") or "") != str(user_id):
+            raise PermissionError("Only the chat creator can modify this session.")
+        return row
 
     def _list_session_messages(
         self,
@@ -1150,18 +1163,42 @@ class SupabaseStore:
         )
 
     def rename_chat_session(self, client: Client, user_id: str, session_id: str, title: str) -> None:
-        self._get_chat_session_row(client, session_id)
+        self._require_chat_session_owner(client, user_id, session_id)
         self.service_client.table("chat_sessions").update(
             {"title": title}
         ).eq("id", str(session_id)).is_("deleted_at", "null").execute()
 
     def delete_chat_session(self, client: Client, user_id: str, session_id: str) -> None:
-        row = self._get_chat_session_row(client, session_id, include_deleted=True)
+        row = self._require_chat_session_owner(client, user_id, session_id, include_deleted=True)
         if str(row.get("deleted_at") or "").strip():
             return
         self.service_client.table("chat_sessions").update(
             {"deleted_at": datetime.now(timezone.utc).isoformat()}
         ).eq("id", str(session_id)).is_("deleted_at", "null").execute()
+
+    def _require_hub_access(self, user_id: str, hub_id: str) -> None:
+        hub_response = (
+            self.service_client.table("hubs")
+            .select("id, owner_id")
+            .eq("id", str(hub_id))
+            .limit(1)
+            .execute()
+        )
+        if not hub_response.data:
+            raise KeyError("Hub not found")
+        if str(hub_response.data[0].get("owner_id") or "") == str(user_id):
+            return
+
+        member_response = (
+            self.service_client.table("hub_members")
+            .select("accepted_at")
+            .eq("hub_id", str(hub_id))
+            .eq("user_id", str(user_id))
+            .limit(1)
+            .execute()
+        )
+        if not member_response.data or not member_response.data[0].get("accepted_at"):
+            raise PermissionError("Hub access required.")
 
     def flag_message(
         self,
@@ -1175,6 +1212,7 @@ class SupabaseStore:
             raise ValueError("Only assistant messages can be flagged.")
 
         session_row = self._get_chat_session_row(client, str(message_row["session_id"]))
+        self._require_hub_access(user_id, str(session_row["hub_id"]))
         existing = self._get_active_flag_case_for_message(message_id)
         if existing is not None:
             return FlagMessageResponse(

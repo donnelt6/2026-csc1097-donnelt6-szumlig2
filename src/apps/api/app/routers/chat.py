@@ -85,6 +85,8 @@ def rename_session(
         store.rename_chat_session(client, current_user.id, str(session_id), payload.title)
     except KeyError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Chat session not found.") from exc
+    except PermissionError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
     except APIError as exc:
         raise_postgrest_error(exc)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -100,6 +102,8 @@ def delete_session(
         store.delete_chat_session(client, current_user.id, str(session_id))
     except KeyError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Chat session not found.") from exc
+    except PermissionError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
     except APIError as exc:
         raise_postgrest_error(exc)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

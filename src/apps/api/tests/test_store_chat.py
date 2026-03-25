@@ -892,6 +892,38 @@ def test_chat_filters_by_selected_sources(monkeypatch) -> None:
     assert captured["source_ids"] == ["22222222-2222-2222-2222-222222222222"]
 
 
+def test_rename_chat_session_rejects_non_owner(monkeypatch) -> None:
+    monkeypatch.setattr(
+        store,
+        "_get_chat_session_row",
+        lambda client, session_id, include_deleted=False: {
+            "id": str(session_id),
+            "hub_id": "hub-1",
+            "created_by": "someone-else",
+            "deleted_at": None,
+        },
+    )
+
+    with pytest.raises(PermissionError, match="Only the chat creator can modify this session."):
+        store.rename_chat_session(object(), "user-1", "session-1", "Updated title")
+
+
+def test_delete_chat_session_rejects_non_owner(monkeypatch) -> None:
+    monkeypatch.setattr(
+        store,
+        "_get_chat_session_row",
+        lambda client, session_id, include_deleted=False: {
+            "id": str(session_id),
+            "hub_id": "hub-1",
+            "created_by": "someone-else",
+            "deleted_at": None,
+        },
+    )
+
+    with pytest.raises(PermissionError, match="Only the chat creator can modify this session."):
+        store.delete_chat_session(object(), "user-1", "session-1")
+
+
 def test_chat_caps_citations_at_three_and_stores_selected_order(monkeypatch) -> None:
     fake_client = FakeClient()
     persisted: dict[str, object] = {}

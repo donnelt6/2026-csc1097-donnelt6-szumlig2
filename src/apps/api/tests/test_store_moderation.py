@@ -189,6 +189,7 @@ def fake_service_client(monkeypatch) -> FakeServiceClient:
 
 
 def test_flag_message_creates_case_and_original_revision_on_first_flag(fake_service_client, monkeypatch) -> None:
+    fake_service_client.hubs = [{"id": "hub-1", "owner_id": "user-1"}]
     monkeypatch.setattr(
         store_module.store,
         "_visible_message_for_user",
@@ -230,6 +231,9 @@ def test_flag_message_creates_case_and_original_revision_on_first_flag(fake_serv
 
 
 def test_flag_message_returns_existing_active_case_without_new_insert(fake_service_client, monkeypatch) -> None:
+    fake_service_client.hubs = [{"id": "hub-1", "owner_id": "user-1"}]
+    fake_service_client.chat_sessions = [{"id": "session-1", "hub_id": "hub-1"}]
+    fake_service_client.messages = [{"id": "message-1", "session_id": "session-1"}]
     existing_case = {
         "id": "flag-1",
         "hub_id": "hub-1",
@@ -271,6 +275,7 @@ def test_flag_message_returns_existing_active_case_without_new_insert(fake_servi
 
 
 def test_flag_message_recovers_from_unique_race_and_returns_existing_case(fake_service_client, monkeypatch) -> None:
+    fake_service_client.hubs = [{"id": "hub-1", "owner_id": "user-1"}]
     fake_service_client.raise_unique_on_flag_insert = True
     fake_service_client.race_existing_case = {
         "id": "flag-race",
@@ -314,6 +319,34 @@ def test_flag_message_recovers_from_unique_race_and_returns_existing_case(fake_s
     assert result.created is False
     assert result.flag_case.id == "flag-race"
     assert fake_service_client.message_revision_inserts == []
+
+
+def test_flag_message_rejects_user_without_hub_access(fake_service_client, monkeypatch) -> None:
+    monkeypatch.setattr(
+        store_module.store,
+        "_visible_message_for_user",
+        lambda _client, _message_id: {"id": "message-1", "session_id": "session-1", "role": "assistant"},
+    )
+    monkeypatch.setattr(
+        store_module.store,
+        "_get_chat_session_row",
+        lambda _client, _session_id, include_deleted=False: {"id": "session-1", "hub_id": "hub-1"},
+    )
+    monkeypatch.setattr(
+        store_module.store,
+        "_require_hub_access",
+        lambda _user_id, _hub_id: (_ for _ in ()).throw(PermissionError("Hub access required.")),
+    )
+
+    with pytest.raises(PermissionError, match="Hub access required."):
+        store_module.store.flag_message(
+            object(),
+            "user-1",
+            "message-1",
+            store_module.FlagMessageRequest(reason=FlagReason.incorrect),
+        )
+
+    assert fake_service_client.rpc_calls == []
 
 
 def test_apply_flagged_chat_revision_uses_atomic_rpc(fake_service_client, monkeypatch) -> None:
