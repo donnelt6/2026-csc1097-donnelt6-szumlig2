@@ -1,6 +1,8 @@
 from functools import lru_cache
 from typing import List
+from urllib.parse import urlparse
 
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings
 
 
@@ -29,7 +31,7 @@ class Settings(BaseSettings):
     rate_limit_ip_multiplier: float = 3.0
     trust_proxy_headers: bool = False
     environment: str = "local"
-    allowed_origins: str = "http://localhost:3000"
+    allowed_origins: str = ""
     faq_default_count: int = 6
     faq_context_chunks_per_source: int = 2
     faq_max_citations: int = 3
@@ -43,12 +45,32 @@ class Settings(BaseSettings):
         env_file = ".env"
         extra = "ignore"
 
+    @field_validator("environment", mode="before")
+    @classmethod
+    def normalize_environment(cls, value: object) -> str:
+        cleaned = str(value or "local").strip().lower()
+        return cleaned or "local"
+
+    @model_validator(mode="after")
+    def apply_environment_origin_rules(self) -> "Settings":
+        origins = self.cors_allowed_origins
+        if self.environment == "local" and not origins:
+            self.allowed_origins = "http://localhost:3000,http://127.0.0.1:3000"
+            return self
+        if self.environment != "local" and not origins:
+            raise ValueError("ALLOWED_ORIGINS must be configured when ENVIRONMENT is not local.")
+        return self
+
+    @property
+    def cors_allowed_origins(self) -> List[str]:
+        origins = [item.strip() for item in self.allowed_origins.split(",") if item.strip()]
+        for origin in origins:
+            parsed = urlparse(origin)
+            if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+                raise ValueError(f"Invalid CORS origin: {origin}")
+        return origins
+
 
 @lru_cache
 def get_settings() -> Settings:
-    settings = Settings()
-    # Normalize comma-separated origins from env into a list for CORS.
-    if isinstance(settings.allowed_origins, str):
-        origins = [item.strip() for item in settings.allowed_origins.split(",") if item.strip()]
-        settings.allowed_origins = origins
-    return settings
+    return Settings()

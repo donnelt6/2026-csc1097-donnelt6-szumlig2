@@ -12,6 +12,12 @@ uvicorn app.main:app --reload --port 8000
 
 Environment variables live in `.env.example`. Provide `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `REDIS_URL`, and `OPENAI_API_KEY` for local development. The API expects a Supabase Auth JWT in the `Authorization: Bearer` header for user-scoped routes. Optional rate-limit settings include `RATE_LIMIT_READ_PER_MINUTE`, `RATE_LIMIT_WRITE_PER_MINUTE`, `RATE_LIMIT_HEALTH_PER_MINUTE`, `RATE_LIMIT_IP_MULTIPLIER`, and `TRUST_PROXY_HEADERS`.
 
+## Deployment-sensitive config
+- `ENVIRONMENT=local` can omit `ALLOWED_ORIGINS`; the API falls back to `http://localhost:3000` and `http://127.0.0.1:3000`.
+- Any non-local environment must set a non-empty comma-separated `ALLOWED_ORIGINS` allowlist. Invalid or empty values now fail startup instead of silently using `*`.
+- `/health` is the baseline health probe and should be checked after every deploy.
+- Startup/config and auth lookup failures are logged with stable prefixes including `api.startup.config_invalid`, `api.startup.ready`, `api.auth.lookup_unreachable`, and `api.auth.lookup_failed`.
+
 ## Files and purpose
 - `.env.example` - Template for required env vars (no secrets).
 - `README.md` - Setup notes for running the API locally.

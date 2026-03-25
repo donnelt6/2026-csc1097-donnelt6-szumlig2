@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { Providers } from "../components/Providers";
 import { AppShell } from "../components/AppShell";
+import { ShellErrorBoundary } from "../components/ShellErrorBoundary";
 
 export const metadata: Metadata = {
   title: "Caddie",
@@ -16,7 +17,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body>
         <Providers>
-          <AppShell>{children}</AppShell>
+          <ShellErrorBoundary>
+            <AppShell>{children}</AppShell>
+          </ShellErrorBoundary>
         </Providers>
       </body>
     </html>

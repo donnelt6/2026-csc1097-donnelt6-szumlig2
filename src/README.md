@@ -84,6 +84,11 @@ Run the SQL migration in Supabase SQL Editor:
 
 ## Auth note
 Sign in via `/auth` using Supabase email/password auth. The web app stores the Supabase session and sends `Authorization: Bearer <JWT>` on API requests. The API enforces RLS with the user token and only uses the service role key for storage/admin tasks (ingestion, member lookups).
+Password recovery is Supabase-native:
+- `/auth/forgot-password` requests a recovery email through Supabase.
+- `/auth/reset-password` completes the recovery flow and updates the password through Supabase.
+- `NEXT_PUBLIC_AUTH_REDIRECT_BASE_URL` must resolve to the deployed site base URL so the app can build the recovery redirect to `/auth/reset-password`.
+- Supabase project setup must include recovery email enabled, the deployed recovery redirect URL allowlisted, and recovery token expiry set to 30 minutes if supported by the project settings.
 
 ## Chat note
 Chat supports hub-only context or hub + web search when `global` scope is selected. Users can also select which completed sources to include when answering a question. Streaming is not implemented yet; it is planned as a future improvement.
@@ -95,3 +100,18 @@ Defaults (configurable in `apps/api/.env`):
 - Read endpoints: 120 requests per minute
 - Write endpoints: 60 requests per minute
 - Health endpoint: 60 requests per minute
+
+Chat read/write hardening also applies the standard read/write limiter to:
+- `GET /chat/sessions`
+- `GET /chat/sessions/{id}/messages`
+- `GET /chat/history`
+- `PATCH /chat/sessions/{id}`
+- `DELETE /chat/sessions/{id}`
+
+## Pre-Deployment Checks
+- Set `ALLOWED_ORIGINS` explicitly for every non-local API environment. The API now fails fast on startup if `ENVIRONMENT != local` and no valid allowlist is configured.
+- Local API development can omit `ALLOWED_ORIGINS`; it falls back to explicit localhost origins only, never `*`.
+- Verify `/health` returns `{"status":"ok"}` from the deployed API.
+- Verify the worker process and beat process are both running after deploy.
+- Review recent API and worker logs for stable failure prefixes such as `api.startup.config_invalid`, `rate_limit.redis_unavailable`, `worker.ingest.failed`, `worker.web_ingest.failed`, and `worker.youtube_ingest.failed`.
+- Treat default-branch CI failures, repeated worker task failures, failed health checks, and startup config validation failures as deploy blockers.

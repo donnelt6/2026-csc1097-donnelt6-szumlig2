@@ -56,14 +56,14 @@ def ingest_source(self, source_id: str, hub_id: str, storage_path: str) -> dict:
     - Persist chunks to pgvector
     - Update source status
     """
-    logger.info("Starting ingestion for source %s", source_id)
+    logger.info("worker.ingest.start source_id=%s", source_id)
     client = _get_supabase_client()
     _update_source(client, source_id, status="processing", clear_failure_reason=True)
 
     try:
         raw = _download_from_storage(storage_path)
     except Exception as exc:
-        logger.warning("Download failed for %s, retrying: %s", storage_path, exc)
+        logger.warning("worker.ingest.download_retry storage_path=%s error=%s", storage_path, exc)
         raise self.retry(exc=exc)
 
     try:
@@ -73,10 +73,10 @@ def ingest_source(self, source_id: str, hub_id: str, storage_path: str) -> dict:
             raise ValueError("No text extracted from source")
 
         chunk_count = _ingest_text_for_source(client, source_id, hub_id, text, extra_metadata=None)
-        logger.info("Completed ingestion for source %s", source_id)
+        logger.info("worker.ingest.complete source_id=%s", source_id)
         return {"source_id": source_id, "hub_id": hub_id, "chunks": chunk_count}
     except Exception as exc:
-        logger.exception("Ingestion failed for source %s", source_id)
+        logger.exception("worker.ingest.failed source_id=%s", source_id)
         _update_source(client, source_id, status="failed", failure_reason=str(exc)[:500])
         raise
 
@@ -91,7 +91,7 @@ def ingest_web_source(self, source_id: str, hub_id: str, url: str, storage_path:
     - Store pseudo document in Supabase Storage
     - Chunk + embed + persist to pgvector
     """
-    logger.info("Starting web ingestion for source %s (%s)", source_id, url)
+    logger.info("worker.web_ingest.start source_id=%s url=%s", source_id, url)
     client = _get_supabase_client()
     _update_source(client, source_id, status="processing", clear_failure_reason=True)
 
@@ -122,11 +122,11 @@ def ingest_web_source(self, source_id: str, hub_id: str, url: str, storage_path:
             if title:
                 client.table("sources").update({"original_name": title[:500]}).eq("id", source_id).execute()
         except Exception:
-            logger.warning("Failed to update title for source %s", source_id, exc_info=True)
-        logger.info("Completed web ingestion for source %s", source_id)
+            logger.warning("worker.web_ingest.title_update_failed source_id=%s", source_id, exc_info=True)
+        logger.info("worker.web_ingest.complete source_id=%s", source_id)
         return {"source_id": source_id, "hub_id": hub_id, "chunks": chunk_count}
     except Exception as exc:
-        logger.exception("Web ingestion failed for source %s", source_id)
+        logger.exception("worker.web_ingest.failed source_id=%s", source_id)
         _update_source(client, source_id, status="failed", failure_reason=str(exc)[:500])
         raise
 
@@ -148,7 +148,7 @@ def ingest_youtube_source(
     - Store pseudo document in Supabase Storage
     - Chunk + embed + persist to pgvector
     """
-    logger.info("Starting YouTube ingestion for source %s (%s)", source_id, url)
+    logger.info("worker.youtube_ingest.start source_id=%s url=%s", source_id, url)
     client = _get_supabase_client()
     _update_source(client, source_id, status="processing", clear_failure_reason=True)
 
@@ -186,11 +186,11 @@ def ingest_youtube_source(
             if video_title:
                 client.table("sources").update({"original_name": video_title[:500]}).eq("id", source_id).execute()
         except Exception:
-            logger.warning("Failed to update title for source %s", source_id, exc_info=True)
-        logger.info("Completed YouTube ingestion for source %s", source_id)
+            logger.warning("worker.youtube_ingest.title_update_failed source_id=%s", source_id, exc_info=True)
+        logger.info("worker.youtube_ingest.complete source_id=%s", source_id)
         return {"source_id": source_id, "hub_id": hub_id, "chunks": chunk_count}
     except Exception as exc:
-        logger.exception("YouTube ingestion failed for source %s", source_id)
+        logger.exception("worker.youtube_ingest.failed source_id=%s", source_id)
         _update_source(client, source_id, status="failed", failure_reason=str(exc)[:500])
         raise
 
@@ -209,14 +209,14 @@ def scan_source_suggestions() -> dict:
             continue
         lock = _acquire_source_suggestion_lock(hub_id)
         if lock is None:
-            logger.info("Skipping source suggestion scan for %s; lock already held", hub_id)
+            logger.info("worker.source_suggestions.lock_held hub_id=%s", hub_id)
             continue
         try:
             result = _generate_source_suggestions_for_hub(client, hub_id, now=now)
             processed += 1
             generated += int(result.get("inserted", 0) or 0)
         except Exception:
-            logger.exception("Source suggestion scan failed for hub %s", hub_id)
+            logger.exception("worker.source_suggestions.failed hub_id=%s", hub_id)
             _mark_source_suggestion_scan(client, hub_id, now=now, generated=False)
         finally:
             _release_source_suggestion_lock(lock)
