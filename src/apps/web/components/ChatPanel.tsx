@@ -172,6 +172,7 @@ export const ChatPanel = forwardRef<ChatPanelHandle, Props>(function ChatPanel({
   const modalCloseRef = useRef<HTMLButtonElement>(null);
   const previousCompleteSourceIdsRef = useRef<string[]>([]);
   const sessionSourceCacheRef = useRef<Map<string | null, string[]>>(new Map());
+  const pendingSessionSourceIdsRef = useRef<string[] | null>(null);
 
   const readSessionSourceCache = (sessionId: string | null): string[] | null => {
     const inMemory = sessionSourceCacheRef.current.get(sessionId);
@@ -227,6 +228,14 @@ export const ChatPanel = forwardRef<ChatPanelHandle, Props>(function ChatPanel({
     }
     previousCompleteSourceIdsRef.current = completeSourceIds;
   }, [activeSessionId, completeSourceIds, messages.length, selectedSourceIds.length]);
+
+  useEffect(() => {
+    const pending = pendingSessionSourceIdsRef.current;
+    if (pending && completeSourceIds.length > 0) {
+      pendingSessionSourceIdsRef.current = null;
+      setSelectedSourceIds(pending.filter((id) => completeSourceIds.includes(id)));
+    }
+  }, [completeSourceIds]);
 
   useEffect(() => {
     sessionSourceCacheRef.current.set(activeSessionId, selectedSourceIds);
@@ -352,9 +361,13 @@ export const ChatPanel = forwardRef<ChatPanelHandle, Props>(function ChatPanel({
 
   function hydrateSession(session: ChatSessionSummary, sessionMessages: SessionMessage[]) {
     const cached = readSessionSourceCache(session.id);
-    const activeSelection = cached
-      ? cached.filter((id) => completeSourceIds.includes(id))
-      : session.source_ids.filter((id) => completeSourceIds.includes(id));
+    const rawIds = cached ?? session.source_ids;
+    const activeSelection = rawIds.filter((id) => completeSourceIds.includes(id));
+    if (completeSourceIds.length === 0 && rawIds.length > 0) {
+      pendingSessionSourceIdsRef.current = rawIds;
+    } else {
+      pendingSessionSourceIdsRef.current = null;
+    }
     const nextControls = {
       scope: session.scope,
       selectedSourceIds: activeSelection,

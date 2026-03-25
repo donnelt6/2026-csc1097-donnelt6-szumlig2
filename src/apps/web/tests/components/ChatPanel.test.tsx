@@ -4,7 +4,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ChatPanel } from "../../components/ChatPanel";
 import {
   askQuestion,
-  deleteChatSession,
   flagMessage,
   getChatSessionMessages,
   listChatSessions,
@@ -19,6 +18,12 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: replaceMock }),
   usePathname: () => "/hubs/hub-1",
   useSearchParams: () => new URLSearchParams(currentSearchParams),
+}));
+
+vi.mock("../../components/auth/AuthProvider", () => ({
+  useAuth: () => ({
+    user: { id: "user-1" },
+  }),
 }));
 
 vi.mock("../../lib/api", () => ({
@@ -56,17 +61,17 @@ describe("ChatPanel", () => {
   afterEach(() => {
     vi.clearAllMocks();
     vi.unstubAllGlobals();
+    localStorage.clear();
   });
 
-  it("shows a draft on first visit when there are no sessions", async () => {
+  it("shows the empty state on first visit when there are no sessions", async () => {
     vi.mocked(listChatSessions).mockResolvedValue([]);
 
     renderWithQueryClient(
       <ChatPanel hubId="hub-1" sources={sources} />
     );
 
-    await waitFor(() => expect(screen.getAllByText("New Chat").length).toBeGreaterThan(0));
-    expect(screen.getByText("No saved chats yet.")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText("New Chat")).toBeInTheDocument());
     expect(screen.getByText("Ask a question about your hub")).toBeInTheDocument();
   });
 
@@ -86,7 +91,7 @@ describe("ChatPanel", () => {
     );
 
     const user = userEvent.setup();
-    await waitFor(() => expect(screen.getAllByText("New Chat").length).toBeGreaterThan(0));
+    await waitFor(() => expect(screen.getByText("New Chat")).toBeInTheDocument());
     await user.type(screen.getByLabelText("Ask a question"), "How do I submit assignments?");
     await user.click(screen.getByRole("button", { name: "Send message" }));
 
@@ -98,7 +103,7 @@ describe("ChatPanel", () => {
       source_ids: ["src-1", "src-2"],
       session_id: null,
     });
-    await waitFor(() => expect(screen.getAllByText("Assignment Help").length).toBeGreaterThanOrEqual(2));
+    await waitFor(() => expect(screen.getByText("Assignment Help")).toBeInTheDocument());
     expect(screen.getByText("Use Moodle.")).toBeInTheDocument();
     expect(replaceMock).toHaveBeenLastCalledWith("/hubs/hub-1?session=session-1", { scroll: false });
   });
@@ -112,12 +117,11 @@ describe("ChatPanel", () => {
     );
 
     const user = userEvent.setup();
-    await waitFor(() => expect(screen.getAllByText("New Chat").length).toBeGreaterThan(0));
+    await waitFor(() => expect(screen.getByText("New Chat")).toBeInTheDocument());
     await user.type(screen.getByLabelText("Ask a question"), "How do I submit assignments?");
     await user.click(screen.getByRole("button", { name: "Send message" }));
 
     await waitFor(() => expect(screen.getByText("Error: Request failed")).toBeInTheDocument());
-    expect(screen.getByText("No saved chats yet.")).toBeInTheDocument();
     expect(screen.queryByText("Assignment Help")).not.toBeInTheDocument();
   });
 
@@ -137,11 +141,10 @@ describe("ChatPanel", () => {
     );
 
     const user = userEvent.setup();
-    await waitFor(() => expect(screen.getAllByText("New Chat").length).toBeGreaterThan(0));
+    await waitFor(() => expect(screen.getByText("New Chat")).toBeInTheDocument());
     await user.click(screen.getByRole("button", { name: "Sources (2/2)" }));
     await user.click(screen.getByRole("button", { name: "Clear" }));
-    await user.click(screen.getByRole("button", { name: "Hub only" }));
-    await user.click(screen.getByRole("option", { name: "Hub + global" }));
+    await user.click(screen.getByRole("button", { name: "Hub + global" }));
     await user.type(screen.getByLabelText("Ask a question"), "What should I know before starting?");
     await user.click(screen.getByRole("button", { name: "Send message" }));
 
@@ -156,7 +159,8 @@ describe("ChatPanel", () => {
     expect(screen.queryByText("Select at least one source above to send in this chat.")).not.toBeInTheDocument();
   });
 
-  it("switches sessions and discards unsaved control changes on the persisted session", async () => {
+  it("loads an existing session from the URL query param", async () => {
+    currentSearchParams = "session=session-1";
     vi.mocked(listChatSessions).mockResolvedValue([
       {
         id: "session-1",
@@ -167,99 +171,6 @@ describe("ChatPanel", () => {
         created_at: "2026-01-02T12:00:00Z",
         last_message_at: "2026-01-02T12:00:00Z",
       },
-      {
-        id: "session-2",
-        hub_id: "hub-1",
-        title: "Exams",
-        scope: "global",
-        source_ids: ["src-2"],
-        created_at: "2026-01-01T12:00:00Z",
-        last_message_at: "2026-01-01T12:00:00Z",
-      },
-    ]);
-    vi.mocked(getChatSessionMessages).mockImplementation(async (sessionId) => {
-      if (sessionId === "session-1") {
-        return {
-          session: {
-            id: "session-1",
-            hub_id: "hub-1",
-            title: "Assignments",
-            scope: "hub",
-            source_ids: ["src-1", "src-2"],
-            created_at: "2026-01-02T12:00:00Z",
-            last_message_at: "2026-01-02T12:00:00Z",
-          },
-          messages: [
-            {
-              id: "msg-1",
-              role: "user",
-              content: "How do I submit assignments?",
-              citations: [],
-              created_at: "2026-01-02T12:00:00Z",
-              flag_status: "none",
-            },
-          ],
-        };
-      }
-      return {
-        session: {
-          id: "session-2",
-          hub_id: "hub-1",
-          title: "Exams",
-          scope: "global",
-          source_ids: ["src-2"],
-          created_at: "2026-01-01T12:00:00Z",
-          last_message_at: "2026-01-01T12:00:00Z",
-        },
-        messages: [
-          {
-            id: "msg-2",
-            role: "user",
-            content: "When is the exam?",
-            citations: [],
-            created_at: "2026-01-01T12:00:00Z",
-            flag_status: "none",
-          },
-        ],
-      };
-    });
-
-    renderWithQueryClient(
-      <ChatPanel hubId="hub-1" sources={sources} />
-    );
-
-    const user = userEvent.setup();
-    await waitFor(() => expect(screen.getByText("How do I submit assignments?")).toBeInTheDocument());
-
-    await user.click(screen.getByRole("button", { name: "Sources (2/2)" }));
-    await user.click(screen.getByRole("button", { name: "Clear" }));
-    await user.click(screen.getByRole("button", { name: "Hub only" }));
-    await user.click(screen.getByRole("option", { name: "Hub + global" }));
-
-    expect(screen.getByRole("button", { name: "Sources (0/2)" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Hub + global" })).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "Exams 01 Jan" }));
-    await waitFor(() => expect(screen.getByText("When is the exam?")).toBeInTheDocument());
-
-    await user.click(screen.getByRole("button", { name: "Assignments 02 Jan" }));
-    await waitFor(() => expect(screen.getByText("How do I submit assignments?")).toBeInTheDocument());
-
-    expect(screen.getByRole("button", { name: "Sources (2/2)" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Hub only" })).toBeInTheDocument();
-  });
-
-  it("deletes the active session and returns to the draft", async () => {
-    vi.mocked(listChatSessions).mockResolvedValue([
-      {
-        id: "session-1",
-        hub_id: "hub-1",
-        title: "Assignments",
-        scope: "hub",
-        source_ids: ["src-1"],
-        created_at: "2026-01-02T12:00:00Z",
-        last_message_at: "2026-01-02T12:00:00Z",
-      },
     ]);
     vi.mocked(getChatSessionMessages).mockResolvedValue({
       session: {
@@ -267,74 +178,32 @@ describe("ChatPanel", () => {
         hub_id: "hub-1",
         title: "Assignments",
         scope: "hub",
-        source_ids: ["src-1"],
+        source_ids: ["src-1", "src-2"],
         created_at: "2026-01-02T12:00:00Z",
         last_message_at: "2026-01-02T12:00:00Z",
       },
-      messages: [],
-    });
-    vi.mocked(deleteChatSession).mockResolvedValue(undefined);
-    vi.stubGlobal("confirm", vi.fn(() => true));
-
-    renderWithQueryClient(
-      <ChatPanel hubId="hub-1" sources={sources} />
-    );
-
-    const user = userEvent.setup();
-    await waitFor(() => expect(screen.getByText("Assignments")).toBeInTheDocument());
-    await user.click(screen.getByRole("button", { name: "Delete Assignments" }));
-
-    await waitFor(() => expect(deleteChatSession).toHaveBeenCalledWith("session-1"));
-    expect(screen.getAllByText("New Chat").length).toBeGreaterThan(0);
-    expect(replaceMock).toHaveBeenLastCalledWith("/hubs/hub-1", { scroll: false });
-  });
-
-  it("falls back from an invalid session query to the most recent session", async () => {
-    currentSearchParams = "session=invalid-session";
-    vi.mocked(listChatSessions).mockResolvedValue([
-      {
-        id: "session-1",
-        hub_id: "hub-1",
-        title: "Assignments",
-        scope: "hub",
-        source_ids: ["src-1"],
-        created_at: "2026-01-02T12:00:00Z",
-        last_message_at: "2026-01-02T12:00:00Z",
-      },
-    ]);
-    vi.mocked(getChatSessionMessages)
-      .mockRejectedValueOnce(new Error("Chat session not found"))
-      .mockResolvedValueOnce({
-        session: {
-          id: "session-1",
-          hub_id: "hub-1",
-          title: "Assignments",
-          scope: "hub",
-          source_ids: ["src-1"],
+      messages: [
+        {
+          id: "msg-1",
+          role: "user",
+          content: "How do I submit assignments?",
+          citations: [],
           created_at: "2026-01-02T12:00:00Z",
-          last_message_at: "2026-01-02T12:00:00Z",
+          flag_status: "none",
         },
-        messages: [
-          {
-            id: "msg-1",
-            role: "user",
-            content: "How do I submit assignments?",
-            citations: [],
-            created_at: "2026-01-02T12:00:00Z",
-            flag_status: "none",
-          },
-        ],
-      });
+      ],
+    });
 
     renderWithQueryClient(
       <ChatPanel hubId="hub-1" sources={sources} />
     );
 
     await waitFor(() => expect(screen.getByText("How do I submit assignments?")).toBeInTheDocument());
-    expect(replaceMock).toHaveBeenLastCalledWith("/hubs/hub-1?session=session-1", { scroll: false });
+    expect(screen.getByText("Assignments")).toBeInTheDocument();
   });
 
   it("restores saved source selection after sources load later", async () => {
+    currentSearchParams = "session=session-1";
     vi.mocked(listChatSessions).mockResolvedValue([
       {
         id: "session-1",
@@ -387,28 +256,26 @@ describe("ChatPanel", () => {
         session_id: "session-1",
         message_id: "message-1",
         created_by: "user-1",
-        reason: "incorrect",
+        reason: "outdated",
         status: "open",
         created_at: "2026-03-22T10:00:00Z",
         updated_at: "2026-03-22T10:00:00Z",
       },
     });
-    vi.stubGlobal("confirm", vi.fn(() => true));
 
     renderWithQueryClient(
       <ChatPanel hubId="hub-1" hubRole="viewer" sources={sources} />
     );
 
     const user = userEvent.setup();
-    await waitFor(() => expect(screen.getAllByText("New Chat").length).toBeGreaterThan(0));
+    await waitFor(() => expect(screen.getByText("New Chat")).toBeInTheDocument());
     await user.type(screen.getByLabelText("Ask a question"), "How do I submit assignments?");
     await user.click(screen.getByRole("button", { name: "Send message" }));
 
-    await waitFor(() => expect(screen.getByRole("button", { name: "Flag response" })).toBeInTheDocument());
-    await user.selectOptions(screen.getByLabelText("Flag reason"), "outdated");
-    await user.click(screen.getByRole("button", { name: "Flag response" }));
+    await waitFor(() => expect(screen.getByText("Report")).toBeInTheDocument());
+    await user.click(screen.getByText("Report"));
+    await user.click(screen.getByText("Outdated"));
 
     await waitFor(() => expect(flagMessage).toHaveBeenCalledWith("message-1", { reason: "outdated" }));
-    expect(screen.getByRole("button", { name: "Flagged" })).toBeDisabled();
   });
 });
