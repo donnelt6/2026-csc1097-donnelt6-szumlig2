@@ -22,13 +22,14 @@ export function AuthPageClient() {
     );
   }
 
+  const client = supabase;
   const resetStatus = () => setStatus(null);
 
   const onSignIn = async (evt: React.FormEvent) => {
     evt.preventDefault();
     resetStatus();
     setLoading(true);
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const { error } = await client.auth.signInWithPassword({ email, password });
     setLoading(false);
     if (error) {
       setStatus(mapAuthErrorMessage(error, "Sign-in failed. Check your details and try again."));
@@ -40,7 +41,7 @@ export function AuthPageClient() {
   const onSignUp = async () => {
     resetStatus();
     setLoading(true);
-    const { error } = await supabase.auth.signUp({ email, password });
+    const { error } = await client.auth.signUp({ email, password });
     setLoading(false);
     if (error) {
       setStatus(mapAuthErrorMessage(error, "Account creation failed. Try again."));
