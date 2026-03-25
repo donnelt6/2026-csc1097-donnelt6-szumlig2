@@ -16,6 +16,9 @@ __pycache__/
 !.env.example
 !**/.env.example
 
+# Local SQL migration files
+*.sql
+
 # Editor
 .DS_Store
 *.swp
