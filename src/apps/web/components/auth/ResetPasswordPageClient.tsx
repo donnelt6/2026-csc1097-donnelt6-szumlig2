@@ -13,9 +13,10 @@ export function ResetPasswordPageClient() {
   const [status, setStatus] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [recoveryState, setRecoveryState] = useState<RecoveryState>("loading");
+  const client = supabase;
 
   useEffect(() => {
-    if (!supabase) {
+    if (!client) {
       setRecoveryState("invalid");
       setStatus("Supabase is not configured. Add your env vars to enable password recovery.");
       return;
@@ -27,13 +28,13 @@ export function ResetPasswordPageClient() {
       try {
         const code = new URLSearchParams(window.location.search).get("code");
         if (code) {
-          const { error } = await supabase.auth.exchangeCodeForSession(code);
+          const { error } = await client.auth.exchangeCodeForSession(code);
           if (error) {
             throw error;
           }
         }
 
-        const { data, error } = await supabase.auth.getSession();
+        const { data, error } = await client.auth.getSession();
         if (error) {
           throw error;
         }
@@ -48,7 +49,7 @@ export function ResetPasswordPageClient() {
         const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
         if (hashParams.get("type") === "recovery" || hashParams.get("access_token")) {
           window.setTimeout(async () => {
-            const { data: delayedData } = await supabase.auth.getSession();
+            const { data: delayedData } = await client.auth.getSession();
             if (!mounted) {
               return;
             }
@@ -74,7 +75,7 @@ export function ResetPasswordPageClient() {
       }
     };
 
-    const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
+    const { data: listener } = client.auth.onAuthStateChange((event, session) => {
       if (!mounted) {
         return;
       }
@@ -96,7 +97,7 @@ export function ResetPasswordPageClient() {
     event.preventDefault();
     setStatus(null);
 
-    if (!supabase) {
+    if (!client) {
       setStatus("Supabase is not configured. Add your env vars to enable password recovery.");
       return;
     }
@@ -106,7 +107,7 @@ export function ResetPasswordPageClient() {
     }
 
     setLoading(true);
-    const { error } = await supabase.auth.updateUser({ password });
+    const { error } = await client.auth.updateUser({ password });
     setLoading(false);
 
     if (error) {
