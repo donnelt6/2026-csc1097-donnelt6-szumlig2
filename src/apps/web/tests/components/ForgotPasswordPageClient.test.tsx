@@ -2,7 +2,9 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ForgotPasswordPageClient } from "../../components/auth/ForgotPasswordPageClient";
 
-const resetPasswordForEmail = vi.fn();
+const { resetPasswordForEmail } = vi.hoisted(() => ({
+  resetPasswordForEmail: vi.fn(),
+}));
 
 vi.mock("../../lib/supabaseClient", () => ({
   supabase: {

@@ -2,10 +2,12 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ResetPasswordPageClient } from "../../components/auth/ResetPasswordPageClient";
 
-const getSession = vi.fn();
-const updateUser = vi.fn();
-const exchangeCodeForSession = vi.fn();
-const unsubscribe = vi.fn();
+const { getSession, updateUser, exchangeCodeForSession, unsubscribe } = vi.hoisted(() => ({
+  getSession: vi.fn(),
+  updateUser: vi.fn(),
+  exchangeCodeForSession: vi.fn(),
+  unsubscribe: vi.fn(),
+}));
 
 vi.mock("../../lib/supabaseClient", () => ({
   supabase: {
