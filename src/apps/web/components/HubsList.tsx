@@ -38,6 +38,7 @@ export function HubsList({ searchQuery, filters, onHubCountChange, onPaginationV
   const queryClient = useQueryClient();
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [editingHub, setEditingHub] = useState<Hub | null>(null);
+  const [mutationError, setMutationError] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [editDescription, setEditDescription] = useState("");
   const [editIconKey, setEditIconKey] = useState<HubIconKey>(DEFAULT_HUB_ICON_KEY);
@@ -54,23 +55,61 @@ export function HubsList({ searchQuery, filters, onHubCountChange, onPaginationV
         icon_key: payload.icon_key,
         color_key: payload.color_key,
       }),
+    onMutate: () => {
+      setMutationError(null);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["hubs"] });
       setEditingHub(null);
+      setMutationError(null);
+    },
+    onError: (error) => {
+      setMutationError(`Failed to save hub changes: ${(error as Error).message}`);
     },
   });
   const archiveHubMutation = useMutation({
     mutationFn: (hubId: string) => archiveHub(hubId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["hubs"] });
+    onMutate: async (hubId: string) => {
+      setMutationError(null);
+      await queryClient.cancelQueries({ queryKey: ["hubs"] });
+      const previousHubs = queryClient.getQueryData<Hub[]>(["hubs"]) ?? [];
+      const archivedAt = new Date().toISOString();
+      queryClient.setQueryData<Hub[]>(["hubs"], (current = []) =>
+        current.map((hub) => (hub.id === hubId ? { ...hub, archived_at: archivedAt } : hub))
+      );
       setOpenMenuId(null);
+      return { previousHubs };
+    },
+    onError: (_error, _hubId, context) => {
+      if (context?.previousHubs) {
+        queryClient.setQueryData(["hubs"], context.previousHubs);
+      }
+      setMutationError(`Failed to archive hub: ${(_error as Error).message}`);
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["hubs"] });
     },
   });
   const unarchiveHubMutation = useMutation({
     mutationFn: (hubId: string) => unarchiveHub(hubId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["hubs"] });
+    onMutate: async (hubId: string) => {
+      setMutationError(null);
+      await queryClient.cancelQueries({ queryKey: ["hubs"] });
+      const previousHubs = queryClient.getQueryData<Hub[]>(["hubs"]) ?? [];
+      queryClient.setQueryData<Hub[]>(["hubs"], (current = []) =>
+        current.map((hub) => (hub.id === hubId ? { ...hub, archived_at: null } : hub))
+      );
       setOpenMenuId(null);
+      return { previousHubs };
+    },
+    onError: (_error, _hubId, context) => {
+      if (context?.previousHubs) {
+        queryClient.setQueryData(["hubs"], context.previousHubs);
+      }
+      setMutationError(`Failed to unarchive hub: ${(_error as Error).message}`);
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["hubs"] });
     },
   });
 
@@ -172,6 +211,7 @@ export function HubsList({ searchQuery, filters, onHubCountChange, onPaginationV
     event.preventDefault();
     event.stopPropagation();
     setOpenMenuId(null);
+    setMutationError(null);
     setEditingHub(hub);
     setEditName(hub.name ?? "");
     setEditDescription(hub.description ?? "");
@@ -179,12 +219,22 @@ export function HubsList({ searchQuery, filters, onHubCountChange, onPaginationV
     setEditColorKey((hub.color_key as HubColorKey | null) ?? DEFAULT_HUB_COLOR_KEY);
   };
 
+  const closeAppearanceEditor = () => {
+    setEditingHub(null);
+    setMutationError(null);
+  };
+
   const submitAppearanceUpdate = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!editingHub) return;
+    const trimmedName = editName.trim();
+    if (!trimmedName) {
+      setMutationError("Hub name cannot be blank.");
+      return;
+    }
     updateAppearanceMutation.mutate({
       hubId: editingHub.id,
-      name: editName.trim(),
+      name: trimmedName,
       description: editDescription.trim(),
       icon_key: editIconKey,
       color_key: editColorKey,
@@ -213,6 +263,7 @@ export function HubsList({ searchQuery, filters, onHubCountChange, onPaginationV
     <div className="hubs-list-container">
       {isLoading && <p className="muted">Loading hubs...</p>}
       {error && <p className="muted">Failed to load hubs: {(error as Error).message}</p>}
+      {mutationError && <p className="muted" role="alert">{mutationError}</p>}
 
       <div className="hubs-grid hubs-grid--4col">
         {currentPage === 1 && (
@@ -387,10 +438,11 @@ export function HubsList({ searchQuery, filters, onHubCountChange, onPaginationV
       <HubAppearanceModal
         mode="edit"
         title={`Edit ${editingHub.name}`}
-        subtitle="Update the hub name, description, icon, and colour shown on Your Hubs."
+        subtitle=""
         submitLabel="Save hub"
         isSubmitting={updateAppearanceMutation.isPending}
-        onClose={() => setEditingHub(null)}
+        isSubmitDisabled={!editName.trim()}
+        onClose={closeAppearanceEditor}
         onSubmit={submitAppearanceUpdate}
         name={editName}
         description={editDescription}

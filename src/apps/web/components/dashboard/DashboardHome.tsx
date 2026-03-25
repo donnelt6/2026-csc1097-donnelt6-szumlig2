@@ -1,20 +1,21 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueries } from '@tanstack/react-query';
 
 import {
   MagnifyingGlassIcon,
   RectangleStackIcon,
-  DocumentIcon,
   SparklesIcon,
-  UserIcon,
   BellIcon,
   ChatBubbleLeftIcon,
 } from '@heroicons/react/24/outline';
-import { listActivity, listHubs, listReminders } from '../../lib/api';
+import { DocumentIcon, UserIcon } from '@heroicons/react/24/solid';
+import { listActivity, listHubs, listReminders, listChatSessions } from '../../lib/api';
+import { resolveHubAppearance } from '../../lib/hubAppearance';
+import type { ChatSessionSummary } from '../../lib/types';
 import { useAuth } from '../auth/AuthProvider';
 import { describeEventParts, formatRelativeTime, getEventTone } from '../../lib/utils';
 import { MiniCalendar } from './MiniCalendar';
@@ -29,14 +30,14 @@ export function DashboardHome() {
   const [calMonth, setCalMonth] = useState(now.getMonth());
   const [calYear, setCalYear] = useState(now.getFullYear());
 
-  const { data: hubs } = useQuery({
+  const { data: hubs, isLoading: hubsLoading } = useQuery({
     queryKey: ['hubs'],
     queryFn: listHubs,
     staleTime: 0,
   });
 
   // Fetch ALL reminders (no status filter) so calendar shows everything
-  const { data: reminders } = useQuery({
+  const { data: reminders, isLoading: remindersLoading } = useQuery({
     queryKey: ['dashboard-reminders'],
     queryFn: () => listReminders({}),
     staleTime: 0,
@@ -62,14 +63,71 @@ export function DashboardHome() {
   });
   const closestReminders = sortedReminders.slice(0, 4);
 
-  const handleHeroSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (heroSearch.trim()) {
-      router.push(`/?search=${encodeURIComponent(heroSearch.trim())}`);
-    }
-  };
+  const searchRef = useRef<HTMLDivElement>(null);
+  const [searchFocused, setSearchFocused] = useState(false);
 
-  const { data: activityEvents } = useQuery({
+  // Fetch chat sessions for each hub
+  const sessionQueries = useQueries({
+    queries: (hubs ?? []).map((hub) => ({
+      queryKey: ['chat-sessions', hub.id],
+      queryFn: () => listChatSessions(hub.id),
+      staleTime: 30_000,
+    })),
+  });
+
+  const allChats = useMemo(() => {
+    if (!hubs) return [];
+    const chats: (ChatSessionSummary & { hubName: string })[] = [];
+    sessionQueries.forEach((q, i) => {
+      if (q.data) {
+        q.data.forEach((session) => {
+          chats.push({ ...session, hubName: hubs[i].name });
+        });
+      }
+    });
+    return chats;
+  }, [hubs, sessionQueries]);
+
+  const normalizedSearch = heroSearch.trim().toLowerCase();
+  const searchWords = normalizedSearch.split(/\s+/).filter(Boolean);
+
+  const hubResults = useMemo(() => {
+    if (!searchWords.length || !hubs) return [];
+    const scored = hubs.map((h) => {
+      const text = `${h.name ?? ''} ${h.description ?? ''}`.toLowerCase();
+      const matched = searchWords.filter((w) => text.includes(w)).length;
+      return { hub: h, matched };
+    }).filter((r) => r.matched > 0);
+    scored.sort((a, b) => b.matched - a.matched);
+    return scored.map((r) => r.hub).slice(0, 5);
+  }, [searchWords.join(' '), hubs]);
+
+  const chatResults = useMemo(() => {
+    if (!searchWords.length) return [];
+    const scored = allChats.map((c) => {
+      const text = `${c.title ?? ''} ${c.hubName ?? ''}`.toLowerCase();
+      const matched = searchWords.filter((w) => text.includes(w)).length;
+      return { chat: c, matched };
+    }).filter((r) => r.matched > 0);
+    scored.sort((a, b) => b.matched - a.matched);
+    return scored.map((r) => r.chat).slice(0, 5);
+  }, [searchWords.join(' '), allChats]);
+
+  const hasResults = hubResults.length > 0 || chatResults.length > 0;
+  const showDropdown = searchFocused && searchWords.length > 0;
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    const handleClick = (e: MouseEvent) => {
+      if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
+        setSearchFocused(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
+
+  const { data: activityEvents, isLoading: activityLoading } = useQuery({
     queryKey: ['dashboard-activity'],
     queryFn: () => listActivity(undefined, 10),
     staleTime: 0,
@@ -94,16 +152,66 @@ export function DashboardHome() {
       {/* Hero */}
       <div className="dash-hero">
         <h1 className="dash-hero-title">Discover your knowledge archive.</h1>
-        <form className="dash-hero-search-form" onSubmit={handleHeroSearch}>
-          <MagnifyingGlassIcon className="dash-hero-search-icon" />
-          <input
-            type="text"
-            className="dash-hero-search-input"
-            placeholder="Search across all document hubs, sources, and teams..."
-            value={heroSearch}
-            onChange={(e) => setHeroSearch(e.target.value)}
-          />
-        </form>
+        <div className="dash-hero-search-wrap" ref={searchRef}>
+          <div className="dash-hero-search-form">
+            <MagnifyingGlassIcon className="dash-hero-search-icon" />
+            <input
+              type="text"
+              className="dash-hero-search-input"
+              placeholder="Search across all your hubs and chats..."
+              value={heroSearch}
+              onChange={(e) => setHeroSearch(e.target.value)}
+              onFocus={() => setSearchFocused(true)}
+            />
+          </div>
+          {showDropdown && (
+            <div className="dash-hero-search-dropdown">
+              {hubResults.length > 0 && (
+                <div className="dash-hero-search-group">
+                  <span className="dash-hero-search-group-label">Hubs</span>
+                  {hubResults.map((hub) => (
+                    <Link
+                      key={hub.id}
+                      href={`/hubs/${hub.id}`}
+                      className="dash-hero-search-item"
+                      onClick={() => setSearchFocused(false)}
+                    >
+                      <RectangleStackIcon className="dash-hero-search-item-icon" />
+                      <div className="dash-hero-search-item-info">
+                        <span className="dash-hero-search-item-name">{hub.name}</span>
+                        {hub.description && (
+                          <span className="dash-hero-search-item-meta">{hub.description}</span>
+                        )}
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              )}
+              {chatResults.length > 0 && (
+                <div className="dash-hero-search-group">
+                  <span className="dash-hero-search-group-label">Chats</span>
+                  {chatResults.map((chat) => (
+                    <Link
+                      key={chat.id}
+                      href={`/hubs/${chat.hub_id}?tab=chat&session=${chat.id}`}
+                      className="dash-hero-search-item"
+                      onClick={() => setSearchFocused(false)}
+                    >
+                      <ChatBubbleLeftIcon className="dash-hero-search-item-icon" />
+                      <div className="dash-hero-search-item-info">
+                        <span className="dash-hero-search-item-name">{chat.title}</span>
+                        <span className="dash-hero-search-item-meta">{chat.hubName}</span>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              )}
+              {!hasResults && (
+                <div className="dash-hero-search-empty">No results found.</div>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Two-column layout */}
@@ -114,61 +222,72 @@ export function DashboardHome() {
             <span className="dash-section-label">JUMP BACK IN</span>
             <div className="dash-section-header">
               <h2 className="dash-section-title">Recent Hubs</h2>
-              {recentHubs.length > 0 && <Link href="/" className="dash-section-link">View all hubs</Link>}
+              {recentHubs.length > 0 && <Link href="/hubs" className="dash-section-link">View all hubs</Link>}
             </div>
             <div className="dash-recent-hubs">
               {recentHubs.length > 0 ? (
-                recentHubs.map((hub) => (
-                  <Link key={hub.id} href={`/hubs/${hub.id}`} className="hub-card">
-                    <div className="hub-card-top">
-                      <div className="hub-card-icon">
-                        <RectangleStackIcon />
+                recentHubs.map((hub) => {
+                  const appearance = resolveHubAppearance(hub.icon_key, hub.color_key);
+                  const HubIcon = appearance.icon.icon;
+
+                  return (
+                    <Link key={hub.id} href={`/hubs/${hub.id}`} className="hub-card">
+                      <div className="hub-card-top">
+                        <div
+                          className="hub-card-icon"
+                          style={appearance.badgeStyle}
+                          data-testid={`dashboard-hub-icon-${hub.id}`}
+                          data-icon-key={appearance.icon.key}
+                          data-color-key={appearance.color.key}
+                        >
+                          <HubIcon />
+                        </div>
                       </div>
-                    </div>
-                    <h3 className="hub-card-title">{hub.name}</h3>
-                    <p className="hub-card-description">{hub.description || 'No description'}</p>
-                    <div className="hub-card-footer">
-                      <div className="hub-card-stats">
-                        <span className="hub-stat">
-                          <DocumentIcon className="hub-stat-icon" aria-hidden="true" />
-                          <span className="hub-stat-value">{hub.sources_count ?? 0} {(hub.sources_count ?? 0) === 1 ? 'Doc' : 'Docs'}</span>
-                        </span>
-                        <span className="hub-stat">
-                          <UserIcon className="hub-stat-icon" aria-hidden="true" />
-                          <span className="hub-stat-value">{hub.members_count ?? 0} {(hub.members_count ?? 0) === 1 ? 'Member' : 'Members'}</span>
-                        </span>
+                      <h3 className="hub-card-title">{hub.name}</h3>
+                      <p className="hub-card-description">{hub.description || 'No description'}</p>
+                      <div className="hub-card-footer">
+                        <div className="hub-card-stats">
+                          <span className="hub-stat">
+                            <DocumentIcon className="hub-stat-icon" aria-hidden="true" />
+                            <span className="hub-stat-value">{hub.sources_count ?? 0} {(hub.sources_count ?? 0) === 1 ? 'Doc' : 'Docs'}</span>
+                          </span>
+                          <span className="hub-stat">
+                            <UserIcon className="hub-stat-icon" aria-hidden="true" />
+                            <span className="hub-stat-value">{hub.members_count ?? 0} {(hub.members_count ?? 0) === 1 ? 'Member' : 'Members'}</span>
+                          </span>
+                        </div>
+                        <div className="hub-card-footer-bottom">
+                          <span className="hub-card-time">
+                            Modified {formatRelativeTime(hub.last_accessed_at)}
+                          </span>
+                          {(hub.member_emails?.length ?? 0) > 0 && (
+                            <div className="hub-card-avatars">
+                              {hub.member_emails!.slice(0, 2).map((email, i) => (
+                                <div key={i} className="hub-avatar hub-avatar--initials" title={email}>
+                                  {email.charAt(0).toUpperCase()}
+                                </div>
+                              ))}
+                              {hub.member_emails!.length > 2 && (
+                                <div className="hub-avatar hub-avatar--count">
+                                  +{hub.member_emails!.length - 2}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
                       </div>
-                      <div className="hub-card-footer-bottom">
-                        <span className="hub-card-time">
-                          Modified {formatRelativeTime(hub.last_accessed_at)}
-                        </span>
-                        {(hub.member_emails?.length ?? 0) > 0 && (
-                          <div className="hub-card-avatars">
-                            {hub.member_emails!.slice(0, 2).map((email, i) => (
-                              <div key={i} className="hub-avatar hub-avatar--initials" title={email}>
-                                {email.charAt(0).toUpperCase()}
-                              </div>
-                            ))}
-                            {hub.member_emails!.length > 2 && (
-                              <div className="hub-avatar hub-avatar--count">
-                                +{hub.member_emails!.length - 2}
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </Link>
-                ))
-              ) : (
+                    </Link>
+                  );
+                })
+              ) : !hubsLoading ? (
                 <div className="dash-activity-card">
                   <div className="dash-empty-state">
                     <RectangleStackIcon className="dash-empty-state-icon" />
                     <p className="dash-empty-state-text">Create your first hub to get started</p>
-                    <Link href="/" className="dash-empty-state-btn">Go to Hubs</Link>
+                    <Link href="/hubs" className="dash-empty-state-btn">Go to Hubs</Link>
                   </div>
                 </div>
-              )}
+              ) : null}
             </div>
           </div>
 
@@ -176,7 +295,7 @@ export function DashboardHome() {
           <div className="dash-section">
             <div className="dash-section-header">
               <h2 className="dash-section-title">Recent Activity Feed</h2>
-              {activityItems.length > 0 && <Link href="/dashboard?tab=activity" className="dash-section-link">View all activity</Link>}
+              {activityItems.length > 0 && <Link href="/?tab=activity" className="dash-section-link">View all activity</Link>}
             </div>
             <div className="dash-activity-card">
               <div className="dash-activity-list">
@@ -199,12 +318,12 @@ export function DashboardHome() {
                       </Link>
                     );
                   })
-                ) : (
+                ) : !activityLoading ? (
                   <div className="dash-empty-state">
                     <ChatBubbleLeftIcon className="dash-empty-state-icon" />
                     <p className="dash-empty-state-text">Activity will appear here as you use your hubs</p>
                   </div>
-                )}
+                ) : null}
               </div>
             </div>
           </div>
@@ -243,7 +362,7 @@ export function DashboardHome() {
                   </div>
                 </>
               )}
-              {closestReminders.length === 0 && (
+              {closestReminders.length === 0 && !remindersLoading && (
                 <div className="dash-empty-state dash-empty-state--compact">
                   <BellIcon className="dash-empty-state-icon" />
                   <p className="dash-empty-state-text">Set up reminders in any hub to see them here</p>

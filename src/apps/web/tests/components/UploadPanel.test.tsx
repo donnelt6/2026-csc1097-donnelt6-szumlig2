@@ -1,5 +1,4 @@
 // Tests UploadPanel interactions with mocked API calls and fetch.
-import { QueryClientProvider } from "@tanstack/react-query";
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -175,7 +174,7 @@ describe("UploadPanel", () => {
       failure_reason: "upload failed",
     };
 
-    const { container, rerender, queryClient } = renderWithQueryClient(
+    const { container, rerender } = renderWithQueryClient(
       <UploadPanel hubId="hub-1" sources={[]} onRefresh={onRefresh} />
     );
 
@@ -187,9 +186,7 @@ describe("UploadPanel", () => {
     await waitFor(() => expect(failSource).toHaveBeenCalledWith("src-3", "upload failed"));
 
     rerender(
-      <QueryClientProvider client={queryClient}>
-        <UploadPanel hubId="hub-1" sources={[failedSource]} onRefresh={onRefresh} />
-      </QueryClientProvider>
+      <UploadPanel hubId="hub-1" sources={[failedSource]} onRefresh={onRefresh} />
     );
 
     await user.click(screen.getByRole("button", { name: "Retry upload" }));

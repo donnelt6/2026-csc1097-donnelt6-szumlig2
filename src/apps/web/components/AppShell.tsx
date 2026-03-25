@@ -5,12 +5,14 @@ import { useParams, usePathname, useRouter, useSearchParams } from 'next/navigat
 import { useQuery } from '@tanstack/react-query';
 import { Bars3Icon, MagnifyingGlassIcon } from '@heroicons/react/24/outline';
 import { Sidebar } from './navigation/Sidebar';
+import { ThemeToggle } from './navigation/ThemeToggle';
 import { ProfileMenu } from './navigation/ProfileMenu';
 import { NotificationsMenu } from './navigation/NotificationsMenu';
 import { useAuth } from './auth/AuthProvider';
 import { useSearch } from '../lib/SearchContext';
 import { listHubs } from '../lib/api';
 import { CurrentHubProvider } from '../lib/CurrentHubContext';
+import { resolveHubAppearance } from '../lib/hubAppearance';
 
 type SidebarState = 'open' | 'collapsed' | 'hidden';
 
@@ -21,6 +23,7 @@ interface AppShellProps {
 export function AppShell({ children }: AppShellProps) {
   const [sidebarState, setSidebarState] = useState<SidebarState | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [transitionsReady, setTransitionsReady] = useState(false);
   const params = useParams<{ hubId?: string }>();
   const pathname = usePathname();
   const router = useRouter();
@@ -29,8 +32,9 @@ export function AppShell({ children }: AppShellProps) {
   const { searchQuery, setSearchQuery } = useSearch();
 
   const isAuthPage = pathname.startsWith('/auth');
-  const isDashboard = pathname === '/dashboard';
+  const isHome = pathname === '/';
   const isHubRoute = pathname.startsWith('/hubs/');
+  const isOnHub = isHubRoute;
   const hubId = isHubRoute ? params?.hubId ?? null : null;
   const showChrome = !isAuthPage && !loading && !!user;
   const { data: hubs, isLoading: hubsLoading } = useQuery({
@@ -42,24 +46,40 @@ export function AppShell({ children }: AppShellProps) {
     () => hubs?.find((hub) => hub.id === hubId) ?? null,
     [hubId, hubs]
   );
+  const currentHubAppearance = currentHub
+    ? resolveHubAppearance(currentHub.icon_key, currentHub.color_key)
+    : null;
+  const CurrentHubIcon = currentHubAppearance?.icon.icon;
 
-  const dashboardTab = searchParams.get('tab') ?? 'dashboard';
+  const dashboardTab = searchParams.get('tab') ?? 'home';
   const dashboardTabs = [
-    { key: 'dashboard', label: 'Dashboard' },
+    { key: 'home', label: 'Home' },
     { key: 'calendar', label: 'Calendar' },
     { key: 'activity', label: 'Activity' },
   ] as const;
 
   useLayoutEffect(() => {
-    const saved = localStorage.getItem('sidebar-state') as SidebarState | null;
-    if (saved && ['open', 'collapsed'].includes(saved)) {
-      setSidebarState(saved);
+    setTransitionsReady(false);
+    if (!isOnHub) {
+      setSidebarState('hidden');
     } else {
-      setSidebarState('open');
+      const saved = localStorage.getItem('sidebar-state') as SidebarState | null;
+      if (saved && ['open', 'collapsed'].includes(saved)) {
+        setSidebarState(saved);
+      } else {
+        setSidebarState('open');
+      }
     }
-  }, []);
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        setTransitionsReady(true);
+      });
+    });
+  }, [isOnHub]);
 
-  const effectiveSidebarState = sidebarState ?? 'open';
+  const effectiveSidebarState = isOnHub
+    ? (sidebarState ?? 'open')
+    : 'hidden';
 
   const handleStateChange = useCallback((state: SidebarState) => {
     setSidebarState(state);
@@ -80,7 +100,6 @@ export function AppShell({ children }: AppShellProps) {
   }, []);
 
   const sidebarHidden = effectiveSidebarState === 'hidden';
-  const isHydrated = sidebarState !== null;
 
   if (!showChrome) {
     return <div className="app-shell app-shell--no-chrome">{children}</div>;
@@ -88,22 +107,26 @@ export function AppShell({ children }: AppShellProps) {
 
   return (
     <CurrentHubProvider value={{ currentHub, isLoading: isHubRoute && hubsLoading }}>
-      <div className={`app-shell sidebar-${effectiveSidebarState}${!isHydrated ? ' no-transition' : ''}`}>
-        <div
-          className={`mobile-overlay ${mobileMenuOpen ? 'is-visible' : ''}`}
-          onClick={closeMobileMenu}
-        />
-        <Sidebar
-          state={effectiveSidebarState}
-          onStateChange={handleStateChange}
-          mobileOpen={mobileMenuOpen}
-          onMobileClose={closeMobileMenu}
-        />
+      <div className={`app-shell sidebar-${effectiveSidebarState}${!transitionsReady ? ' no-transition' : ''}`}>
+        {isOnHub && (
+          <>
+            <div
+              className={`mobile-overlay ${mobileMenuOpen ? 'is-visible' : ''}`}
+              onClick={closeMobileMenu}
+            />
+            <Sidebar
+              state={effectiveSidebarState}
+              onStateChange={handleStateChange}
+              mobileOpen={mobileMenuOpen}
+              onMobileClose={closeMobileMenu}
+            />
+          </>
+        )}
         <header className="site-nav">
-          <div className="nav-content">
+          <div className={`nav-content${isOnHub ? ' nav-content--hub' : ''}`}>
             <div className="nav-brand">
               <button
-                className={`mobile-menu-button ${sidebarHidden ? 'is-visible-desktop' : ''}`}
+                className={`mobile-menu-button ${isOnHub && sidebarHidden ? 'is-visible-desktop' : ''}`}
                 onClick={handleMenuClick}
                 aria-label="Open menu"
               >
@@ -113,7 +136,7 @@ export function AppShell({ children }: AppShellProps) {
                 Caddie
               </a>
             </div>
-            {isDashboard ? (
+            {isHome ? (
               <div className="dash-nav-tabs">
                 {dashboardTabs.map((tab) => (
                   <button
@@ -121,21 +144,42 @@ export function AppShell({ children }: AppShellProps) {
                     className={`dash-nav-tab ${dashboardTab === tab.key ? 'dash-nav-tab--active' : ''}`}
                     onClick={() => {
                       const params = new URLSearchParams(searchParams.toString());
-                      if (tab.key === 'dashboard') {
+                      if (tab.key === 'home') {
                         params.delete('tab');
                       } else {
                         params.set('tab', tab.key);
                       }
                       const qs = params.toString();
-                      router.push(`/dashboard${qs ? `?${qs}` : ''}`, { scroll: false });
+                      router.push(`/${qs ? `?${qs}` : ''}`, { scroll: false });
                     }}
                   >
                     {tab.label}
                   </button>
                 ))}
               </div>
+            ) : isOnHub ? (
+              <>
+                {currentHub && CurrentHubIcon && (
+                  <div className="nav-current-hub" title={currentHub.name}>
+                    <span className="nav-current-hub-icon" style={currentHubAppearance.badgeStyle}>
+                      <CurrentHubIcon />
+                    </span>
+                    <span className="nav-current-hub-name">{currentHub.name}</span>
+                  </div>
+                )}
+                <div className="nav-search nav-search--hub-chat">
+                  <MagnifyingGlassIcon className="nav-search-icon" />
+                  <input
+                    type="text"
+                    placeholder="Search conversations..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="nav-search-input"
+                  />
+                </div>
+              </>
             ) : (
-              <div className="nav-search">
+              <div className="nav-search nav-search--hubs">
                 <MagnifyingGlassIcon className="nav-search-icon" />
                 <input
                   type="text"
@@ -147,6 +191,7 @@ export function AppShell({ children }: AppShellProps) {
               </div>
             )}
             <div className="nav-actions">
+              <ThemeToggle compact />
               <NotificationsMenu />
               <ProfileMenu />
             </div>

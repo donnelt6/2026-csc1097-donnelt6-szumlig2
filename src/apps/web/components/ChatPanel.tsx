@@ -1,19 +1,20 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { ChevronDownIcon, FlagIcon, PaperAirplaneIcon, PlusIcon, TrashIcon } from "@heroicons/react/24/outline";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { ClipboardDocumentIcon, FlagIcon, PaperAirplaneIcon } from "@heroicons/react/24/outline";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
   askQuestion,
-  deleteChatSession,
   flagMessage,
   getChatSessionMessages,
   listChatSessions,
 } from "../lib/api";
 import type { ChatResponse, Citation, ChatSessionSummary, FlagReason, MembershipRole, SessionMessage, Source } from "../lib/types";
 import { SourceSelector } from "./SourceSelector";
+import { useAuth } from "./auth/AuthProvider";
 
 const SCOPE_OPTIONS = [
   { value: "hub" as const, label: "Hub only" },
@@ -36,6 +37,7 @@ interface MessagePair {
   response: ChatResponse | null;
   error: string | null;
   isLoading: boolean;
+  timestamp: string | null;
 }
 
 interface ChatControlState {
@@ -47,26 +49,111 @@ interface DraftState extends ChatControlState {
   messages: MessagePair[];
 }
 
+export interface ChatPanelHandle {
+  toggleSource: (sourceId: string) => void;
+  selectAllSources: () => void;
+  clearSourceSelection: () => void;
+}
+
 interface Props {
   hubId: string;
-  hubDescription?: string;
   hubRole?: MembershipRole | null;
   sources: Source[];
   sourcesLoading?: boolean;
+  onSourceSelectionChange?: (selectedIds: string[]) => void;
 }
 
-export function ChatPanel({ hubId, hubDescription, hubRole, sources, sourcesLoading }: Props) {
+function buildHighlightedParts(snippet: string, quotes: string[]): { text: string; highlighted: boolean }[] {
+  // Find all match ranges (case-insensitive)
+  const lower = snippet.toLowerCase();
+  const ranges: { start: number; end: number }[] = [];
+  for (const quote of quotes) {
+    const q = quote.toLowerCase().trim();
+    if (!q) continue;
+    const idx = lower.indexOf(q);
+    if (idx !== -1) ranges.push({ start: idx, end: idx + q.length });
+  }
+  if (ranges.length === 0) return [{ text: snippet, highlighted: false }];
+
+  // Merge overlapping ranges
+  ranges.sort((a, b) => a.start - b.start);
+  const merged: { start: number; end: number }[] = [ranges[0]];
+  for (let i = 1; i < ranges.length; i++) {
+    const prev = merged[merged.length - 1];
+    if (ranges[i].start <= prev.end) {
+      prev.end = Math.max(prev.end, ranges[i].end);
+    } else {
+      merged.push(ranges[i]);
+    }
+  }
+
+  // Build segments
+  const parts: { text: string; highlighted: boolean }[] = [];
+  let cursor = 0;
+  for (const range of merged) {
+    if (cursor < range.start) parts.push({ text: snippet.slice(cursor, range.start), highlighted: false });
+    parts.push({ text: snippet.slice(range.start, range.end), highlighted: true });
+    cursor = range.end;
+  }
+  if (cursor < snippet.length) parts.push({ text: snippet.slice(cursor), highlighted: false });
+  return parts;
+}
+
+function SourceExcerpt({
+  snippet,
+  relevantQuotes,
+  paraphrasedQuotes,
+}: {
+  snippet: string;
+  relevantQuotes?: string[];
+  paraphrasedQuotes?: string[];
+}) {
+  const quotes = relevantQuotes?.filter(Boolean) ?? [];
+  const paraphrases = paraphrasedQuotes?.filter(Boolean) ?? [];
+  const hasPairs = paraphrases.length > 0 && paraphrases.length === quotes.length;
+
+  const parts = buildHighlightedParts(snippet, quotes);
+
+  return (
+    <div className="chat__modal-excerpt">
+      {hasPairs && paraphrases.map((paraphrase, i) => (
+        <div key={i} className="chat__citation-pair">
+          <p className="chat__citation-paraphrase">{paraphrase}</p>
+          <blockquote className="chat__citation-direct">
+            <span className="chat__direct-label">Direct quote</span>
+            {quotes[i]}
+          </blockquote>
+        </div>
+      ))}
+      <div className="chat__modal-source">
+        <span className="chat__modal-section-label">Source chunk</span>
+        <p className="chat__modal-snippet">
+          {parts.map((part, i) =>
+            part.highlighted ? (
+              <mark key={i} className="chat__snippet-highlight">{part.text}</mark>
+            ) : (
+              <span key={i}>{part.text}</span>
+            ),
+          )}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+export const ChatPanel = forwardRef<ChatPanelHandle, Props>(function ChatPanel({ hubId, hubRole, sources, sourcesLoading, onSourceSelectionChange }, ref) {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const initialSessionParam = searchParams.get("session");
   const initialPromptParam = searchParams.get("prompt");
   const hasAutoSent = useRef(false);
+  const sessionQueryKey = ["chat-sessions", hubId] as const;
 
   const [question, setQuestion] = useState("");
-  const [sessionList, setSessionList] = useState<ChatSessionSummary[]>([]);
   const [draftState, setDraftState] = useState<DraftState | null>(null);
-  const [persistedSessionControls, setPersistedSessionControls] = useState<ChatControlState | null>(null);
   const [messages, setMessages] = useState<MessagePair[]>([]);
   const [scope, setScope] = useState<ChatScope>("hub");
   const [selectedSourceIds, setSelectedSourceIds] = useState<string[]>([]);
@@ -75,17 +162,42 @@ export function ChatPanel({ hubId, hubDescription, hubRole, sources, sourcesLoad
   const [isLoadingSession, setIsLoadingSession] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [flaggingMessageId, setFlaggingMessageId] = useState<string | null>(null);
-  const [flagReason, setFlagReason] = useState<FlagReason>("incorrect");
-  const [deletingSessionId, setDeletingSessionId] = useState<string | null>(null);
-  const [scopeOpen, setScopeOpen] = useState(false);
+  const [reportMenuMessageId, setReportMenuMessageId] = useState<string | null>(null);
   const [activeCitation, setActiveCitation] = useState<Citation | null>(null);
   const [panelError, setPanelError] = useState<string | null>(null);
 
-  const scopeRef = useRef<HTMLDivElement>(null);
+  const { data: sessionList = [], refetch: refetchSessionList } = useQuery({
+    queryKey: sessionQueryKey,
+    queryFn: () => listChatSessions(hubId),
+    enabled: false,
+    initialData: () => queryClient.getQueryData<ChatSessionSummary[]>(sessionQueryKey) ?? [],
+  });
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const modalCloseRef = useRef<HTMLButtonElement>(null);
   const previousCompleteSourceIdsRef = useRef<string[]>([]);
+  const sessionSourceCacheRef = useRef<Map<string | null, string[]>>(new Map());
+  const pendingSessionSourceIdsRef = useRef<string[] | null>(null);
+
+  const readSessionSourceCache = (sessionId: string | null): string[] | null => {
+    const inMemory = sessionSourceCacheRef.current.get(sessionId);
+    if (inMemory) return inMemory;
+    if (sessionId === null) return null;
+    try {
+      const raw = localStorage.getItem(`caddie:session-sources:${sessionId}`);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : null;
+    } catch {
+      return null;
+    }
+  };
+
+  const userInitial = useMemo(() => {
+    const name = user?.email ?? user?.user_metadata?.full_name ?? "U";
+    return name.trim()[0]?.toUpperCase() ?? "U";
+  }, [user]);
 
   const completeSources = useMemo(
     () => sources.filter((source) => source.status === "complete"),
@@ -109,16 +221,6 @@ export function ChatPanel({ hubId, hubDescription, hubRole, sources, sourcesLoad
     }
     return sessionList.find((session) => session.id === activeSessionId)?.title ?? "New Chat";
   }, [activeSessionId, sessionList]);
-  const hasUnsavedSessionControlChanges = useMemo(() => {
-    if (activeSessionId === null || persistedSessionControls === null) {
-      return false;
-    }
-    return (
-      scope !== persistedSessionControls.scope ||
-      !arraysEqual(selectedSourceIds, persistedSessionControls.selectedSourceIds)
-    );
-  }, [activeSessionId, persistedSessionControls, scope, selectedSourceIds]);
-
   useEffect(() => {
     const previousIds = previousCompleteSourceIdsRef.current;
     if (
@@ -134,6 +236,27 @@ export function ChatPanel({ hubId, hubDescription, hubRole, sources, sourcesLoad
   }, [activeSessionId, completeSourceIds, messages.length, selectedSourceIds.length]);
 
   useEffect(() => {
+    const pending = pendingSessionSourceIdsRef.current;
+    if (pending && completeSourceIds.length > 0) {
+      pendingSessionSourceIdsRef.current = null;
+      setSelectedSourceIds(pending.filter((id) => completeSourceIds.includes(id)));
+    }
+  }, [completeSourceIds]);
+
+  useEffect(() => {
+    sessionSourceCacheRef.current.set(activeSessionId, selectedSourceIds);
+    if (activeSessionId !== null) {
+      try {
+        localStorage.setItem(`caddie:session-sources:${activeSessionId}`, JSON.stringify(selectedSourceIds));
+      } catch {}
+    }
+  }, [activeSessionId, selectedSourceIds]);
+
+  useEffect(() => {
+    onSourceSelectionChange?.(selectedSourceIds);
+  }, [selectedSourceIds, onSourceSelectionChange]);
+
+  useEffect(() => {
     if (activeSessionId !== null) {
       return;
     }
@@ -143,26 +266,6 @@ export function ChatPanel({ hubId, hubDescription, hubRole, sources, sourcesLoad
       selectedSourceIds,
     });
   }, [activeSessionId, messages, scope, selectedSourceIds]);
-
-  useEffect(() => {
-    if (!scopeOpen) return;
-    const handleClick = (event: MouseEvent) => {
-      if (scopeRef.current && !scopeRef.current.contains(event.target as Node)) {
-        setScopeOpen(false);
-      }
-    };
-    const handleKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setScopeOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClick);
-    document.addEventListener("keydown", handleKey);
-    return () => {
-      document.removeEventListener("mousedown", handleClick);
-      document.removeEventListener("keydown", handleKey);
-    };
-  }, [scopeOpen]);
 
   useEffect(() => {
     if (!activeCitation) return;
@@ -187,20 +290,22 @@ export function ChatPanel({ hubId, hubDescription, hubRole, sources, sourcesLoad
       setIsBootstrapping(true);
       setPanelError(null);
       try {
-        const sessions = await listChatSessions(hubId);
+        const { data: sessions = [] } = await refetchSessionList();
         if (cancelled) {
           return;
         }
-        setSessionList(sessions);
 
-        if (initialSessionParam) {
+        const cachedSessionId = localStorage.getItem(`caddie:last-session:${hubId}`);
+        const preferredSessionId = initialSessionParam ?? cachedSessionId;
+
+        if (preferredSessionId && sessions.some((s) => s.id === preferredSessionId)) {
           try {
-            const detail = await getChatSessionMessages(initialSessionParam, hubId);
+            const detail = await getChatSessionMessages(preferredSessionId, hubId);
             if (cancelled) {
               return;
             }
             hydrateSession(detail.session, detail.messages);
-            setSessionList((current) => upsertSessionSummary(current, detail.session));
+            updateSessionCache((current) => upsertSessionSummary(current, detail.session));
             syncSessionQuery(detail.session.id);
             return;
           } catch {
@@ -230,7 +335,7 @@ export function ChatPanel({ hubId, hubDescription, hubRole, sources, sourcesLoad
     return () => {
       cancelled = true;
     };
-  }, [hubId]);
+  }, [hubId, refetchSessionList]);
 
   useEffect(() => {
     if (hasAutoSent.current || isBootstrapping || sourcesLoading || !initialPromptParam) return;
@@ -259,13 +364,29 @@ export function ChatPanel({ hubId, hubDescription, hubRole, sources, sourcesLoad
     router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
   }
 
+  function updateSessionCache(
+    updater: (current: ChatSessionSummary[]) => ChatSessionSummary[]
+  ) {
+    queryClient.setQueryData<ChatSessionSummary[]>(sessionQueryKey, (current) =>
+      updater(current ?? [])
+    );
+  }
+
   function hydrateSession(session: ChatSessionSummary, sessionMessages: SessionMessage[]) {
+    const cached = readSessionSourceCache(session.id);
+    const rawIds = cached ?? session.source_ids;
+    const activeSelection = rawIds.filter((id) => completeSourceIds.includes(id));
+    if (completeSourceIds.length === 0 && rawIds.length > 0) {
+      pendingSessionSourceIdsRef.current = rawIds;
+    } else {
+      pendingSessionSourceIdsRef.current = null;
+    }
     const nextControls = {
       scope: session.scope,
-      selectedSourceIds: [...session.source_ids],
+      selectedSourceIds: activeSelection,
     };
     setActiveSessionId(session.id);
-    setPersistedSessionControls(nextControls);
+    localStorage.setItem(`caddie:last-session:${hubId}`, session.id);
     setMessages(convertSessionMessagesToPairs(sessionMessages));
     setScope(nextControls.scope);
     setSelectedSourceIds(nextControls.selectedSourceIds);
@@ -276,7 +397,8 @@ export function ChatPanel({ hubId, hubDescription, hubRole, sources, sourcesLoad
     sessionId: string,
     summary?: ChatSessionSummary,
     updateUrl = true,
-    cancelled = false
+    cancelled = false,
+    fallbackToAnotherSession = true
   ) {
     setIsLoadingSession(true);
     setPanelError(null);
@@ -286,7 +408,7 @@ export function ChatPanel({ hubId, hubDescription, hubRole, sources, sourcesLoad
         return;
       }
       hydrateSession(detail.session, detail.messages);
-      setSessionList((current) => upsertSessionSummary(current, summary ?? detail.session));
+      updateSessionCache((current) => upsertSessionSummary(current, summary ?? detail.session));
       if (updateUrl) {
         syncSessionQuery(detail.session.id);
       }
@@ -294,7 +416,15 @@ export function ChatPanel({ hubId, hubDescription, hubRole, sources, sourcesLoad
       if (cancelled) {
         return;
       }
-      const fallbackSession = sessionList.find((session) => session.id !== sessionId) ?? null;
+      updateSessionCache((current) => current.filter((session) => session.id !== sessionId));
+      try {
+        if (localStorage.getItem(`caddie:last-session:${hubId}`) === sessionId) {
+          localStorage.removeItem(`caddie:last-session:${hubId}`);
+        }
+      } catch {}
+      const fallbackSession = fallbackToAnotherSession
+        ? sessionList.find((session) => session.id !== sessionId) ?? null
+        : null;
       if (fallbackSession) {
         await openSession(fallbackSession.id, fallbackSession, true);
       } else {
@@ -309,39 +439,60 @@ export function ChatPanel({ hubId, hubDescription, hubRole, sources, sourcesLoad
   }
 
   function activateDraft(nextDraft: DraftState, clearQuery: boolean) {
+    const cached = sessionSourceCacheRef.current.get(null);
     setDraftState(nextDraft);
     setActiveSessionId(null);
-    setPersistedSessionControls(null);
     setMessages(nextDraft.messages);
     setScope(nextDraft.scope);
-    setSelectedSourceIds(nextDraft.selectedSourceIds);
+    setSelectedSourceIds(
+      cached
+        ? cached.filter((id) => completeSourceIds.includes(id))
+        : nextDraft.selectedSourceIds
+    );
     setPanelError(null);
     if (clearQuery) {
       syncSessionQuery(null);
     }
   }
 
-  function handleNewChat() {
+  const currentSessionParam = searchParams.get("session");
+  useEffect(() => {
+    if (isBootstrapping) return;
+    if (currentSessionParam === "new") {
+      sessionSourceCacheRef.current.delete(null);
+      activateDraft({ messages: [], scope, selectedSourceIds: [...completeSourceIds] }, false);
+      return;
+    }
+    if (currentSessionParam && currentSessionParam !== activeSessionId) {
+      void openSession(currentSessionParam, undefined, false, false, false);
+    }
+  }, [currentSessionParam, activeSessionId, isBootstrapping, completeSourceIds, scope]);
+
+  useEffect(() => {
+    if (
+      isBootstrapping ||
+      activeSessionId === null ||
+      currentSessionParam === "new" ||
+      sessionList.some((session) => session.id === activeSessionId)
+    ) {
+      return;
+    }
     activateDraft(buildDraftState(draftState, completeSourceIds), true);
-  }
+  }, [activeSessionId, completeSourceIds, currentSessionParam, draftState, isBootstrapping, sessionList]);
 
   function handleScopeChange(nextScope: ChatScope) {
     setScope(nextScope);
-    setScopeOpen(false);
   }
 
   function handleToggleSource(sourceId: string) {
     if (!completeSourceIds.includes(sourceId)) {
       return;
     }
-    setSelectedSourceIds((current) => {
-      if (current.includes(sourceId)) {
-        return current.filter((id) => id !== sourceId);
-      }
-      const next = current.filter((id) => id !== sourceId);
-      next.push(sourceId);
-      return next;
-    });
+    setSelectedSourceIds((current) =>
+      current.includes(sourceId)
+        ? current.filter((id) => id !== sourceId)
+        : [...current, sourceId]
+    );
   }
 
   function handleSelectAllSources() {
@@ -351,6 +502,12 @@ export function ChatPanel({ hubId, hubDescription, hubRole, sources, sourcesLoad
   function handleClearSourceSelection() {
     setSelectedSourceIds([]);
   }
+
+  useImperativeHandle(ref, () => ({
+    toggleSource: handleToggleSource,
+    selectAllSources: handleSelectAllSources,
+    clearSourceSelection: handleClearSourceSelection,
+  }), [completeSourceIds]);
 
   function handleTextareaChange(event: React.ChangeEvent<HTMLTextAreaElement>) {
     setQuestion(event.target.value);
@@ -369,6 +526,7 @@ export function ChatPanel({ hubId, hubDescription, hubRole, sources, sourcesLoad
     const currentSessionId = activeSessionId;
     const requestScope = scope;
     const requestSourceIds = normalizeSelectedSourceIds(selectedSourceIds, completeSourceIds);
+    const previousSessions = queryClient.getQueryData<ChatSessionSummary[]>(sessionQueryKey) ?? [];
     const requestBody = {
       hub_id: hubId,
       scope: requestScope,
@@ -384,12 +542,27 @@ export function ChatPanel({ hubId, hubDescription, hubRole, sources, sourcesLoad
       response: null,
       error: null,
       isLoading: true,
+      timestamp: new Date().toISOString(),
     };
 
     setMessages((current) => [...current, pendingPair]);
     setQuestion("");
     setIsSending(true);
     setPanelError(null);
+
+    if (currentSessionId) {
+      const now = pendingPair.timestamp;
+      updateSessionCache((current) =>
+        moveSessionToTop(
+          current.map((session) =>
+            session.id === currentSessionId
+              ? { ...session, scope: requestScope, source_ids: [...requestSourceIds], last_message_at: now ?? session.last_message_at }
+              : session
+          ),
+          currentSessionId,
+        )
+      );
+    }
 
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto";
@@ -422,12 +595,8 @@ export function ChatPanel({ hubId, hubDescription, hubRole, sources, sourcesLoad
         last_message_at: now,
       };
 
-      setSessionList((current) => moveSessionToTop(upsertSessionSummary(current, nextSummary), nextSummary.id));
+      updateSessionCache((current) => moveSessionToTop(upsertSessionSummary(current, nextSummary), nextSummary.id));
       setActiveSessionId(response.session_id);
-      setPersistedSessionControls({
-        scope: requestScope,
-        selectedSourceIds: normalizedPersistedSourceIds,
-      });
       setScope(requestScope);
       setSelectedSourceIds(normalizedPersistedSourceIds);
       syncSessionQuery(response.session_id);
@@ -436,6 +605,7 @@ export function ChatPanel({ hubId, hubDescription, hubRole, sources, sourcesLoad
         setDraftState(null);
       }
     } catch (error) {
+      queryClient.setQueryData(sessionQueryKey, previousSessions);
       const message = error instanceof Error ? error.message : String(error);
       setMessages((current) =>
         current.map((pair) =>
@@ -456,42 +626,15 @@ export function ChatPanel({ hubId, hubDescription, hubRole, sources, sourcesLoad
     }
   }
 
-  async function handleDeleteSession(sessionId: string) {
-    if (typeof window !== "undefined") {
-      const confirmed = window.confirm("Delete this chat? Messages stay in the database but the chat will disappear.");
-      if (!confirmed) {
-        return;
-      }
-    }
 
-    setDeletingSessionId(sessionId);
-    setPanelError(null);
-    try {
-      await deleteChatSession(sessionId);
-      setSessionList((current) => current.filter((session) => session.id !== sessionId));
-      if (activeSessionId === sessionId) {
-        activateDraft(buildDraftState(draftState, completeSourceIds), true);
-      }
-    } catch (error) {
-      setPanelError(error instanceof Error ? error.message : String(error));
-    } finally {
-      setDeletingSessionId(null);
-    }
-  }
-
-  async function handleFlagResponse(messageId: string) {
+  async function handleFlagResponse(messageId: string, reason: FlagReason) {
     if (!canFlagResponses || flaggingMessageId) {
       return;
     }
-    if (typeof window !== "undefined") {
-      const confirmed = window.confirm("Flag this response for owner/admin review?");
-      if (!confirmed) {
-        return;
-      }
-    }
+    setReportMenuMessageId(null);
     setFlaggingMessageId(messageId);
     try {
-      const result = await flagMessage(messageId, { reason: flagReason });
+      const result = await flagMessage(messageId, { reason });
       setMessages((current) =>
         current.map((pair) => {
           if (!pair.response || pair.response.message_id !== messageId) {
@@ -517,57 +660,11 @@ export function ChatPanel({ hubId, hubDescription, hubRole, sources, sourcesLoad
   return (
     <>
       <div className="chat">
-        <aside className="chat__sidebar">
-          <button type="button" className="chat__new-button" onClick={handleNewChat}>
-            <PlusIcon className="chat__new-icon" />
-            <span>New Chat</span>
-          </button>
-
-          <div className="chat__sidebar-list">
-            {sessionList.length === 0 ? (
-              <p className="chat__sidebar-empty">No saved chats yet.</p>
-            ) : (
-              sessionList.map((session) => (
-                <div
-                  key={session.id}
-                  className={`chat__session-item${activeSessionId === session.id ? " chat__session-item--active" : ""}`}
-                >
-                  <button
-                    type="button"
-                    className="chat__session-button"
-                    onClick={() => void openSession(session.id, session)}
-                  >
-                    <span className="chat__session-title">{session.title}</span>
-                    <span className="chat__session-time">{formatSessionTimestamp(session.last_message_at)}</span>
-                  </button>
-                  <button
-                    type="button"
-                    className="chat__session-delete"
-                    aria-label={`Delete ${session.title}`}
-                    onClick={() => void handleDeleteSession(session.id)}
-                    disabled={deletingSessionId === session.id}
-                  >
-                    <TrashIcon className="chat__session-delete-icon" />
-                  </button>
-                </div>
-              ))
-            )}
-          </div>
-        </aside>
-
         <section className="chat__main">
           <div className="chat__controls">
             <div className="chat__hub-info">
               <p className="chat__hub-name">{activeSessionTitle}</p>
-              {activeSessionId && (
-                <p className="chat__hub-desc">
-                  {hasUnsavedSessionControlChanges
-                    ? "Unsaved scope and source changes apply on the next successful send."
-                    : hubDescription ?? "Resume this chat in the current hub."}
-                </p>
-              )}
             </div>
-            <div className="chat__controls-divider" aria-hidden="true" />
             <div className="chat__controls-right">
               <SourceSelector
                 sources={sources}
@@ -577,33 +674,17 @@ export function ChatPanel({ hubId, hubDescription, hubRole, sources, sourcesLoad
                 onSelectAllSources={handleSelectAllSources}
                 onClearSourceSelection={handleClearSourceSelection}
               />
-              <div className="scope-selector" ref={scopeRef} data-open={scopeOpen || undefined}>
-                <button
-                  type="button"
-                  className="scope-selector__toggle"
-                  aria-expanded={scopeOpen}
-                  aria-haspopup="listbox"
-                  onClick={() => setScopeOpen((current) => !current)}
-                >
-                  <span>{SCOPE_OPTIONS.find((option) => option.value === scope)?.label}</span>
-                  <ChevronDownIcon className="scope-selector__chevron" />
-                </button>
-                {scopeOpen && (
-                  <div className="scope-selector__dropdown" role="listbox">
-                    {SCOPE_OPTIONS.map((option) => (
-                      <button
-                        key={option.value}
-                        type="button"
-                        role="option"
-                        aria-selected={scope === option.value}
-                        className={`scope-selector__option${scope === option.value ? " scope-selector__option--active" : ""}`}
-                        onClick={() => handleScopeChange(option.value)}
-                      >
-                        {option.label}
-                      </button>
-                    ))}
-                  </div>
-                )}
+              <div className="chat__scope-pills">
+                {SCOPE_OPTIONS.map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    className={`chat__scope-pill${scope === option.value ? " chat__scope-pill--active" : ""}`}
+                    onClick={() => handleScopeChange(option.value)}
+                  >
+                    {option.label}
+                  </button>
+                ))}
               </div>
             </div>
           </div>
@@ -618,7 +699,19 @@ export function ChatPanel({ hubId, hubDescription, hubRole, sources, sourcesLoad
             {!isBootstrapping && !isLoadingSession && messages.length === 0 && (
               <div className="chat__empty">
                 <p className="chat__empty-text">Ask a question about your hub</p>
-                <p className="muted">Answers use the active chat&apos;s selected sources. Change scope only when you want broader context.</p>
+                <p className="muted">Caddie will search your selected sources for answers.</p>
+                <div className="chat__prompt-chips">
+                  {["Summarise the vault", "Key risks", "Give me an overview"].map((prompt) => (
+                    <button
+                      key={prompt}
+                      type="button"
+                      className="chat__prompt-chip"
+                      onClick={() => { setQuestion(prompt); textareaRef.current?.focus(); }}
+                    >
+                      {prompt}
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
 
@@ -628,8 +721,17 @@ export function ChatPanel({ hubId, hubDescription, hubRole, sources, sourcesLoad
                   <div className="chat__bubble chat__bubble--user">
                     {message.question}
                   </div>
+                  <div className="chat__avatar chat__avatar--user">
+                    <span className="chat__avatar-letter">{userInitial}</span>
+                  </div>
                 </div>
+                {message.timestamp && (
+                  <span className="chat__timestamp chat__timestamp--user">{formatMessageTime(message.timestamp)}</span>
+                )}
                 <div className="chat__message chat__message--ai">
+                  <div className="chat__avatar chat__avatar--ai">
+                    <span className="chat__avatar-letter">C</span>
+                  </div>
                   <div className="chat__bubble chat__bubble--ai">
                     {message.isLoading && (
                       <div className="chat__typing">
@@ -654,81 +756,98 @@ export function ChatPanel({ hubId, hubDescription, hubRole, sources, sourcesLoad
                           </p>
                         )}
                         {message.response.citations.length > 0 && (
-                          <div className="chat__citations">
-                            {message.response.citations.map((citation, index) => (
-                              <button
-                                key={`${citation.source_id}-${citation.chunk_index ?? index}`}
-                                className="chat__citation-chip"
-                                type="button"
-                                onClick={() => setActiveCitation(citation)}
-                              >
-                                <span className="chat__citation-num">[{index + 1}]</span>
-                                <span className="chat__citation-name">{getSourceName(citation.source_id)}</span>
-                              </button>
-                            ))}
+                          <div className="chat__sources-block">
+                            <span className="chat__sources-label">Sources</span>
+                            <div className="chat__citations">
+                              {message.response.citations.map((citation, index) => (
+                                <button
+                                  key={`${citation.source_id}-${citation.chunk_index ?? index}`}
+                                  className="chat__citation-chip"
+                                  type="button"
+                                  onClick={() => setActiveCitation(citation)}
+                                >
+                                  {getSourceName(citation.source_id)}
+                                </button>
+                              ))}
+                            </div>
                           </div>
                         )}
-                        {canFlagResponses && (
-                          <div className="chat__response-footer">
-                            {(message.response.flag_status === "resolved" || message.response.flag_status === "dismissed") && (
-                              <span className="chat__response-status muted">
-                                {message.response.flag_status === "resolved" ? "Moderated" : "Reviewed and dismissed"}
-                              </span>
-                            )}
-                            {(message.response.flag_status !== "open" && message.response.flag_status !== "in_review") && (
-                              <select
-                                value={flagReason}
-                                onChange={(event) => setFlagReason(event.target.value as FlagReason)}
-                                aria-label="Flag reason"
-                                disabled={flaggingMessageId === message.response.message_id}
-                              >
-                                {FLAG_REASON_OPTIONS.map((option) => (
-                                  <option key={option.value} value={option.value}>
-                                    {option.label}
-                                  </option>
-                                ))}
-                              </select>
-                            )}
-                            <button
-                              className={`chat__flag-button${
-                                message.response.flag_status === "open" || message.response.flag_status === "in_review"
-                                  ? " chat__flag-button--active"
-                                  : ""
-                              }`}
-                              type="button"
-                              onClick={() => void handleFlagResponse(message.response!.message_id)}
-                              disabled={
-                                flaggingMessageId === message.response.message_id ||
-                                message.response.flag_status === "open" ||
-                                message.response.flag_status === "in_review"
-                              }
-                              aria-label={
-                                message.response.flag_status === "open"
-                                  ? "Flagged"
-                                  : message.response.flag_status === "in_review"
-                                    ? "In review"
-                                    : flaggingMessageId === message.response.message_id
-                                      ? "Flagging..."
-                                      : "Flag response"
-                              }
-                              title={
-                                message.response.flag_status === "open"
-                                  ? "Flagged"
-                                  : message.response.flag_status === "in_review"
-                                    ? "In review"
-                                    : flaggingMessageId === message.response.message_id
-                                      ? "Flagging..."
-                                      : "Flag response"
-                              }
-                            >
-                              <FlagIcon className="chat__flag-button-icon" />
-                            </button>
-                          </div>
-                        )}
+                        <div className="chat__actions">
+                          <button
+                            type="button"
+                            className="chat__action-btn"
+                            onClick={() => navigator.clipboard.writeText(message.response!.answer)}
+                            aria-label="Copy result"
+                          >
+                            <ClipboardDocumentIcon className="chat__action-icon" />
+                            <span>Copy</span>
+                          </button>
+                          {canFlagResponses && (
+                            <>
+                              {(message.response.flag_status === "resolved" || message.response.flag_status === "dismissed") && (
+                                <span className="chat__response-status">
+                                  {message.response.flag_status === "resolved" ? "Moderated" : "Dismissed"}
+                                </span>
+                              )}
+                              {reportMenuMessageId === message.response.message_id ? (
+                                <div className="chat__report-reasons">
+                                  {FLAG_REASON_OPTIONS.map((option) => (
+                                    <button
+                                      key={option.value}
+                                      type="button"
+                                      className="chat__report-reason"
+                                      onClick={() => void handleFlagResponse(message.response!.message_id, option.value)}
+                                    >
+                                      {option.label}
+                                    </button>
+                                  ))}
+                                  <button
+                                    type="button"
+                                    className="chat__action-btn"
+                                    onClick={() => setReportMenuMessageId(null)}
+                                  >
+                                    Cancel
+                                  </button>
+                                </div>
+                              ) : (
+                                <button
+                                  type="button"
+                                  className={`chat__action-btn chat__report-btn${
+                                    message.response.flag_status === "open" || message.response.flag_status === "in_review"
+                                      ? " chat__report-btn--active"
+                                      : ""
+                                  }`}
+                                  onClick={() => setReportMenuMessageId(message.response!.message_id)}
+                                  disabled={
+                                    flaggingMessageId === message.response.message_id ||
+                                    message.response.flag_status === "open" ||
+                                    message.response.flag_status === "in_review"
+                                  }
+                                >
+                                  <FlagIcon className="chat__action-icon" />
+                                  <span>
+                                    {message.response.flag_status === "open"
+                                      ? "Flagged"
+                                      : message.response.flag_status === "in_review"
+                                        ? "In review"
+                                        : flaggingMessageId === message.response.message_id
+                                          ? "Reporting..."
+                                          : "Report"}
+                                  </span>
+                                </button>
+                              )}
+                            </>
+                          )}
+                        </div>
                       </>
                     )}
                   </div>
                 </div>
+                {!message.isLoading && message.timestamp && (
+                  <span className="chat__timestamp chat__timestamp--ai">
+                    {formatMessageTime(message.timestamp)}
+                  </span>
+                )}
               </div>
             ))}
             {panelError && (
@@ -743,7 +862,7 @@ export function ChatPanel({ hubId, hubDescription, hubRole, sources, sourcesLoad
                 Select at least one source above to send in this chat.
               </p>
             )}
-            <div className="chat__input-row">
+            <div className="chat__input-row" onClick={() => textareaRef.current?.focus()}>
               <textarea
                 ref={textareaRef}
                 className="chat__textarea"
@@ -764,6 +883,9 @@ export function ChatPanel({ hubId, hubDescription, hubRole, sources, sourcesLoad
               </button>
             </div>
           </form>
+          <p className="chat__disclaimer">
+            Caddie can make mistakes. Check important info.
+          </p>
         </section>
       </div>
 
@@ -790,15 +912,19 @@ export function ChatPanel({ hubId, hubDescription, hubRole, sources, sourcesLoad
                 Close
               </button>
             </div>
-            <p className="muted" style={{ whiteSpace: "pre-wrap" }}>
-              {activeCitation.snippet}
-            </p>
+            <div className="chat__modal-body">
+              <SourceExcerpt
+                snippet={activeCitation.snippet}
+                relevantQuotes={activeCitation.relevant_quotes}
+                paraphrasedQuotes={activeCitation.paraphrased_quotes}
+              />
+            </div>
           </div>
         </div>
       )}
     </>
   );
-}
+});
 
 function convertSessionMessagesToPairs(messages: SessionMessage[]): MessagePair[] {
   const pairs: MessagePair[] = [];
@@ -810,6 +936,7 @@ function convertSessionMessagesToPairs(messages: SessionMessage[]): MessagePair[
         response: null,
         error: null,
         isLoading: false,
+        timestamp: message.created_at,
       });
       continue;
     }
@@ -846,13 +973,6 @@ function normalizeSelectedSourceIds(selectedSourceIds: string[], completeSourceI
   return completeSourceIds.filter((sourceId) => selectedSet.has(sourceId));
 }
 
-function arraysEqual(left: string[], right: string[]): boolean {
-  if (left.length !== right.length) {
-    return false;
-  }
-  return left.every((value, index) => value === right[index]);
-}
-
 function upsertSessionSummary(
   sessions: ChatSessionSummary[],
   nextSession: ChatSessionSummary
@@ -874,13 +994,13 @@ function moveSessionToTop(sessions: ChatSessionSummary[], sessionId: string): Ch
   return [target, ...sessions.filter((session) => session.id !== sessionId)];
 }
 
-function formatSessionTimestamp(value: string): string {
+function formatMessageTime(value: string): string {
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return "";
-  }
-  return date.toLocaleDateString("en-IE", {
-    day: "2-digit",
-    month: "short",
-  });
+  if (Number.isNaN(date.getTime())) return "";
+  const now = new Date();
+  const isToday = date.toDateString() === now.toDateString();
+  const time = date.toLocaleTimeString("en-IE", { hour: "2-digit", minute: "2-digit" });
+  if (isToday) return time;
+  const day = date.toLocaleDateString("en-IE", { day: "2-digit", month: "short" });
+  return `${day} ${time}`;
 }

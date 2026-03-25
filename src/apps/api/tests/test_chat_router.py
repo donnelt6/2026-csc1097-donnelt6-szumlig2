@@ -142,3 +142,34 @@ def test_delete_chat_session(client, monkeypatch) -> None:
     resp = client.delete("/chat/sessions/11111111-1111-1111-1111-111111111111")
     assert resp.status_code == 204
     assert captured["session_id"] == "11111111-1111-1111-1111-111111111111"
+
+
+def test_rename_chat_session_rejects_non_owner(client, monkeypatch) -> None:
+    monkeypatch.setattr(
+        store_module.store,
+        "rename_chat_session",
+        lambda _client, user_id, session_id, title: (_ for _ in ()).throw(
+            PermissionError("Only the chat creator can modify this session.")
+        ),
+    )
+
+    resp = client.patch(
+        "/chat/sessions/11111111-1111-1111-1111-111111111111",
+        json={"title": "Updated title"},
+    )
+    assert resp.status_code == 403
+    assert resp.json()["detail"] == "Only the chat creator can modify this session."
+
+
+def test_delete_chat_session_rejects_non_owner(client, monkeypatch) -> None:
+    monkeypatch.setattr(
+        store_module.store,
+        "delete_chat_session",
+        lambda _client, user_id, session_id: (_ for _ in ()).throw(
+            PermissionError("Only the chat creator can modify this session.")
+        ),
+    )
+
+    resp = client.delete("/chat/sessions/11111111-1111-1111-1111-111111111111")
+    assert resp.status_code == 403
+    assert resp.json()["detail"] == "Only the chat creator can modify this session."

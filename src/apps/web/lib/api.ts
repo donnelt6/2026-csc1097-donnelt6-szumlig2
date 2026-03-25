@@ -205,6 +205,11 @@ export async function refreshSource(sourceId: string): Promise<{ status: string 
   return handle(res);
 }
 
+export async function listSourceChunks(sourceId: string): Promise<{ chunk_index: number; text: string }[]> {
+  const res = await authedFetch(`${API_BASE}/sources/${sourceId}/chunks`, { cache: "no-store" });
+  return handle(res);
+}
+
 export async function deleteSource(sourceId: string): Promise<void> {
   const res = await authedFetch(`${API_BASE}/sources/${sourceId}`, {
     method: "DELETE",
@@ -253,6 +258,17 @@ export async function getChatSessionMessages(sessionId: string, hubId: string): 
     { cache: "no-store" }
   );
   return handle<ChatSessionDetail>(res);
+}
+
+export async function renameChatSession(sessionId: string, title: string): Promise<void> {
+  const res = await authedFetch(`${API_BASE}/chat/sessions/${sessionId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ title }),
+  });
+  if (!res.ok) {
+    await handle(res);
+  }
 }
 
 export async function deleteChatSession(sessionId: string): Promise<void> {

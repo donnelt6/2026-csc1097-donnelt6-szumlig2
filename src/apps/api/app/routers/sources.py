@@ -7,6 +7,7 @@ from supabase import Client
 from ..schemas import (
     MembershipRole,
     Source,
+    SourceChunk,
     SourceCreate,
     SourceEnqueueResponse,
     SourceFailureRequest,
@@ -308,6 +309,30 @@ def get_source_status(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Source not found") from exc
     except APIError as exc:
         raise_postgrest_error(exc)
+
+
+@router.get(
+    "/{source_id}/chunks",
+    response_model=list[SourceChunk],
+    dependencies=[Depends(rate_limit_user_ip("sources:read", "rate_limit_read_per_minute"))],
+)
+def list_source_chunks(
+    source_id: UUID,
+    client: Client = Depends(get_supabase_user_client),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> list[SourceChunk]:
+    _ = current_user
+    try:
+        store.get_source(client, source_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Source not found") from exc
+    except APIError as exc:
+        raise_postgrest_error(exc)
+    try:
+        rows = store.list_source_chunks(client, str(source_id))
+    except APIError as exc:
+        raise_postgrest_error(exc)
+    return [SourceChunk(**row) for row in rows]
 
 
 @router.post(

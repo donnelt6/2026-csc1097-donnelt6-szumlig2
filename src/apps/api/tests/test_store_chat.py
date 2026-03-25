@@ -892,6 +892,38 @@ def test_chat_filters_by_selected_sources(monkeypatch) -> None:
     assert captured["source_ids"] == ["22222222-2222-2222-2222-222222222222"]
 
 
+def test_rename_chat_session_rejects_non_owner(monkeypatch) -> None:
+    monkeypatch.setattr(
+        store,
+        "_get_chat_session_row",
+        lambda client, session_id, include_deleted=False: {
+            "id": str(session_id),
+            "hub_id": "hub-1",
+            "created_by": "someone-else",
+            "deleted_at": None,
+        },
+    )
+
+    with pytest.raises(PermissionError, match="Only the chat creator can modify this session."):
+        store.rename_chat_session(object(), "user-1", "session-1", "Updated title")
+
+
+def test_delete_chat_session_rejects_non_owner(monkeypatch) -> None:
+    monkeypatch.setattr(
+        store,
+        "_get_chat_session_row",
+        lambda client, session_id, include_deleted=False: {
+            "id": str(session_id),
+            "hub_id": "hub-1",
+            "created_by": "someone-else",
+            "deleted_at": None,
+        },
+    )
+
+    with pytest.raises(PermissionError, match="Only the chat creator can modify this session."):
+        store.delete_chat_session(object(), "user-1", "session-1")
+
+
 def test_chat_caps_citations_at_three_and_stores_selected_order(monkeypatch) -> None:
     fake_client = FakeClient()
     persisted: dict[str, object] = {}
@@ -926,3 +958,37 @@ def test_chat_caps_citations_at_three_and_stores_selected_order(monkeypatch) -> 
     assert [citation.source_id for citation in persisted["assistant_citations"]] == [
         citation.source_id for citation in result.citations
     ]
+
+
+def test_chat_ignores_malformed_quote_keys_but_keeps_valid_quote_metadata(monkeypatch) -> None:
+    fake_client = FakeClient()
+    monkeypatch.setattr(store, "_embed_query", lambda text: [1.0, 0.0])
+    monkeypatch.setattr(
+        store,
+        "_match_chunks",
+        lambda client, hub_id, embedding, top_k, source_ids=None: [
+            _match(
+                "src-a",
+                snippet="Coursework submissions go through Moodle for this module.",
+                similarity=0.99,
+                chunk_index=0,
+            ),
+        ],
+    )
+    monkeypatch.setattr(
+        store,
+        "llm_client",
+        FakeLLMClient(
+            'Submit through Moodle. [1]\n'
+            'QUOTES: {"source_1": [{"paraphrase": "ignored", "quote": "bad key"}], '
+            '" 1 ": [{"paraphrase": "Use Moodle for submissions.", "quote": "submissions go through Moodle"}]}'
+        ),
+    )
+
+    payload = ChatRequest(hub_id="11111111-1111-1111-1111-111111111111", question="How do I submit coursework?")
+    result = store.chat(fake_client, "user-1", payload)
+
+    assert result.answer == "Submit through Moodle. [1]"
+    assert len(result.citations) == 1
+    assert result.citations[0].relevant_quotes == ["submissions go through Moodle"]
+    assert result.citations[0].paraphrased_quotes == ["Use Moodle for submissions."]

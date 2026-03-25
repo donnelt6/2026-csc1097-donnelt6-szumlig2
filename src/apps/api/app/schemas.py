@@ -62,6 +62,15 @@ class StrictModel(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
 
+def _trim_and_reject_blank(value: Optional[str]) -> Optional[str]:
+    if value is None:
+        return None
+    trimmed = value.strip()
+    if not trimmed:
+        raise ValueError("Value cannot be blank.")
+    return trimmed
+
+
 class Hub(BaseModel):
     id: str
     owner_id: str
@@ -91,6 +100,11 @@ class HubUpdate(StrictModel):
     description: Optional[str] = Field(default=None, max_length=500)
     icon_key: Optional[str] = Field(default=None)
     color_key: Optional[str] = Field(default=None)
+
+    @field_validator("name", mode="before")
+    @classmethod
+    def validate_name(cls, value: Optional[str]) -> Optional[str]:
+        return _trim_and_reject_blank(value)
 
 
 class CurrentUser(BaseModel):
@@ -246,6 +260,11 @@ class SourceStatusResponse(BaseModel):
     failure_reason: Optional[str] = None
 
 
+class SourceChunk(BaseModel):
+    chunk_index: int
+    text: str
+
+
 class SourceFailureRequest(StrictModel):
     failure_reason: str = Field(..., min_length=1, max_length=500)
 
@@ -283,6 +302,8 @@ class Citation(BaseModel):
     source_id: str
     snippet: str
     chunk_index: Optional[int] = None
+    relevant_quotes: Optional[List[str]] = None
+    paraphrased_quotes: Optional[List[str]] = None
 
 
 class ChatRequest(StrictModel):
@@ -435,6 +456,17 @@ class FlaggedChatDetail(BaseModel):
     question_message: SessionMessage
     flagged_message: SessionMessage
     revisions: List[MessageRevision] = Field(default_factory=list)
+
+
+class ChatSessionRenameRequest(StrictModel):
+    title: str = Field(..., min_length=1, max_length=80)
+
+    @field_validator("title", mode="before")
+    @classmethod
+    def validate_title(cls, value: str) -> str:
+        trimmed = _trim_and_reject_blank(value)
+        assert trimmed is not None
+        return trimmed
 
 
 class FaqEntry(BaseModel):

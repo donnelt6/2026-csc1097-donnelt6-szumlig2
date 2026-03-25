@@ -376,6 +376,16 @@ class SupabaseStore:
             raise KeyError("Source not found")
         return Source(**response.data[0])
 
+    def list_source_chunks(self, client: Client, source_id: str) -> List[dict]:
+        response = (
+            client.table("source_chunks")
+            .select("chunk_index, text")
+            .eq("source_id", str(source_id))
+            .order("chunk_index")
+            .execute()
+        )
+        return response.data or []
+
     def delete_source(self, client: Client, source_id: str) -> None:
         source = self.get_source(client, source_id)
         response = client.table("sources").delete().eq("id", str(source_id)).execute()
@@ -760,7 +770,7 @@ class SupabaseStore:
 
     def update_hub_access(self, client: Client, hub_id: str, user_id: str) -> None:
         response = (
-            client.table("hub_members")
+            self.service_client.table("hub_members")
             .update({"last_accessed_at": datetime.now(timezone.utc).isoformat()})
             .eq("hub_id", str(hub_id))
             .eq("user_id", str(user_id))
@@ -844,7 +854,7 @@ class SupabaseStore:
     ) -> Dict[str, Any]:
         query = (
             client.table("chat_sessions")
-            .select("id, hub_id, title, scope, source_ids, created_at, last_message_at, deleted_at")
+            .select("id, hub_id, created_by, title, scope, source_ids, created_at, last_message_at, deleted_at")
             .eq("id", str(session_id))
             .limit(1)
         )
@@ -854,6 +864,19 @@ class SupabaseStore:
         if not response.data:
             raise KeyError("Chat session not found")
         return response.data[0]
+
+    def _require_chat_session_owner(
+        self,
+        client: Client,
+        user_id: str,
+        session_id: str,
+        *,
+        include_deleted: bool = False,
+    ) -> Dict[str, Any]:
+        row = self._get_chat_session_row(client, session_id, include_deleted=include_deleted)
+        if str(row.get("created_by") or "") != str(user_id):
+            raise PermissionError("Only the chat creator can modify this session.")
+        return row
 
     def _list_session_messages(
         self,
@@ -1139,13 +1162,43 @@ class SupabaseStore:
             messages=[self._serialize_session_message(message, flag_metadata) for message in messages],
         )
 
+    def rename_chat_session(self, client: Client, user_id: str, session_id: str, title: str) -> None:
+        self._require_chat_session_owner(client, user_id, session_id)
+        self.service_client.table("chat_sessions").update(
+            {"title": title}
+        ).eq("id", str(session_id)).is_("deleted_at", "null").execute()
+
     def delete_chat_session(self, client: Client, user_id: str, session_id: str) -> None:
-        row = self._get_chat_session_row(client, session_id, include_deleted=True)
+        row = self._require_chat_session_owner(client, user_id, session_id, include_deleted=True)
         if str(row.get("deleted_at") or "").strip():
             return
         self.service_client.table("chat_sessions").update(
             {"deleted_at": datetime.now(timezone.utc).isoformat()}
         ).eq("id", str(session_id)).is_("deleted_at", "null").execute()
+
+    def _require_hub_access(self, user_id: str, hub_id: str) -> None:
+        hub_response = (
+            self.service_client.table("hubs")
+            .select("id, owner_id")
+            .eq("id", str(hub_id))
+            .limit(1)
+            .execute()
+        )
+        if not hub_response.data:
+            raise KeyError("Hub not found")
+        if str(hub_response.data[0].get("owner_id") or "") == str(user_id):
+            return
+
+        member_response = (
+            self.service_client.table("hub_members")
+            .select("accepted_at")
+            .eq("hub_id", str(hub_id))
+            .eq("user_id", str(user_id))
+            .limit(1)
+            .execute()
+        )
+        if not member_response.data or not member_response.data[0].get("accepted_at"):
+            raise PermissionError("Hub access required.")
 
     def flag_message(
         self,
@@ -1159,6 +1212,7 @@ class SupabaseStore:
             raise ValueError("Only assistant messages can be flagged.")
 
         session_row = self._get_chat_session_row(client, str(message_row["session_id"]))
+        self._require_hub_access(user_id, str(session_row["hub_id"]))
         existing = self._get_active_flag_case_for_message(message_id)
         if existing is not None:
             return FlagMessageResponse(
@@ -1724,7 +1778,16 @@ class SupabaseStore:
             "If the context is insufficient, say you don't have enough information. "
             "Cite sources inline using [n] that matches the context list, and only include citations when you are "
             "directly using the cited content. "
-            "If the user sends small talk or a greeting, respond politely and ask how you can help."
+            "If the user sends small talk or a greeting, respond politely and ask how you can help.\n\n"
+            "After your answer, on a new line, output QUOTES: followed by a JSON object.\n"
+            "For each citation number you used, provide an array of objects with two fields:\n"
+            '- "paraphrase": a short, clean summary of the point you are making (one sentence).\n'
+            '- "quote": copy a passage from the context that supports the point. '
+            "Copy it as closely as possible from the source text, even if messy or repetitive. "
+            "It does not need to be exact but should contain enough key words to locate the region.\n"
+            "Include all distinct pieces of information you used, not just one. Example:\n"
+            'QUOTES: {"1": [{"paraphrase": "clean summary of point", "quote": "approximate passage from context 1"}], '
+            '"3": [{"paraphrase": "another clean summary", "quote": "approximate passage from context 3"}]}'
         )
         user_prompt = f"Question: {question}\n\nContext:\n" + "\n".join(context_blocks)
 
@@ -1755,9 +1818,24 @@ class SupabaseStore:
             ],
             temperature=0.2,
         )
-        answer = completion.choices[0].message.content or ""
+        raw_answer = completion.choices[0].message.content or ""
         usage = completion.usage.model_dump() if completion.usage else None
-        final_citations = citations if _answer_has_citation(answer, len(context_blocks)) else []
+
+        answer, quotes = _extract_quotes(raw_answer)
+        for idx_str, pairs in quotes.items():
+            try:
+                citation_idx = int(str(idx_str).strip()) - 1
+            except (TypeError, ValueError):
+                continue
+            if 0 <= citation_idx < len(citations):
+                snippet = citations[citation_idx].snippet
+                verified = _match_quote_pairs_to_snippet(pairs, snippet)
+                if verified:
+                    citations[citation_idx].relevant_quotes = [v[0] for v in verified]
+                    citations[citation_idx].paraphrased_quotes = [v[1] for v in verified]
+
+        has_citations = _answer_has_citation(answer, len(context_blocks)) or bool(quotes)
+        final_citations = citations if has_citations else []
         return answer, final_citations, usage
 
     def chat(self, client: Client, user_id: str, payload: ChatRequest) -> ChatResponse:
@@ -2914,6 +2992,183 @@ def _parse_steps_from_text(raw: str, max_count: int) -> List[Dict[str, str]]:
             break
         _add_step("", line)
     return steps
+
+
+class _QuotePair:
+    """A paraphrase + approximate direct quote pair from the LLM."""
+
+    __slots__ = ("paraphrase", "quote")
+
+    def __init__(self, paraphrase: str, quote: str) -> None:
+        self.paraphrase = paraphrase
+        self.quote = quote
+
+
+def _extract_quotes(raw_answer: str) -> tuple[str, Dict[str, List[_QuotePair]]]:
+    """Split the QUOTES: JSON block from the answer.
+
+    Supports both the new paired format (objects with paraphrase+quote)
+    and the legacy format (plain string arrays) for backwards compatibility.
+    """
+    marker = "QUOTES:"
+    idx = raw_answer.rfind(marker)
+    if idx == -1:
+        return raw_answer.strip(), {}
+    answer = raw_answer[:idx].strip()
+    json_part = raw_answer[idx + len(marker) :].strip()
+    try:
+        quotes = json.loads(json_part)
+        if isinstance(quotes, dict):
+            result: Dict[str, List[_QuotePair]] = {}
+            for k, v in quotes.items():
+                pairs: List[_QuotePair] = []
+                items = v if isinstance(v, list) else [v]
+                for item in items:
+                    if isinstance(item, dict):
+                        paraphrase = str(item.get("paraphrase") or "").strip()
+                        quote = str(item.get("quote") or "").strip()
+                        if quote:
+                            pairs.append(_QuotePair(paraphrase=paraphrase, quote=quote))
+                    elif isinstance(item, str):
+                        # Legacy format: plain string treated as quote only
+                        if item.strip():
+                            pairs.append(_QuotePair(paraphrase="", quote=item.strip()))
+                if pairs:
+                    result[str(k)] = pairs
+            return answer, result
+    except (json.JSONDecodeError, ValueError):
+        pass
+    return answer, {}
+
+
+def _match_quote_pairs_to_snippet(
+    pairs: list,
+    snippet: str,
+    threshold: float = 0.45,
+) -> list[tuple[str, str]]:
+    """Match all quote pairs to distinct regions of the snippet simultaneously.
+
+    Instead of greedily assigning one quote at a time (where an early quote can
+    steal the best region from a later quote), this finds the top candidate
+    regions for every quote, then picks the global assignment that maximises
+    total score with no overlapping regions.
+
+    Returns list of (matched_snippet_text, paraphrase) in the original pair order.
+    """
+    snippet_lower = snippet.lower()
+    s_words = snippet_lower.split()
+    if not s_words:
+        return []
+
+    _stop = frozenset(
+        "a an the is are was were be been being have has had do does did "
+        "will would could should may might shall can to of in for on with "
+        "at by from it its this that and or but not no if so as than you "
+        "your he she they them their we our".split()
+    )
+
+    # Pre-compute word char offsets once
+    word_starts: list[int] = []
+    word_ends: list[int] = []
+    pos = 0
+    for w in s_words:
+        idx = snippet_lower.index(w, pos)
+        word_starts.append(idx)
+        word_ends.append(idx + len(w))
+        pos = idx + len(w)
+
+    # For each pair, find top-k candidate regions (scored)
+    # Each candidate: (score, char_start, char_end, snippet_text)
+    _Candidate = tuple  # (score, char_start, char_end, text)
+    all_candidates: list[list[_Candidate]] = []
+
+    for pair in pairs:
+        q = (pair.quote or "").strip()
+        if not q:
+            all_candidates.append([])
+            continue
+
+        candidates: list[_Candidate] = []
+
+        # Try exact match first — gets score 1.0
+        q_lower = q.lower()
+        search_pos = 0
+        while search_pos < len(snippet_lower):
+            idx = snippet_lower.find(q_lower, search_pos)
+            if idx == -1:
+                break
+            candidates.append((1.0, idx, idx + len(q_lower), q))
+            search_pos = idx + 1
+
+        # Fuzzy candidates via sliding window
+        q_words_list = q.lower().split()
+        if len(q_words_list) >= 3:
+            q_content = {w for w in q_words_list if w not in _stop}
+            if len(q_content) < 2:
+                q_content = set(q_words_list)
+
+            min_win = max(3, len(q_words_list) // 2)
+            max_win = min(len(s_words), len(q_words_list) * 4)
+
+            scored_windows: list[tuple[float, int, int]] = []
+            for win_size in range(min_win, max_win + 1, max(1, (max_win - min_win) // 8)):
+                for start in range(0, len(s_words) - win_size + 1, max(1, win_size // 5)):
+                    window_content = {w for w in s_words[start : start + win_size] if w not in _stop}
+                    overlap = len(q_content & window_content)
+                    recall = overlap / len(q_content)
+                    precision = overlap / max(len(window_content), 1)
+                    score = recall * 0.7 + precision * 0.3
+                    if score >= threshold:
+                        scored_windows.append((score, start, start + win_size))
+
+            # Keep top 5 fuzzy candidates to limit search space
+            scored_windows.sort(key=lambda x: x[0], reverse=True)
+            for score, ws, we in scored_windows[:5]:
+                cs = word_starts[ws]
+                ce = word_ends[min(we - 1, len(word_ends) - 1)]
+                candidates.append((score, cs, ce, snippet[cs:ce]))
+
+        all_candidates.append(candidates)
+
+    # Greedy-by-best-score global assignment: sort ALL candidates across
+    # all pairs by score descending, assign each to its pair if the region
+    # hasn't been claimed yet.
+    # This ensures the highest-confidence matches get their preferred region
+    # before weaker matches.
+    assignment: dict[int, _Candidate] = {}
+    claimed_ranges: list[tuple[int, int]] = []
+
+    # Build flat list: (score, pair_index, candidate)
+    flat: list[tuple[float, int, _Candidate]] = []
+    for pair_idx, cands in enumerate(all_candidates):
+        for cand in cands:
+            flat.append((cand[0], pair_idx, cand))
+    flat.sort(key=lambda x: x[0], reverse=True)
+
+    for _score, pair_idx, cand in flat:
+        if pair_idx in assignment:
+            continue
+        c_start, c_end = cand[1], cand[2]
+        # Check overlap with already-claimed regions
+        overlaps = False
+        for cs, ce in claimed_ranges:
+            if c_start < ce and c_end > cs:
+                overlaps = True
+                break
+        if not overlaps:
+            assignment[pair_idx] = cand
+            claimed_ranges.append((c_start, c_end))
+        if len(assignment) == len(pairs):
+            break
+
+    # Build result in original order
+    result: list[tuple[str, str]] = []
+    for i, pair in enumerate(pairs):
+        if i in assignment:
+            matched_text = assignment[i][3]
+            paraphrase = (pair.paraphrase or matched_text).strip()
+            result.append((matched_text, paraphrase))
+    return result
 
 
 def _answer_has_citation(answer: str, max_index: int) -> bool:

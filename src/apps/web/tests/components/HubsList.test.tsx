@@ -244,6 +244,62 @@ describe("HubsList", () => {
     });
   });
 
+  it("disables save and blocks submission when the trimmed hub name is blank", async () => {
+    const user = userEvent.setup();
+    vi.mocked(listHubs).mockResolvedValue([
+      {
+        id: "hub-1",
+        owner_id: "user-1",
+        name: "Launch Hub",
+        description: "Docs",
+        icon_key: "rocket",
+        color_key: "blue",
+        created_at: "2025-01-01T00:00:00Z",
+        role: "owner",
+      },
+    ]);
+
+    renderWithQueryClient(<HubsList searchQuery="" filters={defaultFilters} />);
+
+    await screen.findByText("Launch Hub");
+    await user.click(screen.getByLabelText("Hub options for Launch Hub"));
+    await user.click(screen.getByRole("button", { name: "Edit hub" }));
+    await user.clear(screen.getByLabelText("Hub title"));
+    await user.type(screen.getByLabelText("Hub title"), "   ");
+
+    const saveButton = screen.getByRole("button", { name: "Save hub" });
+    expect(saveButton).toBeDisabled();
+    expect(updateHub).not.toHaveBeenCalled();
+  });
+
+  it("shows an inline error when saving hub changes fails", async () => {
+    const user = userEvent.setup();
+    vi.mocked(listHubs).mockResolvedValue([
+      {
+        id: "hub-1",
+        owner_id: "user-1",
+        name: "Launch Hub",
+        description: "Docs",
+        icon_key: "rocket",
+        color_key: "blue",
+        created_at: "2025-01-01T00:00:00Z",
+        role: "owner",
+      },
+    ]);
+    vi.mocked(updateHub).mockRejectedValue(new Error("Owner or admin role required."));
+
+    renderWithQueryClient(<HubsList searchQuery="" filters={defaultFilters} />);
+
+    await screen.findByText("Launch Hub");
+    await user.click(screen.getByLabelText("Hub options for Launch Hub"));
+    await user.click(screen.getByRole("button", { name: "Edit hub" }));
+    await user.clear(screen.getByLabelText("Hub title"));
+    await user.type(screen.getByLabelText("Hub title"), "Launch Hub Updated");
+    await user.click(screen.getByRole("button", { name: "Save hub" }));
+
+    expect(await screen.findByText("Failed to save hub changes: Owner or admin role required.")).toBeInTheDocument();
+  });
+
   it("only shows the appearance menu for owners and admins", async () => {
     vi.mocked(listHubs).mockResolvedValue([
       {
@@ -363,6 +419,31 @@ describe("HubsList", () => {
     expect(confirmSpy).toHaveBeenCalledWith('Unarchive "Owner Hub"? It will appear in Active again.');
     expect(unarchiveHub).toHaveBeenCalledWith("hub-owner");
 
+    confirmSpy.mockRestore();
+  });
+
+  it("shows an inline error when archiving fails", async () => {
+    const user = userEvent.setup();
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    vi.mocked(listHubs).mockResolvedValue([
+      {
+        id: "hub-owner",
+        owner_id: "user-1",
+        name: "Owner Hub",
+        description: "Docs",
+        created_at: "2025-01-01T00:00:00Z",
+        role: "owner",
+      },
+    ]);
+    vi.mocked(archiveHub).mockRejectedValue(new Error("Owner role required."));
+
+    renderWithQueryClient(<HubsList searchQuery="" filters={defaultFilters} />);
+
+    await screen.findByText("Owner Hub");
+    await user.click(screen.getByLabelText("Hub options for Owner Hub"));
+    await user.click(screen.getByRole("button", { name: "Archive hub" }));
+
+    expect(await screen.findByText("Failed to archive hub: Owner role required.")).toBeInTheDocument();
     confirmSpy.mockRestore();
   });
 

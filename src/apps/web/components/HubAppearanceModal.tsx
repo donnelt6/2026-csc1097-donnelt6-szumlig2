@@ -18,6 +18,7 @@ interface HubAppearanceModalProps {
   subtitle: string;
   submitLabel: string;
   isSubmitting?: boolean;
+  isSubmitDisabled?: boolean;
   onClose: () => void;
   onSubmit: (evt: React.FormEvent<HTMLFormElement>) => void;
   name?: string;
@@ -38,6 +39,7 @@ export function HubAppearanceModal({
   subtitle,
   submitLabel,
   isSubmitting = false,
+  isSubmitDisabled = false,
   onClose,
   onSubmit,
   name = "",
@@ -104,7 +106,7 @@ export function HubAppearanceModal({
                       autoFocus
                       aria-label="Hub title"
                     />
-                    {mode === "edit" ? (
+                    {mode === "edit" && subtitle ? (
                       <p className="modal__subtitle">{subtitle}</p>
                     ) : null}
                   </div>
@@ -200,7 +202,7 @@ export function HubAppearanceModal({
             <button
               className={`button button--secondary modal__footer-button${showTextFields ? " modal__footer-button--full modal__footer-button--create" : ""}`}
               type="submit"
-              disabled={isSubmitting}
+              disabled={isSubmitting || isSubmitDisabled}
             >
               {isSubmitting ? (mode === "create" ? "Creating..." : "Saving...") : submitLabel}
             </button>

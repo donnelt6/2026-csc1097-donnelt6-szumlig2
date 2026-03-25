@@ -1,213 +1,30 @@
 'use client';
 
-import { useState, useRef, useEffect } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
-import { useIsFetching, useQueryClient, useMutation } from "@tanstack/react-query";
-import { HubAppearanceModal } from "../components/HubAppearanceModal";
-import { HubsList } from "../components/HubsList";
-import { HubsToolbar, type HubsFilterState } from "../components/HubsToolbar";
-import { createHub } from "../lib/api";
-import {
-  DEFAULT_HUB_COLOR_KEY,
-  DEFAULT_HUB_ICON_KEY,
-  type HubColorKey,
-  type HubIconKey,
-} from "../lib/hubAppearance";
-import { useSearch } from "../lib/SearchContext";
+import { Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { DashboardHome } from '../components/dashboard/DashboardHome';
+import { DashboardCalendar } from '../components/dashboard/DashboardCalendar';
+import { DashboardActivity } from '../components/dashboard/DashboardActivity';
 
-const NAME_MAX = 40;
-const DESC_MAX = 200;
-
-const MIN_HUBS_LOADING_MS = 1500;
-const LOADING_FADE_MS = 0;
-
-export default function HomePage() {
-  const queryClient = useQueryClient();
+function HomeContent() {
   const searchParams = useSearchParams();
-  const router = useRouter();
-  const hubsFetching = useIsFetching({ queryKey: ["hubs"] });
-  const [minDelayElapsed, setMinDelayElapsed] = useState(true);
-  const delayTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const exitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const hubsLoaded = queryClient.getQueryData(["hubs"]) !== undefined;
-  const isInitialHubsLoading = hubsFetching > 0 && !hubsLoaded;
-  const [overlayRendered, setOverlayRendered] = useState(false);
-  const [overlayVisible, setOverlayVisible] = useState(false);
-
-  const { searchQuery } = useSearch();
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
-  const [createModalOpen, setCreateModalOpen] = useState(false);
-  const [selectedIconKey, setSelectedIconKey] = useState<HubIconKey>(DEFAULT_HUB_ICON_KEY);
-  const [selectedColorKey, setSelectedColorKey] = useState<HubColorKey>(DEFAULT_HUB_COLOR_KEY);
-  const [hubCount, setHubCount] = useState(0);
-  const [paginationVisible, setPaginationVisible] = useState(false);
-  const [filters, setFilters] = useState<HubsFilterState>({
-    sortField: "accessed",
-    sortDirection: "desc",
-    selectedRoles: new Set(),
-    typeTab: "all",
-    statusTab: "active",
-  });
-
-  const createMutation = useMutation({
-    mutationFn: (payload: { name: string; description?: string; icon_key?: string; color_key?: string }) => createHub(payload),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["hubs"] });
-      setName("");
-      setDescription("");
-      setSelectedIconKey(DEFAULT_HUB_ICON_KEY);
-      setSelectedColorKey(DEFAULT_HUB_COLOR_KEY);
-      setCreateModalOpen(false);
-    },
-  });
-
-  const onSubmit = (evt: React.FormEvent) => {
-    evt.preventDefault();
-    if (!name.trim()) return;
-    createMutation.mutate({
-      name,
-      description,
-      icon_key: selectedIconKey,
-      color_key: selectedColorKey,
-    });
-  };
-
-  useEffect(() => {
-    if (isInitialHubsLoading) {
-      if (!delayTimerRef.current) {
-        setMinDelayElapsed(false);
-        delayTimerRef.current = setTimeout(() => {
-          setMinDelayElapsed(true);
-          delayTimerRef.current = null;
-        }, MIN_HUBS_LOADING_MS);
-      }
-      return;
-    }
-    if (!delayTimerRef.current) {
-      setMinDelayElapsed(true);
-    }
-  }, [isInitialHubsLoading]);
-
-  useEffect(() => {
-    return () => {
-      if (delayTimerRef.current) {
-        clearTimeout(delayTimerRef.current);
-        delayTimerRef.current = null;
-      }
-      if (exitTimerRef.current) {
-        clearTimeout(exitTimerRef.current);
-        exitTimerRef.current = null;
-      }
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!overlayRendered) return;
-    const prevOverflow = document.body.style.overflow;
-    const prevPaddingRight = document.body.style.paddingRight;
-    const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
-    document.body.style.overflow = "hidden";
-    if (scrollbarWidth > 0) {
-      document.body.style.paddingRight = `${scrollbarWidth}px`;
-    }
-    return () => {
-      document.body.style.overflow = prevOverflow;
-      document.body.style.paddingRight = prevPaddingRight;
-    };
-  }, [overlayRendered]);
-
-  const showLoadingScreen = isInitialHubsLoading || !minDelayElapsed;
-
-  useEffect(() => {
-    if (showLoadingScreen) {
-      if (exitTimerRef.current) {
-        clearTimeout(exitTimerRef.current);
-        exitTimerRef.current = null;
-      }
-      setOverlayRendered(true);
-      setOverlayVisible(true);
-      return;
-    }
-    if (!overlayRendered) return;
-    setOverlayVisible(false);
-    exitTimerRef.current = setTimeout(() => {
-      setOverlayRendered(false);
-      exitTimerRef.current = null;
-    }, LOADING_FADE_MS);
-  }, [showLoadingScreen, overlayRendered]);
-
-  useEffect(() => {
-    if (searchParams.get('create') === 'true') {
-      setCreateModalOpen(true);
-      router.replace('/', { scroll: false });
-    }
-  }, [searchParams, router]);
+  const tab = searchParams.get('tab') ?? 'home';
 
   return (
-    <>
-      {overlayRendered && (
-        <div
-          className={`loading-overlay${overlayVisible ? " is-visible" : ""}`}
-          role="status"
-          aria-live="polite"
-          aria-busy="true"
-        >
-          <div className="loading-card">
-            <span className="loading-spinner" aria-hidden="true" />
-            <p className="loading-text">Loading your hubs...</p>
-          </div>
-        </div>
-      )}
+    <main className="page-content page-content--dash">
+      <div className="dash-page">
+        {tab === 'home' && <DashboardHome />}
+        {tab === 'calendar' && <DashboardCalendar />}
+        {tab === 'activity' && <DashboardActivity />}
+      </div>
+    </main>
+  );
+}
 
-      <main className="page-content page-content--hubs">
-        <div className={`content-inner hubs-page${paginationVisible ? " hubs-page--with-pagination" : ""}`}>
-          <div className="hubs-page-header">
-            <div className="hubs-page-title-row">
-              <div className="hubs-page-title-section">
-                <h2 className="hubs-page-title">Your Hubs</h2>
-                <p className="hubs-page-subtitle">
-                  Manage your documentation environments and onboarding resources.
-                </p>
-              </div>
-              <HubsToolbar
-                filters={filters}
-                onFiltersChange={setFilters}
-                hubCount={hubCount}
-              />
-            </div>
-          </div>
-
-          <HubsList
-            searchQuery={searchQuery}
-            filters={filters}
-            onHubCountChange={setHubCount}
-            onPaginationVisibleChange={setPaginationVisible}
-            onCreateHub={() => setCreateModalOpen(true)}
-          />
-        </div>
-      </main>
-      {createModalOpen && (
-        <HubAppearanceModal
-          mode="create"
-          title="Create a new hub"
-          subtitle="Shape the look of your hub before you add docs, sources, and AI chat."
-          submitLabel="Create hub"
-          isSubmitting={createMutation.isPending}
-          onClose={() => setCreateModalOpen(false)}
-          onSubmit={onSubmit}
-          name={name}
-          description={description}
-          onNameChange={setName}
-          onDescriptionChange={setDescription}
-          iconKey={selectedIconKey}
-          colorKey={selectedColorKey}
-          onIconKeyChange={setSelectedIconKey}
-          onColorKeyChange={setSelectedColorKey}
-          nameMax={NAME_MAX}
-          descriptionMax={DESC_MAX}
-        />
-      )}
-    </>
+export default function HomePage() {
+  return (
+    <Suspense>
+      <HomeContent />
+    </Suspense>
   );
 }

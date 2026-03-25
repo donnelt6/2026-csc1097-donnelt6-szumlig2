@@ -1,6 +1,6 @@
 'use client';
 
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   DocumentTextIcon,
@@ -9,6 +9,7 @@ import {
   DocumentPlusIcon,
   MagnifyingGlassIcon,
   XMarkIcon,
+  EyeIcon,
 } from "@heroicons/react/24/outline";
 import {
   createSource,
@@ -18,6 +19,7 @@ import {
   deleteSource,
   enqueueSource,
   failSource,
+  listSourceChunks,
   refreshSource,
 } from "../lib/api";
 import { SuggestedSourcesPanel } from "./SuggestedSourcesPanel";
@@ -46,6 +48,7 @@ export function UploadPanel({
   onSelectAllSources = () => undefined,
   onClearSourceSelection = () => undefined,
 }: Props) {
+  const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
   const [url, setUrl] = useState("");
@@ -67,12 +70,19 @@ export function UploadPanel({
   const [pageSize, setPageSize] = useState(10);
   const [page, setPage] = useState(0);
   const [isDeletingFailed, setIsDeletingFailed] = useState(false);
+  const [viewingSource, setViewingSource] = useState<Source | null>(null);
+  const [viewChunks, setViewChunks] = useState<{ chunk_index: number; text: string }[]>([]);
+  const [isLoadingChunks, setIsLoadingChunks] = useState(false);
 
   useEffect(() => {
     if (!statusMessage) return;
     const timeout = window.setTimeout(() => setStatusMessage(null), 5000);
     return () => window.clearTimeout(timeout);
   }, [statusMessage]);
+
+  const updateSourcesCache = (updater: (current: Source[]) => Source[]) => {
+    queryClient.setQueryData<Source[]>(["sources", hubId], (current) => updater(current ?? []));
+  };
 
 
   const mutation = useMutation({
@@ -124,6 +134,14 @@ export function UploadPanel({
     }
     setIsRetrying(true);
     setRetryingSourceId(sourceId);
+    const previousSources = queryClient.getQueryData<Source[]>(["sources", hubId]) ?? [];
+    updateSourcesCache((current) =>
+      current.map((source) =>
+        source.id === sourceId
+          ? { ...source, status: "queued", failure_reason: undefined }
+          : source
+      )
+    );
     try {
       const { upload_url } = await createSourceUploadUrl(sourceId);
       const contentType = resolveContentType(retryFile);
@@ -140,6 +158,7 @@ export function UploadPanel({
       setStatusMessage({ text: "Upload requeued. Processing will start shortly.", type: "success" });
       onRefresh();
     } catch (err) {
+      queryClient.setQueryData(["sources", hubId], previousSources);
       const reason = clampFailureReason(err);
       await failSource(sourceId, reason).catch(() => undefined);
       onRefresh();
@@ -158,6 +177,8 @@ export function UploadPanel({
       if (!confirmed) return;
     }
     setDeletingSourceId(sourceId);
+    const previousSources = queryClient.getQueryData<Source[]>(["sources", hubId]) ?? [];
+    updateSourcesCache((current) => current.filter((source) => source.id !== sourceId));
     try {
       await deleteSource(sourceId);
       setPage(0);
@@ -166,9 +187,10 @@ export function UploadPanel({
         const { [sourceId]: _unused, ...rest } = prev;
         return rest;
       });
-      setStatusMessage({ text: "Source deleted.", type: "success" });
       onRefresh();
+      setStatusMessage({ text: "Source deleted.", type: "success" });
     } catch (err) {
+      queryClient.setQueryData(["sources", hubId], previousSources);
       setStatusMessage({ text: (err as Error).message, type: "error" });
     } finally {
       setDeletingSourceId(null);
@@ -185,6 +207,9 @@ export function UploadPanel({
       if (!confirmed) return;
     }
     setIsDeletingFailed(true);
+    const failedIds = new Set(failed.map((source) => source.id));
+    const previousSources = queryClient.getQueryData<Source[]>(["sources", hubId]) ?? [];
+    updateSourcesCache((current) => current.filter((source) => !failedIds.has(source.id)));
     try {
       const results = await Promise.allSettled(failed.map((s) => deleteSource(s.id)));
       const succeeded = results.filter((r) => r.status === "fulfilled").length;
@@ -198,6 +223,15 @@ export function UploadPanel({
       if (failedCount === 0) {
         setStatusMessage({ text: `${succeeded} failed source${succeeded === 1 ? "" : "s"} deleted.`, type: "success" });
       } else {
+        const deletedIds = new Set(
+          failed
+            .filter((_, index) => results[index].status === "fulfilled")
+            .map((source) => source.id)
+        );
+        queryClient.setQueryData(
+          ["sources", hubId],
+          previousSources.filter((source) => !deletedIds.has(source.id))
+        );
         setStatusMessage({ text: `${succeeded} deleted, ${failedCount} could not be removed.`, type: "error" });
       }
       onRefresh();
@@ -259,11 +293,20 @@ export function UploadPanel({
 
   const handleRefreshSource = async (sourceId: string) => {
     setRefreshingSourceId(sourceId);
+    const previousSources = queryClient.getQueryData<Source[]>(["sources", hubId]) ?? [];
+    updateSourcesCache((current) =>
+      current.map((source) =>
+        source.id === sourceId
+          ? { ...source, status: "queued", failure_reason: undefined }
+          : source
+      )
+    );
     try {
       await refreshSource(sourceId);
       setStatusMessage({ text: "Refresh queued. Latest content will be ingested.", type: "success" });
       onRefresh();
     } catch (err) {
+      queryClient.setQueryData(["sources", hubId], previousSources);
       setStatusMessage({ text: (err as Error).message, type: "error" });
     } finally {
       setRefreshingSourceId(null);
@@ -272,14 +315,37 @@ export function UploadPanel({
 
   const handleReprocessSource = async (sourceId: string) => {
     setReprocessingSourceId(sourceId);
+    const previousSources = queryClient.getQueryData<Source[]>(["sources", hubId]) ?? [];
+    updateSourcesCache((current) =>
+      current.map((source) =>
+        source.id === sourceId
+          ? { ...source, status: "queued", failure_reason: undefined }
+          : source
+      )
+    );
     try {
       await enqueueSource(sourceId);
       setStatusMessage({ text: "Reprocessing queued.", type: "success" });
       onRefresh();
     } catch (err) {
+      queryClient.setQueryData(["sources", hubId], previousSources);
       setStatusMessage({ text: (err as Error).message, type: "error" });
     } finally {
       setReprocessingSourceId(null);
+    }
+  };
+
+  const handleViewChunks = async (source: Source) => {
+    setViewingSource(source);
+    setViewChunks([]);
+    setIsLoadingChunks(true);
+    try {
+      const chunks = await listSourceChunks(source.id);
+      setViewChunks(chunks);
+    } catch {
+      setViewChunks([]);
+    } finally {
+      setIsLoadingChunks(false);
     }
   };
 
@@ -536,6 +602,16 @@ export function UploadPanel({
                   </div>
                 </div>
                 <div className="sources__card-right">
+                  {source.status === "complete" && (
+                    <button
+                      className="button--small sources__view-btn"
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); handleViewChunks(source); }}
+                    >
+                      <EyeIcon className="sources__view-icon" />
+                      View
+                    </button>
+                  )}
                   {source.status === "failed" && (
                     <div className="sources__card-actions">
                       {isRemoteSource ? (
@@ -612,6 +688,31 @@ export function UploadPanel({
           onPageChange={setPage}
           onPageSizeChange={(size) => { setPageSize(size); setPage(0); }}
         />
+      )}
+
+      {viewingSource && (
+        <div className="modal-backdrop" onClick={() => setViewingSource(null)}>
+          <div className="modal sources__chunks-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="sources__chunks-header">
+              <h3 className="sources__chunks-title">{viewingSource.original_name}</h3>
+              <button type="button" className="sources__chunks-close" onClick={() => setViewingSource(null)} aria-label="Close">
+                <XMarkIcon className="sources__chunks-close-icon" />
+              </button>
+            </div>
+            <div className="sources__chunks-body">
+              {isLoadingChunks && <p className="sources__chunks-loading">Loading chunks...</p>}
+              {!isLoadingChunks && viewChunks.length === 0 && (
+                <p className="sources__chunks-empty">No chunks found for this source.</p>
+              )}
+              {!isLoadingChunks && viewChunks.map((chunk) => (
+                <div key={chunk.chunk_index} className="sources__chunk">
+                  <span className="sources__chunk-index">Chunk {chunk.chunk_index + 1}</span>
+                  <p className="sources__chunk-text">{chunk.text}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

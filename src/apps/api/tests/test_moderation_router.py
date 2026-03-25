@@ -71,6 +71,22 @@ def test_flag_message_returns_existing_case_with_200(client, monkeypatch) -> Non
     assert resp.json()["flag_case"]["id"] == "flag-1"
 
 
+def test_flag_message_rejects_user_without_hub_access(client, monkeypatch) -> None:
+    monkeypatch.setattr(
+        store_module.store,
+        "flag_message",
+        lambda _client, user_id, message_id, payload: (_ for _ in ()).throw(PermissionError("Hub access required.")),
+    )
+
+    resp = client.post(
+        "/messages/11111111-1111-1111-1111-111111111111/flag",
+        json={"reason": "incorrect"},
+    )
+
+    assert resp.status_code == 403
+    assert resp.json()["detail"] == "Hub access required."
+
+
 def test_list_flagged_chats_returns_queue(client, monkeypatch) -> None:
     queue = [
         FlaggedChatQueueItem(
