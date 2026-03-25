@@ -18,7 +18,6 @@ import {
   TrashIcon,
   ShieldCheckIcon,
 } from '@heroicons/react/24/outline';
-
 import { useHubTab } from '../../lib/HubTabContext';
 import { useCurrentHub } from '../../lib/CurrentHubContext';
 import { useSearch } from '../../lib/SearchContext';
@@ -345,21 +344,23 @@ export function Sidebar({ state, onStateChange, mobileOpen, onMobileClose, onCre
       </nav>
 
       <div className="sidebar-footer">
-        <button
-          className="sidebar-item sidebar-new-hub-button"
-          onClick={() => {
-            if (onCreateHub) {
-              onCreateHub();
-            } else {
-              router.push('/hubs?create=true');
-            }
-            onMobileClose?.();
-          }}
-          title={isCollapsed ? 'New Hub' : undefined}
-        >
-          <PlusIcon className="sidebar-item-icon" />
-          <span className="sidebar-item-text">New Hub</span>
-        </button>
+        {!isOnHub && (
+          <button
+            className="sidebar-item sidebar-new-hub-button"
+            onClick={() => {
+              if (onCreateHub) {
+                onCreateHub();
+              } else {
+                router.push('/hubs?create=true');
+              }
+              onMobileClose?.();
+            }}
+            title={isCollapsed ? 'New Hub' : undefined}
+          >
+            <PlusIcon className="sidebar-item-icon" />
+            <span className="sidebar-item-text">New Hub</span>
+          </button>
+        )}
         <div className="sidebar-footer-links">
         </div>
       </div>

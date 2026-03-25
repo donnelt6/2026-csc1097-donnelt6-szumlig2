@@ -12,6 +12,7 @@ import { useAuth } from './auth/AuthProvider';
 import { useSearch } from '../lib/SearchContext';
 import { listHubs } from '../lib/api';
 import { CurrentHubProvider } from '../lib/CurrentHubContext';
+import { resolveHubAppearance } from '../lib/hubAppearance';
 
 type SidebarState = 'open' | 'collapsed' | 'hidden';
 
@@ -45,6 +46,10 @@ export function AppShell({ children }: AppShellProps) {
     () => hubs?.find((hub) => hub.id === hubId) ?? null,
     [hubId, hubs]
   );
+  const currentHubAppearance = currentHub
+    ? resolveHubAppearance(currentHub.icon_key, currentHub.color_key)
+    : null;
+  const CurrentHubIcon = currentHubAppearance?.icon.icon;
 
   const dashboardTab = searchParams.get('tab') ?? 'home';
   const dashboardTabs = [
@@ -118,7 +123,7 @@ export function AppShell({ children }: AppShellProps) {
           </>
         )}
         <header className="site-nav">
-          <div className="nav-content">
+          <div className={`nav-content${isOnHub ? ' nav-content--hub' : ''}`}>
             <div className="nav-brand">
               <button
                 className={`mobile-menu-button ${isOnHub && sidebarHidden ? 'is-visible-desktop' : ''}`}
@@ -153,18 +158,28 @@ export function AppShell({ children }: AppShellProps) {
                 ))}
               </div>
             ) : isOnHub ? (
-              <div className="nav-search">
-                <MagnifyingGlassIcon className="nav-search-icon" />
-                <input
-                  type="text"
-                  placeholder="Search conversations..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="nav-search-input"
-                />
-              </div>
+              <>
+                {currentHub && CurrentHubIcon && (
+                  <div className="nav-current-hub" title={currentHub.name}>
+                    <span className="nav-current-hub-icon" style={currentHubAppearance.badgeStyle}>
+                      <CurrentHubIcon />
+                    </span>
+                    <span className="nav-current-hub-name">{currentHub.name}</span>
+                  </div>
+                )}
+                <div className="nav-search nav-search--hub-chat">
+                  <MagnifyingGlassIcon className="nav-search-icon" />
+                  <input
+                    type="text"
+                    placeholder="Search conversations..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="nav-search-input"
+                  />
+                </div>
+              </>
             ) : (
-              <div className="nav-search">
+              <div className="nav-search nav-search--hubs">
                 <MagnifyingGlassIcon className="nav-search-icon" />
                 <input
                   type="text"

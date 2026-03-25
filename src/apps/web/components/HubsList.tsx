@@ -414,7 +414,7 @@ export function HubsList({ searchQuery, filters, onHubCountChange, onPaginationV
       <HubAppearanceModal
         mode="edit"
         title={`Edit ${editingHub.name}`}
-        subtitle="Update the hub name, description, icon, and colour shown on Your Hubs."
+        subtitle=""
         submitLabel="Save hub"
         isSubmitting={updateAppearanceMutation.isPending}
         onClose={() => setEditingHub(null)}

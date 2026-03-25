@@ -104,7 +104,7 @@ export function HubAppearanceModal({
                       autoFocus
                       aria-label="Hub title"
                     />
-                    {mode === "edit" ? (
+                    {mode === "edit" && subtitle ? (
                       <p className="modal__subtitle">{subtitle}</p>
                     ) : null}
                   </div>

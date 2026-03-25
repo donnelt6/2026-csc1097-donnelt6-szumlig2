@@ -665,9 +665,6 @@ export const ChatPanel = forwardRef<ChatPanelHandle, Props>(function ChatPanel({
           <div className="chat__controls">
             <div className="chat__hub-info">
               <p className="chat__hub-name">{activeSessionTitle}</p>
-              {hubName && (
-                <p className="chat__hub-desc">{hubName}</p>
-              )}
             </div>
             <div className="chat__controls-right">
               <SourceSelector

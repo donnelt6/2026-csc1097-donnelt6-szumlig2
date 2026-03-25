@@ -1,8 +1,10 @@
 'use client';
 
+import Link from "next/link";
 import { useState, useRef, useEffect } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useIsFetching, useQueryClient, useMutation } from "@tanstack/react-query";
+import { ArrowLeftIcon } from "@heroicons/react/24/outline";
 import { HubAppearanceModal } from "../../components/HubAppearanceModal";
 import { HubsList } from "../../components/HubsList";
 import { HubsToolbar, type HubsFilterState } from "../../components/HubsToolbar";
@@ -200,6 +202,10 @@ export default function HomePage() {
           <div className="hubs-page-header">
             <div className="hubs-page-title-row">
               <div className="hubs-page-title-section">
+                <Link href="/" className="hubs-page-back-link">
+                  <ArrowLeftIcon className="hubs-page-back-link-icon" aria-hidden="true" />
+                  <span>Back to Home</span>
+                </Link>
                 <h2 className="hubs-page-title">Your Hubs</h2>
                 <p className="hubs-page-subtitle">
                   Manage your documentation environments and onboarding resources.

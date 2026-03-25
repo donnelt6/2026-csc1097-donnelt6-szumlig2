@@ -8,13 +8,13 @@ import { useQuery, useQueries } from '@tanstack/react-query';
 import {
   MagnifyingGlassIcon,
   RectangleStackIcon,
-  DocumentIcon,
   SparklesIcon,
-  UserIcon,
   BellIcon,
   ChatBubbleLeftIcon,
 } from '@heroicons/react/24/outline';
+import { DocumentIcon, UserIcon } from '@heroicons/react/24/solid';
 import { listActivity, listHubs, listReminders, listChatSessions } from '../../lib/api';
+import { resolveHubAppearance } from '../../lib/hubAppearance';
 import type { ChatSessionSummary } from '../../lib/types';
 import { useAuth } from '../auth/AuthProvider';
 import { describeEventParts, formatRelativeTime, getEventTone } from '../../lib/utils';
@@ -226,48 +226,59 @@ export function DashboardHome() {
             </div>
             <div className="dash-recent-hubs">
               {recentHubs.length > 0 ? (
-                recentHubs.map((hub) => (
-                  <Link key={hub.id} href={`/hubs/${hub.id}`} className="hub-card">
-                    <div className="hub-card-top">
-                      <div className="hub-card-icon">
-                        <RectangleStackIcon />
+                recentHubs.map((hub) => {
+                  const appearance = resolveHubAppearance(hub.icon_key, hub.color_key);
+                  const HubIcon = appearance.icon.icon;
+
+                  return (
+                    <Link key={hub.id} href={`/hubs/${hub.id}`} className="hub-card">
+                      <div className="hub-card-top">
+                        <div
+                          className="hub-card-icon"
+                          style={appearance.badgeStyle}
+                          data-testid={`dashboard-hub-icon-${hub.id}`}
+                          data-icon-key={appearance.icon.key}
+                          data-color-key={appearance.color.key}
+                        >
+                          <HubIcon />
+                        </div>
                       </div>
-                    </div>
-                    <h3 className="hub-card-title">{hub.name}</h3>
-                    <p className="hub-card-description">{hub.description || 'No description'}</p>
-                    <div className="hub-card-footer">
-                      <div className="hub-card-stats">
-                        <span className="hub-stat">
-                          <DocumentIcon className="hub-stat-icon" aria-hidden="true" />
-                          <span className="hub-stat-value">{hub.sources_count ?? 0} {(hub.sources_count ?? 0) === 1 ? 'Doc' : 'Docs'}</span>
-                        </span>
-                        <span className="hub-stat">
-                          <UserIcon className="hub-stat-icon" aria-hidden="true" />
-                          <span className="hub-stat-value">{hub.members_count ?? 0} {(hub.members_count ?? 0) === 1 ? 'Member' : 'Members'}</span>
-                        </span>
+                      <h3 className="hub-card-title">{hub.name}</h3>
+                      <p className="hub-card-description">{hub.description || 'No description'}</p>
+                      <div className="hub-card-footer">
+                        <div className="hub-card-stats">
+                          <span className="hub-stat">
+                            <DocumentIcon className="hub-stat-icon" aria-hidden="true" />
+                            <span className="hub-stat-value">{hub.sources_count ?? 0} {(hub.sources_count ?? 0) === 1 ? 'Doc' : 'Docs'}</span>
+                          </span>
+                          <span className="hub-stat">
+                            <UserIcon className="hub-stat-icon" aria-hidden="true" />
+                            <span className="hub-stat-value">{hub.members_count ?? 0} {(hub.members_count ?? 0) === 1 ? 'Member' : 'Members'}</span>
+                          </span>
+                        </div>
+                        <div className="hub-card-footer-bottom">
+                          <span className="hub-card-time">
+                            Modified {formatRelativeTime(hub.last_accessed_at)}
+                          </span>
+                          {(hub.member_emails?.length ?? 0) > 0 && (
+                            <div className="hub-card-avatars">
+                              {hub.member_emails!.slice(0, 2).map((email, i) => (
+                                <div key={i} className="hub-avatar hub-avatar--initials" title={email}>
+                                  {email.charAt(0).toUpperCase()}
+                                </div>
+                              ))}
+                              {hub.member_emails!.length > 2 && (
+                                <div className="hub-avatar hub-avatar--count">
+                                  +{hub.member_emails!.length - 2}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
                       </div>
-                      <div className="hub-card-footer-bottom">
-                        <span className="hub-card-time">
-                          Modified {formatRelativeTime(hub.last_accessed_at)}
-                        </span>
-                        {(hub.member_emails?.length ?? 0) > 0 && (
-                          <div className="hub-card-avatars">
-                            {hub.member_emails!.slice(0, 2).map((email, i) => (
-                              <div key={i} className="hub-avatar hub-avatar--initials" title={email}>
-                                {email.charAt(0).toUpperCase()}
-                              </div>
-                            ))}
-                            {hub.member_emails!.length > 2 && (
-                              <div className="hub-avatar hub-avatar--count">
-                                +{hub.member_emails!.length - 2}
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </Link>
-                ))
+                    </Link>
+                  );
+                })
               ) : !hubsLoading ? (
                 <div className="dash-activity-card">
                   <div className="dash-empty-state">
