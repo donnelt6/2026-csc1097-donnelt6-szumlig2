@@ -1,7 +1,7 @@
 [build]
-  base = "src"
-  command = "npm run build:web"
-  publish = ".netlify"
+  base = "src/apps/web"
+  command = "npm run build"
+  publish = ".next"
 
 [build.environment]
   NODE_VERSION = "22"
