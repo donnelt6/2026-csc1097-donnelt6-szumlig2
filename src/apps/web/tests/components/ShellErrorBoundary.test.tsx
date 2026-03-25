@@ -2,7 +2,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { ShellErrorBoundary } from "../../components/ShellErrorBoundary";
 
-function ExplodingChild() {
+function ExplodingChild(): never {
   throw new Error("boom");
 }
 
