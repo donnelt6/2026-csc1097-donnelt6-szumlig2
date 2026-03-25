@@ -2,7 +2,7 @@
 
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ClipboardDocumentIcon, FlagIcon, PaperAirplaneIcon } from "@heroicons/react/24/outline";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -151,9 +151,9 @@ export const ChatPanel = forwardRef<ChatPanelHandle, Props>(function ChatPanel({
   const initialSessionParam = searchParams.get("session");
   const initialPromptParam = searchParams.get("prompt");
   const hasAutoSent = useRef(false);
+  const sessionQueryKey = ["chat-sessions", hubId] as const;
 
   const [question, setQuestion] = useState("");
-  const [sessionList, setSessionList] = useState<ChatSessionSummary[]>([]);
   const [draftState, setDraftState] = useState<DraftState | null>(null);
   const [messages, setMessages] = useState<MessagePair[]>([]);
   const [scope, setScope] = useState<ChatScope>("hub");
@@ -166,6 +166,13 @@ export const ChatPanel = forwardRef<ChatPanelHandle, Props>(function ChatPanel({
   const [reportMenuMessageId, setReportMenuMessageId] = useState<string | null>(null);
   const [activeCitation, setActiveCitation] = useState<Citation | null>(null);
   const [panelError, setPanelError] = useState<string | null>(null);
+
+  const { data: sessionList = [], refetch: refetchSessionList } = useQuery({
+    queryKey: sessionQueryKey,
+    queryFn: () => listChatSessions(hubId),
+    enabled: false,
+    initialData: () => queryClient.getQueryData<ChatSessionSummary[]>(sessionQueryKey) ?? [],
+  });
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -284,11 +291,10 @@ export const ChatPanel = forwardRef<ChatPanelHandle, Props>(function ChatPanel({
       setIsBootstrapping(true);
       setPanelError(null);
       try {
-        const sessions = await listChatSessions(hubId);
+        const { data: sessions = [] } = await refetchSessionList();
         if (cancelled) {
           return;
         }
-        setSessionList(sessions);
 
         const cachedSessionId = localStorage.getItem(`caddie:last-session:${hubId}`);
         const preferredSessionId = initialSessionParam ?? cachedSessionId;
@@ -300,7 +306,7 @@ export const ChatPanel = forwardRef<ChatPanelHandle, Props>(function ChatPanel({
               return;
             }
             hydrateSession(detail.session, detail.messages);
-            setSessionList((current) => upsertSessionSummary(current, detail.session));
+            updateSessionCache((current) => upsertSessionSummary(current, detail.session));
             syncSessionQuery(detail.session.id);
             return;
           } catch {
@@ -330,7 +336,7 @@ export const ChatPanel = forwardRef<ChatPanelHandle, Props>(function ChatPanel({
     return () => {
       cancelled = true;
     };
-  }, [hubId]);
+  }, [hubId, refetchSessionList]);
 
   useEffect(() => {
     if (hasAutoSent.current || isBootstrapping || sourcesLoading || !initialPromptParam) return;
@@ -359,6 +365,14 @@ export const ChatPanel = forwardRef<ChatPanelHandle, Props>(function ChatPanel({
     router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
   }
 
+  function updateSessionCache(
+    updater: (current: ChatSessionSummary[]) => ChatSessionSummary[]
+  ) {
+    queryClient.setQueryData<ChatSessionSummary[]>(sessionQueryKey, (current) =>
+      updater(current ?? [])
+    );
+  }
+
   function hydrateSession(session: ChatSessionSummary, sessionMessages: SessionMessage[]) {
     const cached = readSessionSourceCache(session.id);
     const rawIds = cached ?? session.source_ids;
@@ -384,7 +398,8 @@ export const ChatPanel = forwardRef<ChatPanelHandle, Props>(function ChatPanel({
     sessionId: string,
     summary?: ChatSessionSummary,
     updateUrl = true,
-    cancelled = false
+    cancelled = false,
+    fallbackToAnotherSession = true
   ) {
     setIsLoadingSession(true);
     setPanelError(null);
@@ -394,7 +409,7 @@ export const ChatPanel = forwardRef<ChatPanelHandle, Props>(function ChatPanel({
         return;
       }
       hydrateSession(detail.session, detail.messages);
-      setSessionList((current) => upsertSessionSummary(current, summary ?? detail.session));
+      updateSessionCache((current) => upsertSessionSummary(current, summary ?? detail.session));
       if (updateUrl) {
         syncSessionQuery(detail.session.id);
       }
@@ -402,7 +417,15 @@ export const ChatPanel = forwardRef<ChatPanelHandle, Props>(function ChatPanel({
       if (cancelled) {
         return;
       }
-      const fallbackSession = sessionList.find((session) => session.id !== sessionId) ?? null;
+      updateSessionCache((current) => current.filter((session) => session.id !== sessionId));
+      try {
+        if (localStorage.getItem(`caddie:last-session:${hubId}`) === sessionId) {
+          localStorage.removeItem(`caddie:last-session:${hubId}`);
+        }
+      } catch {}
+      const fallbackSession = fallbackToAnotherSession
+        ? sessionList.find((session) => session.id !== sessionId) ?? null
+        : null;
       if (fallbackSession) {
         await openSession(fallbackSession.id, fallbackSession, true);
       } else {
@@ -442,9 +465,21 @@ export const ChatPanel = forwardRef<ChatPanelHandle, Props>(function ChatPanel({
       return;
     }
     if (currentSessionParam && currentSessionParam !== activeSessionId) {
-      void openSession(currentSessionParam, undefined, false);
+      void openSession(currentSessionParam, undefined, false, false, false);
     }
-  }, [currentSessionParam]);
+  }, [currentSessionParam, activeSessionId, isBootstrapping, completeSourceIds, scope]);
+
+  useEffect(() => {
+    if (
+      isBootstrapping ||
+      activeSessionId === null ||
+      currentSessionParam === "new" ||
+      sessionList.some((session) => session.id === activeSessionId)
+    ) {
+      return;
+    }
+    activateDraft(buildDraftState(draftState, completeSourceIds), true);
+  }, [activeSessionId, completeSourceIds, currentSessionParam, draftState, isBootstrapping, sessionList]);
 
   function handleScopeChange(nextScope: ChatScope) {
     setScope(nextScope);
@@ -492,6 +527,7 @@ export const ChatPanel = forwardRef<ChatPanelHandle, Props>(function ChatPanel({
     const currentSessionId = activeSessionId;
     const requestScope = scope;
     const requestSourceIds = normalizeSelectedSourceIds(selectedSourceIds, completeSourceIds);
+    const previousSessions = queryClient.getQueryData<ChatSessionSummary[]>(sessionQueryKey) ?? [];
     const requestBody = {
       hub_id: hubId,
       scope: requestScope,
@@ -514,6 +550,20 @@ export const ChatPanel = forwardRef<ChatPanelHandle, Props>(function ChatPanel({
     setQuestion("");
     setIsSending(true);
     setPanelError(null);
+
+    if (currentSessionId) {
+      const now = pendingPair.timestamp;
+      updateSessionCache((current) =>
+        moveSessionToTop(
+          current.map((session) =>
+            session.id === currentSessionId
+              ? { ...session, scope: requestScope, source_ids: [...requestSourceIds], last_message_at: now ?? session.last_message_at }
+              : session
+          ),
+          currentSessionId,
+        )
+      );
+    }
 
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto";
@@ -546,17 +596,17 @@ export const ChatPanel = forwardRef<ChatPanelHandle, Props>(function ChatPanel({
         last_message_at: now,
       };
 
-      setSessionList((current) => moveSessionToTop(upsertSessionSummary(current, nextSummary), nextSummary.id));
+      updateSessionCache((current) => moveSessionToTop(upsertSessionSummary(current, nextSummary), nextSummary.id));
       setActiveSessionId(response.session_id);
       setScope(requestScope);
       setSelectedSourceIds(normalizedPersistedSourceIds);
       syncSessionQuery(response.session_id);
-      queryClient.invalidateQueries({ queryKey: ['chat-sessions', hubId] });
 
       if (currentSessionId === null) {
         setDraftState(null);
       }
     } catch (error) {
+      queryClient.setQueryData(sessionQueryKey, previousSessions);
       const message = error instanceof Error ? error.message : String(error);
       setMessages((current) =>
         current.map((pair) =>

@@ -26,7 +26,7 @@ const REMINDER_TABS = [
 
 const EMPTY_SOURCES: never[] = [];
 
-const VALID_TABS: HubTab[] = ['chat', 'sources', 'dashboard', 'members', 'settings'];
+const VALID_TABS: HubTab[] = ['chat', 'sources', 'dashboard', 'members', 'settings', 'admin'];
 
 export default function HubDetail({ params }: { params: { hubId: string } }) {
   const queryClient = useQueryClient();
@@ -44,7 +44,7 @@ export default function HubDetail({ params }: { params: { hubId: string } }) {
     } else {
       setActiveTab('chat');
     }
-  }, [params.hubId]);
+  }, [params.hubId, searchParams, setActiveTab]);
 
   const hubResolved = !!hub;
   const canUpload = hub?.role === 'owner' || hub?.role === 'admin' || hub?.role === 'editor';

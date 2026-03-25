@@ -14,6 +14,7 @@ import {
   type HubIconKey,
 } from "../../lib/hubAppearance";
 import { useSearch } from "../../lib/SearchContext";
+import type { Hub } from "../../lib/types";
 
 const NAME_MAX = 40;
 const DESC_MAX = 200;
@@ -52,13 +53,47 @@ export default function HomePage() {
 
   const createMutation = useMutation({
     mutationFn: (payload: { name: string; description?: string; icon_key?: string; color_key?: string }) => createHub(payload),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["hubs"] });
+    onMutate: async (payload) => {
+      await queryClient.cancelQueries({ queryKey: ["hubs"] });
+      const previousHubs = queryClient.getQueryData<Hub[]>(["hubs"]) ?? [];
+      const tempId = `temp-hub-${Date.now()}`;
+      const optimisticHub: Hub = {
+        id: tempId,
+        owner_id: "pending",
+        name: payload.name.trim(),
+        description: payload.description?.trim() || null,
+        icon_key: payload.icon_key ?? DEFAULT_HUB_ICON_KEY,
+        color_key: payload.color_key ?? DEFAULT_HUB_COLOR_KEY,
+        created_at: new Date().toISOString(),
+        archived_at: null,
+        role: "owner",
+        members_count: 1,
+        sources_count: 0,
+        last_accessed_at: new Date().toISOString(),
+        is_favourite: false,
+        member_emails: [],
+      };
+      queryClient.setQueryData<Hub[]>(["hubs"], (current = []) => [optimisticHub, ...current]);
+      setCreateModalOpen(false);
+      return { previousHubs, tempId };
+    },
+    onSuccess: (hub, _payload, context) => {
+      queryClient.setQueryData<Hub[]>(["hubs"], (current = []) =>
+        current.map((item) => (item.id === context?.tempId ? hub : item))
+      );
       setName("");
       setDescription("");
       setSelectedIconKey(DEFAULT_HUB_ICON_KEY);
       setSelectedColorKey(DEFAULT_HUB_COLOR_KEY);
-      setCreateModalOpen(false);
+    },
+    onError: (_error, _payload, context) => {
+      if (context?.previousHubs) {
+        queryClient.setQueryData(["hubs"], context.previousHubs);
+      }
+      setCreateModalOpen(true);
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["hubs"] });
     },
   });
 

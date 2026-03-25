@@ -1785,7 +1785,10 @@ class SupabaseStore:
 
         answer, quotes = _extract_quotes(raw_answer)
         for idx_str, pairs in quotes.items():
-            citation_idx = int(idx_str) - 1
+            try:
+                citation_idx = int(str(idx_str).strip()) - 1
+            except (TypeError, ValueError):
+                continue
             if 0 <= citation_idx < len(citations):
                 snippet = citations[citation_idx].snippet
                 verified = _match_quote_pairs_to_snippet(pairs, snippet)

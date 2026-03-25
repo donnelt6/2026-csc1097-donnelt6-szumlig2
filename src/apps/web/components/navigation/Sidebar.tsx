@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useParams, usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Squares2X2Icon,
   ChatBubbleLeftRightIcon,
@@ -58,6 +58,7 @@ function formatSessionTimestamp(value: string): string {
 export function Sidebar({ state, onStateChange, mobileOpen, onMobileClose, onCreateHub }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
+  const queryClient = useQueryClient();
   const params = useParams<{ hubId: string }>();
   const searchParams = useSearchParams();
   const { activeTab, setActiveTab } = useHubTab();
@@ -82,6 +83,7 @@ export function Sidebar({ state, onStateChange, mobileOpen, onMobileClose, onCre
 
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState('');
+  const [sessionActionError, setSessionActionError] = useState<string | null>(null);
   const editInputRef = useRef<HTMLInputElement>(null);
   const activeSessionId = searchParams.get('session');
 
@@ -92,46 +94,99 @@ export function Sidebar({ state, onStateChange, mobileOpen, onMobileClose, onCre
     }
   }, [editingSessionId]);
 
+  function navigateToTab(tab: 'chat' | 'sources' | 'dashboard' | 'members' | 'settings' | 'admin') {
+    const p = new URLSearchParams(searchParams.toString());
+    p.set('tab', tab);
+    setSessionActionError(null);
+    setActiveTab(tab);
+    router.replace(`${pathname}?${p.toString()}`, { scroll: false });
+    handleLinkClick();
+  }
+
   function navigateToSession(sessionId: string) {
     const p = new URLSearchParams(searchParams.toString());
     p.set('session', sessionId);
-    router.replace(`${window.location.pathname}?${p.toString()}`, { scroll: false });
+    setSessionActionError(null);
+    router.replace(`${pathname}?${p.toString()}`, { scroll: false });
   }
 
   function navigateToNewChat() {
     const p = new URLSearchParams(searchParams.toString());
     p.set('session', 'new');
-    router.replace(`${window.location.pathname}?${p.toString()}`, { scroll: false });
+    p.set('tab', 'chat');
+    setSessionActionError(null);
+    router.replace(`${pathname}?${p.toString()}`, { scroll: false });
   }
 
   function startRename(session: ChatSessionSummary) {
+    setSessionActionError(null);
     setEditingSessionId(session.id);
     setEditTitle(session.title);
+  }
+
+  async function saveRename(sessionId: string, title: string) {
+    const trimmed = title.trim();
+    if (!trimmed) return;
+    const queryKey = ['chat-sessions', hubId] as const;
+    const previousSessions = queryClient.getQueryData<ChatSessionSummary[]>(queryKey) ?? [];
+    const nextSessions = previousSessions.map((session) =>
+      session.id === sessionId ? { ...session, title: trimmed } : session
+    );
+    queryClient.setQueryData(queryKey, nextSessions);
+    try {
+      await renameChatSession(sessionId, trimmed);
+      setSessionActionError(null);
+    } catch (error) {
+      queryClient.setQueryData(queryKey, previousSessions);
+      setSessionActionError(error instanceof Error ? error.message : "Couldn't update chat name.");
+      await refetch();
+    }
   }
 
   async function commitRename() {
     if (!editingSessionId) return;
     const trimmed = editTitle.trim();
     if (!trimmed) { setEditingSessionId(null); return; }
-    try {
-      await renameChatSession(editingSessionId, trimmed);
-      await refetch();
-    } catch { /* silent */ }
+    const sessionId = editingSessionId;
     setEditingSessionId(null);
+    await saveRename(sessionId, trimmed);
   }
 
   function handleRenameKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
     if (event.key === 'Enter') { event.preventDefault(); void commitRename(); }
-    else if (event.key === 'Escape') { setEditingSessionId(null); }
+    else if (event.key === 'Escape') { setEditingSessionId(null); setSessionActionError(null); }
   }
 
   async function handleDelete(sessionId: string) {
     if (!window.confirm("Delete this chat?")) return;
+    const queryKey = ['chat-sessions', hubId] as const;
+    const previousSessions = queryClient.getQueryData<ChatSessionSummary[]>(queryKey) ?? [];
+    queryClient.setQueryData(
+      queryKey,
+      previousSessions.filter((session) => session.id !== sessionId)
+    );
+    const deletedWasActive = activeSessionId === sessionId;
+    if (deletedWasActive) {
+      navigateToNewChat();
+    }
     try {
       await deleteChatSession(sessionId);
+      try {
+        localStorage.removeItem(`caddie:session-sources:${sessionId}`);
+        if (localStorage.getItem(`caddie:last-session:${hubId}`) === sessionId) {
+          localStorage.removeItem(`caddie:last-session:${hubId}`);
+        }
+      } catch {}
+      setSessionActionError(null);
+      queryClient.invalidateQueries({ queryKey });
+    } catch (error) {
+      queryClient.setQueryData(queryKey, previousSessions);
+      if (deletedWasActive) {
+        navigateToSession(sessionId);
+      }
+      setSessionActionError(error instanceof Error ? error.message : "Couldn't delete chat.");
       await refetch();
-      if (activeSessionId === sessionId) navigateToNewChat();
-    } catch { /* silent */ }
+    }
   }
 
   const expandSidebar = () => {
@@ -205,7 +260,7 @@ export function Sidebar({ state, onStateChange, mobileOpen, onMobileClose, onCre
               <button
                 className={`sidebar-item${activeTab === key ? ' active' : ''}`}
                 title={isCollapsed ? label : undefined}
-                onClick={() => { setActiveTab(key); handleLinkClick(); }}
+                onClick={() => navigateToTab(key)}
                 type="button"
               >
                 <Icon className="sidebar-item-icon" />
@@ -226,6 +281,9 @@ export function Sidebar({ state, onStateChange, mobileOpen, onMobileClose, onCre
             <span>New Chat</span>
           </button>
           <p className="sidebar-section-title">Recent Chats</p>
+          {sessionActionError && (
+            <p className="chat__banner-error sidebar-chat-error">Error: {sessionActionError}</p>
+          )}
           <ul className="sidebar-nav-list sidebar-chat-list">
             {filteredSessions.map((session: ChatSessionSummary) => (
               <li key={session.id} className="sidebar-chat-item">
@@ -241,7 +299,7 @@ export function Sidebar({ state, onStateChange, mobileOpen, onMobileClose, onCre
                       const trimmed = editTitle.trim();
                       setEditingSessionId(null);
                       if (id && trimmed) {
-                        void renameChatSession(id, trimmed).then(() => refetch()).catch(() => {});
+                        void saveRename(id, trimmed);
                       }
                     }}
                     maxLength={80}

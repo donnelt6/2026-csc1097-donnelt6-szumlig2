@@ -202,6 +202,53 @@ describe("ChatPanel", () => {
     expect(screen.getByText("Assignments")).toBeInTheDocument();
   });
 
+  it("updates the active session title when the shared session cache changes", async () => {
+    currentSearchParams = "session=session-1";
+    vi.mocked(listChatSessions).mockResolvedValue([
+      {
+        id: "session-1",
+        hub_id: "hub-1",
+        title: "Assignments",
+        scope: "hub",
+        source_ids: ["src-1", "src-2"],
+        created_at: "2026-01-02T12:00:00Z",
+        last_message_at: "2026-01-02T12:00:00Z",
+      },
+    ]);
+    vi.mocked(getChatSessionMessages).mockResolvedValue({
+      session: {
+        id: "session-1",
+        hub_id: "hub-1",
+        title: "Assignments",
+        scope: "hub",
+        source_ids: ["src-1", "src-2"],
+        created_at: "2026-01-02T12:00:00Z",
+        last_message_at: "2026-01-02T12:00:00Z",
+      },
+      messages: [],
+    });
+
+    const { queryClient } = renderWithQueryClient(
+      <ChatPanel hubId="hub-1" sources={sources} />
+    );
+
+    await waitFor(() => expect(screen.getByText("Assignments")).toBeInTheDocument());
+
+    queryClient.setQueryData(["chat-sessions", "hub-1"], [
+      {
+        id: "session-1",
+        hub_id: "hub-1",
+        title: "Renamed Session",
+        scope: "hub",
+        source_ids: ["src-1", "src-2"],
+        created_at: "2026-01-02T12:00:00Z",
+        last_message_at: "2026-01-02T12:00:00Z",
+      },
+    ]);
+
+    await waitFor(() => expect(screen.getByText("Renamed Session")).toBeInTheDocument());
+  });
+
   it("restores saved source selection after sources load later", async () => {
     currentSearchParams = "session=session-1";
     vi.mocked(listChatSessions).mockResolvedValue([

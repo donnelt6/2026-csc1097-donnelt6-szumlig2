@@ -61,16 +61,43 @@ export function HubsList({ searchQuery, filters, onHubCountChange, onPaginationV
   });
   const archiveHubMutation = useMutation({
     mutationFn: (hubId: string) => archiveHub(hubId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["hubs"] });
+    onMutate: async (hubId: string) => {
+      await queryClient.cancelQueries({ queryKey: ["hubs"] });
+      const previousHubs = queryClient.getQueryData<Hub[]>(["hubs"]) ?? [];
+      const archivedAt = new Date().toISOString();
+      queryClient.setQueryData<Hub[]>(["hubs"], (current = []) =>
+        current.map((hub) => (hub.id === hubId ? { ...hub, archived_at: archivedAt } : hub))
+      );
       setOpenMenuId(null);
+      return { previousHubs };
+    },
+    onError: (_error, _hubId, context) => {
+      if (context?.previousHubs) {
+        queryClient.setQueryData(["hubs"], context.previousHubs);
+      }
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["hubs"] });
     },
   });
   const unarchiveHubMutation = useMutation({
     mutationFn: (hubId: string) => unarchiveHub(hubId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["hubs"] });
+    onMutate: async (hubId: string) => {
+      await queryClient.cancelQueries({ queryKey: ["hubs"] });
+      const previousHubs = queryClient.getQueryData<Hub[]>(["hubs"]) ?? [];
+      queryClient.setQueryData<Hub[]>(["hubs"], (current = []) =>
+        current.map((hub) => (hub.id === hubId ? { ...hub, archived_at: null } : hub))
+      );
       setOpenMenuId(null);
+      return { previousHubs };
+    },
+    onError: (_error, _hubId, context) => {
+      if (context?.previousHubs) {
+        queryClient.setQueryData(["hubs"], context.previousHubs);
+      }
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["hubs"] });
     },
   });
 
