@@ -57,7 +57,6 @@ export interface ChatPanelHandle {
 
 interface Props {
   hubId: string;
-  hubName?: string;
   hubRole?: MembershipRole | null;
   sources: Source[];
   sourcesLoading?: boolean;
@@ -142,7 +141,7 @@ function SourceExcerpt({
   );
 }
 
-export const ChatPanel = forwardRef<ChatPanelHandle, Props>(function ChatPanel({ hubId, hubName, hubRole, sources, sourcesLoading, onSourceSelectionChange }, ref) {
+export const ChatPanel = forwardRef<ChatPanelHandle, Props>(function ChatPanel({ hubId, hubRole, sources, sourcesLoading, onSourceSelectionChange }, ref) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const router = useRouter();

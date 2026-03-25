@@ -120,7 +120,6 @@ export default function HubDetail({ params }: { params: { hubId: string } }) {
             <ChatPanel
               ref={chatPanelRef}
               hubId={params.hubId}
-              hubName={hub?.name ?? undefined}
               hubRole={hub?.role ?? undefined}
               sources={sources ?? []}
               sourcesLoading={sourcesLoading}
