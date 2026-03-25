@@ -187,6 +187,7 @@ export function UploadPanel({
         const { [sourceId]: _unused, ...rest } = prev;
         return rest;
       });
+      onRefresh();
       setStatusMessage({ text: "Source deleted.", type: "success" });
     } catch (err) {
       queryClient.setQueryData(["sources", hubId], previousSources);
