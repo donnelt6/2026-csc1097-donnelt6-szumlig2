@@ -27,11 +27,11 @@ export function mapAuthErrorMessage(error: unknown, fallback: string): string {
   if (normalized.includes("user already registered")) {
     return "An account with that email already exists.";
   }
-  if (normalized.includes("password")) {
-    return "The password does not meet the required format.";
-  }
   if (normalized.includes("expired") || normalized.includes("invalid") || normalized.includes("otp")) {
     return "This recovery link is invalid or has expired. Request a new password reset email.";
+  }
+  if (normalized.includes("password")) {
+    return "The password does not meet the required format.";
   }
   if (normalized.includes("email")) {
     return "We could not send that email right now. Try again in a moment.";
