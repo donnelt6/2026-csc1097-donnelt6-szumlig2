@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ChatPanel } from "../../../components/ChatPanel";
 import type { ChatPanelHandle } from "../../../components/ChatPanel";
 import { FaqPanel } from "../../../components/FaqPanel";
@@ -30,6 +30,7 @@ const VALID_TABS: HubTab[] = ['chat', 'sources', 'dashboard', 'members', 'settin
 
 export default function HubDetail({ params }: { params: { hubId: string } }) {
   const queryClient = useQueryClient();
+  const router = useRouter();
   const searchParams = useSearchParams();
   const hasTrackedAccess = useRef(false);
   const { activeTab, setActiveTab } = useHubTab();
@@ -159,7 +160,7 @@ export default function HubDetail({ params }: { params: { hubId: string } }) {
   return (
     <main className={`page-content page-content--no-hero${activeTab === 'chat' ? ' page-content--fullscreen' : ''}`}>
       <div className="content-inner">
-        {activeTab !== 'chat' && activeTab !== 'admin' && (
+        {activeTab !== 'chat' && activeTab !== 'admin' && activeTab !== 'sources' && (
           <header className="hub-header">
             <h2 className="hub-header__name">{hub?.name ?? "Hub"}</h2>
             {hub?.description && (
@@ -190,6 +191,12 @@ export default function HubDetail({ params }: { params: { hubId: string } }) {
               onToggleSource={handleToggleSource}
               onSelectAllSources={handleSelectAllSources}
               onClearSourceSelection={handleClearSourceSelection}
+              autoOpenModal={searchParams.get('addSource') === 'true'}
+              onModalOpened={() => {
+                const p = new URLSearchParams(searchParams.toString());
+                p.delete('addSource');
+                router.replace(`/hubs/${params.hubId}?${p.toString()}`, { scroll: false });
+              }}
             />
           )}
           {activeTab === 'members' && (

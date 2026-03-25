@@ -1,27 +1,27 @@
 'use client';
 
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   DocumentTextIcon,
   GlobeAltIcon,
   PlayCircleIcon,
   DocumentPlusIcon,
-  MagnifyingGlassIcon,
   XMarkIcon,
   EyeIcon,
+  TrashIcon,
+  ArrowPathIcon,
+  PlusIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
 } from "@heroicons/react/24/outline";
 import {
-  createSource,
-  createSourceUploadUrl,
-  createWebSource,
-  createYouTubeSource,
   deleteSource,
-  enqueueSource,
-  failSource,
   listSourceChunks,
   refreshSource,
 } from "../lib/api";
+import { useSearch } from "../lib/SearchContext";
+import { AddSourceModal } from "./AddSourceModal";
 import { SuggestedSourcesPanel } from "./SuggestedSourcesPanel";
 import type { Source } from "../lib/types";
 
@@ -35,6 +35,8 @@ interface Props {
   onToggleSource?: (sourceId: string) => void;
   onSelectAllSources?: (scope?: string[]) => void;
   onClearSourceSelection?: (scope?: string[]) => void;
+  autoOpenModal?: boolean;
+  onModalOpened?: () => void;
 }
 
 export function UploadPanel({
@@ -47,24 +49,14 @@ export function UploadPanel({
   onToggleSource = () => undefined,
   onSelectAllSources = () => undefined,
   onClearSourceSelection = () => undefined,
+  autoOpenModal = false,
+  onModalOpened,
 }: Props) {
   const queryClient = useQueryClient();
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [file, setFile] = useState<File | null>(null);
-  const [url, setUrl] = useState("");
-  const [youtubeUrl, setYouTubeUrl] = useState("");
-  const [youtubeLanguage, setYouTubeLanguage] = useState("");
-  const [youtubeAutoCaptions, setYouTubeAutoCaptions] = useState(true);
+  const { searchQuery } = useSearch();
   const [statusMessage, setStatusMessage] = useState<{ text: string; type: "success" | "error" } | null>(null);
-  const [retryingSourceId, setRetryingSourceId] = useState<string | null>(null);
-  const [isRetrying, setIsRetrying] = useState(false);
   const [deletingSourceId, setDeletingSourceId] = useState<string | null>(null);
   const [refreshingSourceId, setRefreshingSourceId] = useState<string | null>(null);
-  const [reprocessingSourceId, setReprocessingSourceId] = useState<string | null>(null);
-  const [isSubmittingUrl, setIsSubmittingUrl] = useState(false);
-  const [isSubmittingYouTube, setIsSubmittingYouTube] = useState(false);
-  const [retryFiles, setRetryFiles] = useState<Record<string, File>>({});
-  const [searchQuery, setSearchQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState<"all" | "file" | "web" | "youtube">("all");
   const [statusFilter, setStatusFilter] = useState<"all" | "complete" | "incomplete">("all");
   const [pageSize, setPageSize] = useState(10);
@@ -73,6 +65,24 @@ export function UploadPanel({
   const [viewingSource, setViewingSource] = useState<Source | null>(null);
   const [viewChunks, setViewChunks] = useState<{ chunk_index: number; text: string }[]>([]);
   const [isLoadingChunks, setIsLoadingChunks] = useState(false);
+  const [showAddModal, setShowAddModal] = useState(false);
+
+  // Reset page when navbar search changes
+  useEffect(() => { setPage(0); }, [searchQuery]);
+  const [showFilterMenu] = useState(false);
+  const autoOpenHandled = useRef(false);
+
+  // Auto-open modal when triggered from sidebar
+  useEffect(() => {
+    if (autoOpenModal && !autoOpenHandled.current) {
+      autoOpenHandled.current = true;
+      setShowAddModal(true);
+      onModalOpened?.();
+    }
+    if (!autoOpenModal) {
+      autoOpenHandled.current = false;
+    }
+  }, [autoOpenModal, onModalOpened]);
 
   useEffect(() => {
     if (!statusMessage) return;
@@ -82,91 +92,6 @@ export function UploadPanel({
 
   const updateSourcesCache = (updater: (current: Source[]) => Source[]) => {
     queryClient.setQueryData<Source[]>(["sources", hubId], (current) => updater(current ?? []));
-  };
-
-
-  const mutation = useMutation({
-    mutationFn: async () => {
-      if (!file) throw new Error("Choose a file first");
-      const uploadFile = file;
-      const enqueue = await createSource({ hub_id: hubId, original_name: file.name });
-      const contentType = resolveContentType(file);
-      try {
-        const uploadResp = await fetch(enqueue.upload_url, {
-          method: "PUT",
-          body: uploadFile,
-          headers: { "Content-Type": contentType },
-        });
-        if (!uploadResp.ok) {
-          const detail = await uploadResp.text();
-          throw new Error(detail || `Upload failed with status ${uploadResp.status}`);
-        }
-      } catch (err) {
-        const reason = clampFailureReason(err);
-        setRetryFiles((prev) => ({ ...prev, [enqueue.source.id]: uploadFile }));
-        await failSource(enqueue.source.id, reason).catch(() => undefined);
-        onRefresh();
-        throw new Error(reason);
-      }
-      await enqueueSource(enqueue.source.id);
-      return enqueue.source;
-    },
-    onSuccess: (source) => {
-      setStatusMessage({ text: "Upload enqueued. Processing will start shortly.", type: "success" });
-      setFile(null);
-      setRetryFiles((prev) => {
-        if (!source?.id || !(source.id in prev)) return prev;
-        const { [source.id]: _unused, ...rest } = prev;
-        return rest;
-      });
-      onRefresh();
-    },
-    onError: (err) => {
-      setStatusMessage({ text: (err as Error).message, type: "error" });
-    },
-  });
-
-  const handleRetryUpload = async (sourceId: string) => {
-    const retryFile = retryFiles[sourceId];
-    if (!retryFile) {
-      setStatusMessage({ text: "Retry unavailable after refresh.", type: "error" });
-      return;
-    }
-    setIsRetrying(true);
-    setRetryingSourceId(sourceId);
-    const previousSources = queryClient.getQueryData<Source[]>(["sources", hubId]) ?? [];
-    updateSourcesCache((current) =>
-      current.map((source) =>
-        source.id === sourceId
-          ? { ...source, status: "queued", failure_reason: undefined }
-          : source
-      )
-    );
-    try {
-      const { upload_url } = await createSourceUploadUrl(sourceId);
-      const contentType = resolveContentType(retryFile);
-      const uploadResp = await fetch(upload_url, {
-        method: "PUT",
-        body: retryFile,
-        headers: { "Content-Type": contentType },
-      });
-      if (!uploadResp.ok) {
-        const detail = await uploadResp.text();
-        throw new Error(detail || `Upload failed with status ${uploadResp.status}`);
-      }
-      await enqueueSource(sourceId);
-      setStatusMessage({ text: "Upload requeued. Processing will start shortly.", type: "success" });
-      onRefresh();
-    } catch (err) {
-      queryClient.setQueryData(["sources", hubId], previousSources);
-      const reason = clampFailureReason(err);
-      await failSource(sourceId, reason).catch(() => undefined);
-      onRefresh();
-      setStatusMessage({ text: reason, type: "error" });
-    } finally {
-      setIsRetrying(false);
-      setRetryingSourceId(null);
-    }
   };
 
   const handleDeleteSource = async (sourceId: string) => {
@@ -182,11 +107,6 @@ export function UploadPanel({
     try {
       await deleteSource(sourceId);
       setPage(0);
-      setRetryFiles((prev) => {
-        if (!(sourceId in prev)) return prev;
-        const { [sourceId]: _unused, ...rest } = prev;
-        return rest;
-      });
       onRefresh();
       setStatusMessage({ text: "Source deleted.", type: "success" });
     } catch (err) {
@@ -214,11 +134,6 @@ export function UploadPanel({
       const results = await Promise.allSettled(failed.map((s) => deleteSource(s.id)));
       const succeeded = results.filter((r) => r.status === "fulfilled").length;
       const failedCount = results.filter((r) => r.status === "rejected").length;
-      setRetryFiles((prev) => {
-        const next = { ...prev };
-        for (const s of failed) delete next[s.id];
-        return next;
-      });
       setPage(0);
       if (failedCount === 0) {
         setStatusMessage({ text: `${succeeded} failed source${succeeded === 1 ? "" : "s"} deleted.`, type: "success" });
@@ -237,57 +152,6 @@ export function UploadPanel({
       onRefresh();
     } finally {
       setIsDeletingFailed(false);
-    }
-  };
-
-  const handleSubmitUrl = async () => {
-    if (!url.trim()) {
-      setStatusMessage({ text: "Enter a URL to ingest.", type: "error" });
-      return;
-    }
-    let finalUrl = url.trim();
-    if (!/^https?:\/\//i.test(finalUrl)) {
-      finalUrl = `https://${finalUrl}`;
-    }
-    setIsSubmittingUrl(true);
-    try {
-      await createWebSource({ hub_id: hubId, url: finalUrl });
-      setStatusMessage({ text: "URL enqueued. Processing will start shortly.", type: "success" });
-      setUrl("");
-      onRefresh();
-    } catch (err) {
-      setStatusMessage({ text: (err as Error).message, type: "error" });
-    } finally {
-      setIsSubmittingUrl(false);
-    }
-  };
-
-  const handleSubmitYouTube = async () => {
-    if (!youtubeUrl.trim()) {
-      setStatusMessage({ text: "Enter a YouTube URL to ingest.", type: "error" });
-      return;
-    }
-    let finalYtUrl = youtubeUrl.trim();
-    if (!/^https?:\/\//i.test(finalYtUrl)) {
-      finalYtUrl = `https://${finalYtUrl}`;
-    }
-    setIsSubmittingYouTube(true);
-    try {
-      await createYouTubeSource({
-        hub_id: hubId,
-        url: finalYtUrl,
-        language: youtubeLanguage.trim() ? youtubeLanguage.trim() : null,
-        allow_auto_captions: youtubeAutoCaptions,
-      });
-      setStatusMessage({ text: "YouTube video enqueued. Processing will start shortly.", type: "success" });
-      setYouTubeUrl("");
-      setYouTubeLanguage("");
-      setYouTubeAutoCaptions(true);
-      onRefresh();
-    } catch (err) {
-      setStatusMessage({ text: (err as Error).message, type: "error" });
-    } finally {
-      setIsSubmittingYouTube(false);
     }
   };
 
@@ -313,27 +177,6 @@ export function UploadPanel({
     }
   };
 
-  const handleReprocessSource = async (sourceId: string) => {
-    setReprocessingSourceId(sourceId);
-    const previousSources = queryClient.getQueryData<Source[]>(["sources", hubId]) ?? [];
-    updateSourcesCache((current) =>
-      current.map((source) =>
-        source.id === sourceId
-          ? { ...source, status: "queued", failure_reason: undefined }
-          : source
-      )
-    );
-    try {
-      await enqueueSource(sourceId);
-      setStatusMessage({ text: "Reprocessing queued.", type: "success" });
-      onRefresh();
-    } catch (err) {
-      queryClient.setQueryData(["sources", hubId], previousSources);
-      setStatusMessage({ text: (err as Error).message, type: "error" });
-    } finally {
-      setReprocessingSourceId(null);
-    }
-  };
 
   const handleViewChunks = async (source: Source) => {
     setViewingSource(source);
@@ -391,182 +234,122 @@ export function UploadPanel({
 
   return (
     <div className="sources">
-      <input
-        ref={fileInputRef}
-        type="file"
-        onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-        accept=".pdf,.docx,.txt,.md"
-        disabled={!canUpload}
-        style={{ display: "none" }}
-      />
-
-      {canUpload ? (
-        <div className="sources__add-row">
-          {/* File upload */}
-          <div className="sources__add-col">
-            <DocumentTextIcon className="sources__add-icon sources__type-icon--file" />
-            <h4 className="sources__add-title">Upload file</h4>
-            <p className="sources__add-desc">PDF, DOCX, TXT, MD</p>
-            <div className="sources__add-inputs">
-              <button className="button--secondary button" type="button" onClick={() => fileInputRef.current?.click()}>
-                Choose file
-              </button>
-              <span className="sources__file-name">{file ? file.name : "No file chosen"}</span>
-            </div>
-            <button className="button button--primary sources__add-submit" onClick={() => mutation.mutate()} disabled={mutation.isPending || !file}>
-              {mutation.isPending ? "Uploading..." : "Upload"}
-            </button>
-          </div>
-
-          {/* Web URL */}
-          <div className="sources__add-col">
-            <GlobeAltIcon className="sources__add-icon sources__type-icon--web" />
-            <h4 className="sources__add-title">Web page</h4>
-            <p className="sources__add-desc">Scrape &amp; ingest URL</p>
-            <div className="sources__add-inputs">
-              <input type="url" placeholder="https://example.com/..." value={url} onChange={(e) => setUrl(e.target.value)} />
-            </div>
-            <button className="button button--primary sources__add-submit" onClick={handleSubmitUrl} disabled={isSubmittingUrl || !url.trim()}>
-              {isSubmittingUrl ? "Adding..." : "Add URL"}
-            </button>
-          </div>
-
-          {/* YouTube */}
-          <div className="sources__add-col">
-            <PlayCircleIcon className="sources__add-icon sources__type-icon--youtube" />
-            <h4 className="sources__add-title">YouTube</h4>
-            <p className="sources__add-desc">Extract transcript</p>
-            <div className="sources__add-inputs">
-              <input type="url" placeholder="https://youtube.com/watch?v=..." value={youtubeUrl} onChange={(e) => setYouTubeUrl(e.target.value)} />
-              <input type="text" placeholder="Language (optional)" value={youtubeLanguage} onChange={(e) => setYouTubeLanguage(e.target.value)} />
-              <label className="checkbox-label">
-                <input type="checkbox" checked={youtubeAutoCaptions} onChange={(e) => setYouTubeAutoCaptions(e.target.checked)} />
-                <span>Auto-captions</span>
-              </label>
-            </div>
-            <button className="button button--primary sources__add-submit" onClick={handleSubmitYouTube} disabled={isSubmittingYouTube || !youtubeUrl.trim()}>
-              {isSubmittingYouTube ? "Adding..." : "Add YouTube"}
-            </button>
-          </div>
-        </div>
-      ) : (
-        <p className="sources__permission-notice">You only have view access. Ask the hub owner to grant admin or editor permissions.</p>
-      )}
-      {statusMessage && <p className={`sources__status sources__status--${statusMessage.type}`}>{statusMessage.text}</p>}
-      <SuggestedSourcesPanel hubId={hubId} canReview={canReviewSuggestions} onAccepted={onRefresh} />
-
-      <hr className="sources__divider" />
-
-      {sortedSources.length > 0 && (
-        <div className="sources__filter-bar">
-          <div className="sources__search">
-            <MagnifyingGlassIcon className="sources__search-icon" />
-            <input
-              type="text"
-              className="sources__search-input"
-              placeholder="Search sources..."
-              aria-label="Search sources"
-              value={searchQuery}
-              onChange={(e) => { setSearchQuery(e.target.value); setPage(0); }}
-            />
-            {searchQuery && (
-              <button type="button" className="sources__search-clear" onClick={() => setSearchQuery("")} aria-label="Clear search">
-                <XMarkIcon className="sources__search-clear-icon" />
-              </button>
-            )}
-          </div>
-          <div className="sources__filter-pills">
+      {/* Header: title on top, subtitle + actions on second row */}
+      <h2 className="sources__title">Hub Sources</h2>
+      <div className="sources__subtitle-row">
+        <p className="sources__description">
+          Centralised knowledge repository. All uploaded documents are indexed and processed for semantic search.
+        </p>
+        <div className="sources__header-actions">
+          <SuggestedSourcesPanel hubId={hubId} canReview={canReviewSuggestions} onAccepted={onRefresh} />
+          {canUpload && (
             <button
               type="button"
-              className={`sources__filter-pill${statusFilter === "all" && typeFilter === "all" ? " sources__filter-pill--active" : ""}`}
-              onClick={() => { setStatusFilter("all"); setTypeFilter("all"); setPage(0); }}
+              className="button button--primary sources__add-btn"
+              onClick={() => setShowAddModal(true)}
             >
-              All ({typeCounts.all})
+              <PlusIcon className="sources__btn-icon" />
+              Add Source
             </button>
-            {(["complete", "incomplete"] as const).map((status) => (
+          )}
+        </div>
+      </div>
+
+      {!canUpload && (
+        <p className="sources__permission-notice">You only have view access. Ask the hub owner to grant admin or editor permissions.</p>
+      )}
+
+      {statusMessage && <p className={`sources__status sources__status--${statusMessage.type}`}>{statusMessage.text}</p>}
+
+      {/* Filters + selection row */}
+      {(showFilterMenu || sortedSources.length > 0) && (
+        <div className="sources__toolbar">
+          <div className="sources__filter-groups">
+            <div className="sources__filter-pills">
               <button
-                key={status}
                 type="button"
-                className={`sources__filter-pill${statusFilter === status ? " sources__filter-pill--active" : ""}`}
-                onClick={() => { setStatusFilter(statusFilter === status ? "all" : status); setPage(0); }}
+                className={`sources__filter-pill${statusFilter === "all" ? " sources__filter-pill--active" : ""}`}
+                onClick={() => { setStatusFilter("all"); setPage(0); }}
               >
-                {status === "complete" ? "Complete" : "Incomplete"} ({typeCounts[status]})
+                All
               </button>
-            ))}
-            <span className="sources__filter-divider" />
-            {(["file", "web", "youtube"] as const).map((type) => (
-              <button
-                key={type}
-                type="button"
-                className={`sources__filter-pill${typeFilter === type ? " sources__filter-pill--active" : ""}`}
-                onClick={() => { setTypeFilter(typeFilter === type ? "all" : type); setPage(0); }}
-              >
-                {type === "file" ? "Files" : type === "web" ? "Web" : "YouTube"} ({typeCounts[type]})
-              </button>
-            ))}
-            {canUpload && typeCounts.failed > 0 && (
-              <>
-                <span className="sources__filter-divider" />
+              {(["complete", "incomplete"] as const).map((status) => (
                 <button
+                  key={status}
                   type="button"
-                  className="sources__filter-pill sources__delete-failed"
-                  onClick={handleDeleteAllFailed}
-                  disabled={isDeletingFailed}
+                  className={`sources__filter-pill${statusFilter === status ? " sources__filter-pill--active" : ""}`}
+                  onClick={() => { setStatusFilter(statusFilter === status ? "all" : status); setPage(0); }}
                 >
-                  {isDeletingFailed ? "Deleting..." : `Delete failed (${typeCounts.failed})`}
+                  {status === "complete" ? "Complete" : "Incomplete"} ({typeCounts[status]})
                 </button>
-              </>
+              ))}
+            </div>
+            <div className="sources__filter-pills">
+              <button
+                type="button"
+                className={`sources__filter-pill${typeFilter === "all" ? " sources__filter-pill--active" : ""}`}
+                onClick={() => { setTypeFilter("all"); setPage(0); }}
+              >
+                All
+              </button>
+              {(["file", "web", "youtube"] as const).map((type) => (
+                <button
+                  key={type}
+                  type="button"
+                  className={`sources__filter-pill${typeFilter === type ? " sources__filter-pill--active" : ""}`}
+                  onClick={() => { setTypeFilter(typeFilter === type ? "all" : type); setPage(0); }}
+                >
+                  {type === "file" ? "Files" : type === "web" ? "Web" : "YouTube"} ({typeCounts[type]})
+                </button>
+              ))}
+            </div>
+            {canUpload && typeCounts.failed > 0 && (
+              <button
+                type="button"
+                className="sources__filter-pill sources__delete-failed"
+                onClick={handleDeleteAllFailed}
+                disabled={isDeletingFailed}
+              >
+                {isDeletingFailed ? "Deleting..." : `Delete failed (${typeCounts.failed})`}
+              </button>
             )}
           </div>
           {selectableCount > 0 && (
-            <div className="sources__selection-row">
+            <div className="sources__selection-actions">
               <span className="sources__selection-text">{selectedCount} of {selectableCount} selected</span>
-              <div className="sources__selection-actions">
-                <button className="button--small" type="button" onClick={() => onSelectAllSources?.(filteredSelectableIds)} disabled={selectedCount === selectableCount}>
-                  Select all
-                </button>
-                <button className="button--small" type="button" onClick={() => onClearSourceSelection?.(filteredSelectableIds)} disabled={selectedCount === 0}>
-                  Clear
-                </button>
-              </div>
+              <button className="button--small" type="button" onClick={() => onSelectAllSources?.(filteredSelectableIds)} disabled={selectedCount === selectableCount}>
+                Select all
+              </button>
+              <button className="button--small" type="button" onClick={() => onClearSourceSelection?.(filteredSelectableIds)} disabled={selectedCount === 0}>
+                Clear
+              </button>
             </div>
           )}
         </div>
       )}
 
-      {filteredSources.length > 0 && (
-        <PaginationBar
-          page={page}
-          totalPages={totalPages}
-          pageSize={pageSize}
-          totalItems={filteredSources.length}
-          onPageChange={setPage}
-          onPageSizeChange={(size) => { setPageSize(size); setPage(0); }}
-        />
+      {/* Table header */}
+      {sortedSources.length > 0 && (
+        <div className="sources__table-header">
+          <span className="sources__th sources__th--name">Resource Name</span>
+          <span className="sources__th sources__th--type">Type</span>
+          <span className="sources__th sources__th--status">Status</span>
+          <span className="sources__th sources__th--actions">Actions</span>
+        </div>
       )}
 
-      <div className="sources__list">
+      {/* Table rows */}
+      <div className="sources__table-body">
         {pagedSources.map((source) => {
           const isSelectable = source.status === "complete";
           const isSelected = isSelectable && selectedSourceSet.has(source.id);
-          const webSnapshotReady =
-            source.type === "web" &&
-            source.status === "complete" &&
-            Boolean((source.ingestion_metadata as { crawl_at?: string } | null)?.crawl_at);
-          const youtubeSnapshotReady =
-            source.type === "youtube" &&
-            source.status === "complete" &&
-            Boolean((source.ingestion_metadata as { transcript_fetched_at?: string } | null)?.transcript_fetched_at);
           const isRemoteSource = source.type === "web" || source.type === "youtube";
-          const snapshotReady = webSnapshotReady || youtubeSnapshotReady;
           const isDeleting = deletingSourceId === source.id;
-          const isRetryingThis = isRetrying && retryingSourceId === source.id;
           const isRefreshingThis = refreshingSourceId === source.id;
-          const isReprocessingThis = reprocessingSourceId === source.id;
           return (
             <div
               key={source.id}
-              className={`sources__card${isSelectable ? " sources__card--selectable" : ""}${isSelected ? " sources__card--selected" : ""}`}
+              className={`sources__row${isSelectable ? " sources__row--selectable" : ""}${isSelected ? " sources__row--selected" : ""}`}
               role={isSelectable ? "button" : undefined}
               tabIndex={isSelectable ? 0 : undefined}
               aria-label={isSelectable ? `${isSelected ? "Deselect" : "Select"} ${source.original_name}` : undefined}
@@ -582,88 +365,85 @@ export function UploadPanel({
                 }
               } : undefined}
             >
-              <div className="sources__card-top">
-                <div className="sources__card-info">
+              {/* Resource name */}
+              <div className="sources__cell sources__cell--name">
+                <div className={`sources__resource-icon sources__resource-icon--${source.type}`}>
                   {source.type === "file" && <DocumentTextIcon className="sources__type-icon sources__type-icon--file" />}
                   {source.type === "web" && <GlobeAltIcon className="sources__type-icon sources__type-icon--web" />}
                   {source.type === "youtube" && <PlayCircleIcon className="sources__type-icon sources__type-icon--youtube" />}
-                  <div className="sources__card-details">
-                    <p className="sources__card-name">{source.original_name}</p>
-                    <p className="sources__card-meta">
-                      {source.type === "web" ? "Web URL" : source.type === "youtube" ? "YouTube" : "File"}{" "}
-                      &middot; {formatIrelandDateTime(new Date(source.created_at))}
-                      {source.type === "youtube" && (source.ingestion_metadata as Record<string, unknown> | null)?.captions_source === "auto" && (
-                        <span className="sources__auto-caption-badge" title="This transcript was generated by YouTube's automatic captions and may contain errors">⚠ Auto-captions</span>
-                      )}
-                    </p>
-                    {!isSelectable && source.status !== "failed" && (
-                      <p className="sources__card-note">Available after processing completes.</p>
-                    )}
-                  </div>
                 </div>
-                <div className="sources__card-right">
-                  {source.status === "complete" && (
-                    <button
-                      className="button--small sources__view-btn"
-                      type="button"
-                      onClick={(e) => { e.stopPropagation(); handleViewChunks(source); }}
-                    >
-                      <EyeIcon className="sources__view-icon" />
-                      View
-                    </button>
+                <div className="sources__resource-details">
+                  <span className="sources__resource-name">{source.original_name}</span>
+                  <span className="sources__resource-meta">
+                    Uploaded {formatRelativeDate(new Date(source.created_at))}
+                    {source.type === "youtube" && (source.ingestion_metadata as Record<string, unknown> | null)?.captions_source === "auto" && (
+                      <span className="sources__auto-caption-badge" title="Auto-generated captions">&#x26A0; Auto-captions</span>
+                    )}
+                  </span>
+                  {source.failure_reason && (
+                    <span className="sources__resource-error">{source.failure_reason}</span>
                   )}
-                  {source.status === "failed" && (
-                    <div className="sources__card-actions">
-                      {isRemoteSource ? (
-                        <button className="button--small" type="button" onClick={() => handleRefreshSource(source.id)} disabled={isRefreshingThis}>
-                          {isRefreshingThis ? "Refreshing..." : "Refresh"}
-                        </button>
-                      ) : (
-                        <button className="button--small" type="button" onClick={() => handleRetryUpload(source.id)} disabled={isRetryingThis || isDeleting || !retryFiles[source.id]}>
-                          {isRetryingThis ? "Retrying..." : "Retry upload"}
-                        </button>
-                      )}
-                      {canUpload && (
-                        <button className="button--small button--danger" type="button" onClick={() => handleDeleteSource(source.id)} disabled={isRetryingThis || isDeleting || isRefreshingThis}>
-                          {isDeleting ? "Deleting..." : "Delete"}
-                        </button>
-                      )}
-                    </div>
-                  )}
-                  {isRemoteSource && source.status !== "failed" && (
-                    <div className="sources__card-actions">
-                      <button className="button--small" type="button" onClick={() => handleReprocessSource(source.id)} disabled={isReprocessingThis || isRefreshingThis || !snapshotReady}>
-                        {isReprocessingThis ? "Reprocessing..." : "Reprocess"}
-                      </button>
-                      <button className="button--small" type="button" onClick={() => handleRefreshSource(source.id)} disabled={isRefreshingThis || isReprocessingThis}>
-                        {isRefreshingThis ? "Refreshing..." : "Refresh"}
-                      </button>
-                      {canUpload && (
-                        <button className="button--small button--danger" type="button" onClick={() => handleDeleteSource(source.id)} disabled={isDeleting || isRefreshingThis || isReprocessingThis}>
-                          {isDeleting ? "Deleting..." : "Delete"}
-                        </button>
-                      )}
-                    </div>
-                  )}
-                  {!isRemoteSource && source.status !== "failed" && canUpload && (
-                    <div className="sources__card-actions">
-                      <button className="button--small button--danger" type="button" onClick={() => handleDeleteSource(source.id)} disabled={isDeleting}>
-                        {isDeleting ? "Deleting..." : "Delete"}
-                      </button>
-                    </div>
-                  )}
-                  <StatusPill status={source.status} />
                 </div>
               </div>
-              {source.failure_reason && (
-                <p className="sources__card-error">Error: {source.failure_reason}</p>
-              )}
-              {isRemoteSource && source.status !== "failed" && !snapshotReady && (
-                <p className="sources__card-note">Reprocess is available after the first successful ingest.</p>
-              )}
-              {source.status === "failed" && !isRemoteSource && !retryFiles[source.id] && (
-                <p className="sources__card-note">Retry is available until you refresh this page.</p>
-              )}
+
+              {/* Type badge */}
+              <div className="sources__cell sources__cell--type">
+                <span className={`sources__type-badge sources__type-badge--${source.type}`}>
+                  {source.type === "file" ? "Document" : source.type === "web" ? "Web" : "YouTube"}
+                </span>
+              </div>
+
+              {/* Status */}
+              <div className="sources__cell sources__cell--status">
+                <StatusIndicator status={source.status} />
+              </div>
+
+              {/* Actions */}
+              <div className="sources__cell sources__cell--actions">
+                {source.status === "complete" && (
+                  <button
+                    className="sources__action-btn"
+                    type="button"
+                    onClick={() => handleViewChunks(source)}
+                    title="View chunks"
+                  >
+                    <EyeIcon className="sources__action-icon" />
+                  </button>
+                )}
+                {source.status === "failed" && isRemoteSource && (
+                  <button
+                    className="sources__action-btn"
+                    type="button"
+                    onClick={() => handleRefreshSource(source.id)}
+                    disabled={isRefreshingThis}
+                    title="Refresh"
+                  >
+                    <ArrowPathIcon className={`sources__action-icon${isRefreshingThis ? " sources__action-icon--spin" : ""}`} />
+                  </button>
+                )}
+                {isRemoteSource && source.status !== "failed" && (
+                  <button
+                    className="sources__action-btn"
+                    type="button"
+                    onClick={() => handleRefreshSource(source.id)}
+                    disabled={isRefreshingThis}
+                    title="Refresh"
+                  >
+                    <ArrowPathIcon className={`sources__action-icon${isRefreshingThis ? " sources__action-icon--spin" : ""}`} />
+                  </button>
+                )}
+                {canUpload && (
+                  <button
+                    className="sources__action-btn sources__action-btn--danger"
+                    type="button"
+                    onClick={() => handleDeleteSource(source.id)}
+                    disabled={isDeleting}
+                    title="Delete"
+                  >
+                    <TrashIcon className="sources__action-icon" />
+                  </button>
+                )}
+              </div>
             </div>
           );
         })}
@@ -674,22 +454,60 @@ export function UploadPanel({
           <div className="sources__empty">
             <DocumentPlusIcon className="sources__empty-icon" />
             <p className="sources__empty-title">No sources yet</p>
-            <p className="sources__empty-desc">Upload your first document, add a URL, or paste a YouTube link above.</p>
+            <p className="sources__empty-desc">Click &ldquo;Add Source&rdquo; to upload your first document, add a URL, or import a YouTube video.</p>
           </div>
         )}
       </div>
 
+      {/* Pagination */}
       {filteredSources.length > 0 && (
-        <PaginationBar
-          page={page}
-          totalPages={totalPages}
-          pageSize={pageSize}
-          totalItems={filteredSources.length}
-          onPageChange={setPage}
-          onPageSizeChange={(size) => { setPageSize(size); setPage(0); }}
-        />
+        <div className="sources__pagination">
+          <p className="sources__pagination-info">
+            Showing {page * pageSize + 1}&ndash;{Math.min((page + 1) * pageSize, filteredSources.length)} of {filteredSources.length} Sources
+          </p>
+          <div className="sources__pagination-controls">
+            <div className="sources__pagination-per-page">
+              <span className="sources__pagination-per-page-label">Per page</span>
+              {[10, 25, 50].map((size) => (
+                <button
+                  key={size}
+                  className={`sources__pagination-page${size === pageSize ? " sources__pagination-page--active" : ""}`}
+                  onClick={() => { setPageSize(size); setPage(0); }}
+                >
+                  {size}
+                </button>
+              ))}
+            </div>
+            <div className="sources__pagination-buttons">
+              <button
+                className="sources__pagination-arrow"
+                onClick={() => setPage((p) => Math.max(0, p - 1))}
+                disabled={page === 0}
+              >
+                <ChevronLeftIcon className="sources__pagination-arrow-icon" />
+              </button>
+              {Array.from({ length: totalPages }, (_, i) => i).map((p) => (
+                <button
+                  key={p}
+                  className={`sources__pagination-page${p === page ? " sources__pagination-page--active" : ""}`}
+                  onClick={() => setPage(p)}
+                >
+                  {p + 1}
+                </button>
+              ))}
+              <button
+                className="sources__pagination-arrow"
+                onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+                disabled={page >= totalPages - 1}
+              >
+                <ChevronRightIcon className="sources__pagination-arrow-icon" />
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
+      {/* View chunks modal */}
       {viewingSource && (
         <div className="modal-backdrop" onClick={() => setViewingSource(null)}>
           <div className="modal sources__chunks-modal" onClick={(e) => e.stopPropagation()}>
@@ -714,95 +532,61 @@ export function UploadPanel({
           </div>
         </div>
       )}
+
+      {/* Add source modal */}
+      <AddSourceModal
+        hubId={hubId}
+        open={showAddModal}
+        onClose={() => setShowAddModal(false)}
+        onRefresh={onRefresh}
+      />
+
     </div>
   );
 }
 
-function StatusPill({ status }: { status: Source["status"] }) {
+function StatusIndicator({ status }: { status: Source["status"] }) {
+  const label = status.charAt(0).toUpperCase() + status.slice(1);
+  if (status === "complete") {
+    return (
+      <span className="sources__status-indicator sources__status-indicator--complete">
+        <span className="sources__status-dot sources__status-dot--complete" />
+        {label}
+      </span>
+    );
+  }
+  if (status === "failed") {
+    return (
+      <span className="sources__status-indicator sources__status-indicator--failed">
+        <span className="sources__status-dot sources__status-dot--failed" />
+        {label}
+      </span>
+    );
+  }
   return (
-    <span className={`sources__pill sources__pill--${status}`}>
-      {status.charAt(0).toUpperCase() + status.slice(1)}
+    <span className="sources__status-indicator sources__status-indicator--processing">
+      <span className="sources__status-spinner" />
+      Indexing
     </span>
   );
 }
 
-function PaginationBar({
-  page,
-  totalPages,
-  pageSize,
-  totalItems,
-  onPageChange,
-  onPageSizeChange,
-}: {
-  page: number;
-  totalPages: number;
-  pageSize: number;
-  totalItems: number;
-  onPageChange: (page: number) => void;
-  onPageSizeChange: (size: number) => void;
-}) {
-  return (
-    <div className="sources__pagination">
-      <div className="sources__pagination-info">
-        Showing {page * pageSize + 1}–{Math.min((page + 1) * pageSize, totalItems)} of {totalItems}
-      </div>
-      <div className="sources__pagination-controls">
-        <button type="button" className="button--small" disabled={page === 0} onClick={() => onPageChange(page - 1)}>
-          Previous
-        </button>
-        <span className="sources__pagination-page">Page {page + 1} of {totalPages}</span>
-        <button type="button" className="button--small" disabled={page >= totalPages - 1} onClick={() => onPageChange(page + 1)}>
-          Next
-        </button>
-      </div>
-      <div className="sources__pagination-sizes">
-        {[10, 25, 50].map((size) => (
-          <button
-            key={size}
-            type="button"
-            className={`sources__filter-pill${pageSize === size ? " sources__filter-pill--active" : ""}`}
-            onClick={() => onPageSizeChange(size)}
-          >
-            {size}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function resolveContentType(file: File): string {
-  if (file.type) return file.type;
-  const extension = file.name.split(".").pop()?.toLowerCase();
-  switch (extension) {
-    case "pdf":
-      return "application/pdf";
-    case "docx":
-      return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
-    case "txt":
-    case "md":
-      return "text/plain";
-    default:
-      return "application/octet-stream";
-  }
-}
-
-function clampFailureReason(err: unknown): string {
-  const message = err instanceof Error ? err.message : "Upload failed.";
-  const trimmed = message.trim() || "Upload failed.";
-  return trimmed.length > 500 ? trimmed.slice(0, 500) : trimmed;
-}
-
-function formatIrelandDateTime(date: Date) {
+function formatRelativeDate(date: Date): string {
   if (Number.isNaN(date.getTime())) return "";
-  const day = pad2(date.getDate());
-  const month = pad2(date.getMonth() + 1);
-  const year = date.getFullYear();
-  const hours = pad2(date.getHours());
-  const minutes = pad2(date.getMinutes());
-  return `${day}/${month}/${year} ${hours}:${minutes}`;
-}
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const minutes = Math.floor(diffMs / 60000);
+  const hours = Math.floor(diffMs / 3600000);
+  const days = Math.floor(diffMs / 86400000);
 
-function pad2(value: number) {
-  return value.toString().padStart(2, "0");
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes}m ago`;
+  if (hours < 24) return `${hours}h ago`;
+  if (days === 1) return "yesterday";
+  if (days < 7) return `${days} days ago`;
+
+  const day = date.getDate().toString().padStart(2, "0");
+  const month = (date.getMonth() + 1).toString().padStart(2, "0");
+  const year = date.getFullYear();
+  return `${day}/${month}/${year}`;
 }
