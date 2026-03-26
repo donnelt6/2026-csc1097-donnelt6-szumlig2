@@ -104,6 +104,8 @@ export function AddSourceModal({ hubId, open, onClose, onRefresh }: Props) {
   const [statusMessage, setStatusMessage] = useState<{ text: string; type: "success" | "error" } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const isProcessingRef = useRef(false);
+  const queueRef = useRef(queue);
+  queueRef.current = queue;
   const backdropRef = useRef<HTMLDivElement>(null);
 
   // Auto-dismiss status messages
@@ -249,8 +251,11 @@ export function AddSourceModal({ hubId, open, onClose, onRefresh }: Props) {
 
   const addFiles = useCallback((files: FileList | File[]) => {
     const newItems: QueueItem[] = [];
+    const MAX_SIZE = 50 * 1024 * 1024;
+    const rejected: string[] = [];
     for (const file of Array.from(files)) {
       if (!isAcceptedFile(file)) continue;
+      if (file.size > MAX_SIZE) { rejected.push(file.name); continue; }
       newItems.push({
         kind: "file",
         id: `upload-${++queueIdCounter}`,
@@ -261,23 +266,32 @@ export function AddSourceModal({ hubId, open, onClose, onRefresh }: Props) {
         progress: 0,
       });
     }
-    if (newItems.length === 0) {
+    if (rejected.length > 0) {
+      setStatusMessage({ text: `${rejected.join(", ")} exceeded the 50 MB limit`, type: "error" });
+    }
+    if (newItems.length === 0 && rejected.length === 0) {
       setStatusMessage({ text: "No supported files selected. Accepted: PDF, DOCX, TXT, MD.", type: "error" });
       return;
     }
+    if (newItems.length === 0) return;
     setQueue((prev) => [...prev, ...newItems]);
   }, []);
 
   const addWebUrl = useCallback(() => {
-    if (!url.trim()) {
+    const trimmed = url.trim();
+    if (!trimmed) {
       setStatusMessage({ text: "Enter a URL to ingest.", type: "error" });
+      return;
+    }
+    if (queueRef.current.some((i) => "url" in i && i.url === trimmed && i.status !== "error" && i.status !== "complete")) {
+      setStatusMessage({ text: "That URL is already in the queue.", type: "error" });
       return;
     }
     setQueue((prev) => [...prev, {
       kind: "webpage" as const,
       id: `web-${++queueIdCounter}`,
-      label: url.trim(),
-      url: url.trim(),
+      label: trimmed,
+      url: trimmed,
       status: "pending" as UploadStatus,
       progress: 0,
     }]);
@@ -285,15 +299,20 @@ export function AddSourceModal({ hubId, open, onClose, onRefresh }: Props) {
   }, [url]);
 
   const addYouTubeUrl = useCallback(() => {
-    if (!youtubeUrl.trim()) {
+    const trimmed = youtubeUrl.trim();
+    if (!trimmed) {
       setStatusMessage({ text: "Enter a YouTube URL to ingest.", type: "error" });
+      return;
+    }
+    if (queueRef.current.some((i) => "url" in i && i.url === trimmed && i.status !== "error" && i.status !== "complete")) {
+      setStatusMessage({ text: "That URL is already in the queue.", type: "error" });
       return;
     }
     setQueue((prev) => [...prev, {
       kind: "youtube" as const,
       id: `yt-${++queueIdCounter}`,
-      label: youtubeUrl.trim(),
-      url: youtubeUrl.trim(),
+      label: trimmed,
+      url: trimmed,
       language: youtubeLanguage,
       allowAutoCaptions: youtubeAutoCaptions,
       status: "pending" as UploadStatus,
@@ -305,12 +324,12 @@ export function AddSourceModal({ hubId, open, onClose, onRefresh }: Props) {
   }, [youtubeUrl, youtubeLanguage, youtubeAutoCaptions]);
 
   const removeFromQueue = useCallback((itemId: string) => {
-    const item = queue.find((i) => i.id === itemId);
+    const item = queueRef.current.find((i) => i.id === itemId);
     if (item?.kind === "file" && item.sourceId && item.status === "error") {
       deleteSource(item.sourceId).then(() => onRefresh()).catch(() => {});
     }
     setQueue((prev) => prev.filter((i) => i.id !== itemId));
-  }, [queue, onRefresh]);
+  }, [onRefresh]);
 
   // Drag-and-drop handlers
   const handleDragOver = useCallback((e: React.DragEvent) => {

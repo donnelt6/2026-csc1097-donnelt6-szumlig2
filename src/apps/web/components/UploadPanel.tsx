@@ -242,9 +242,14 @@ export function UploadPanel({
   const selectedCount = filteredSelectableIds.filter((id) => selectedSourceSet.has(id)).length;
   const selectableCount = filteredSelectableIds.length;
   const totalPages = Math.max(1, Math.ceil(filteredSources.length / pageSize));
-  const clampedPage = Math.min(page, totalPages - 1);
-  if (clampedPage !== page) setPage(clampedPage);
-  const pagedSources = filteredSources.slice(clampedPage * pageSize, (clampedPage + 1) * pageSize);
+
+  useEffect(() => {
+    const max = Math.max(0, totalPages - 1);
+    if (page > max) setPage(max);
+  }, [page, totalPages]);
+
+  const safePage = Math.min(page, totalPages - 1);
+  const pagedSources = filteredSources.slice(safePage * pageSize, (safePage + 1) * pageSize);
 
   return (
     <div className="sources">

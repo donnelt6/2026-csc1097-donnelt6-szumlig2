@@ -447,7 +447,7 @@ def _select_caption_track(
       6. Auto captions in any language (if allowed)
     """
     subtitles = info.get("subtitles") or {}
-    auto_caps = info.get("automatic_captions") or {} if allow_auto else {}
+    auto_caps = (info.get("automatic_captions") or {}) if allow_auto else {}
 
     preferred_norm = _normalize_language(preferred_language) if preferred_language else None
     preferred_is_english = preferred_norm in (None, "en") or (preferred_norm or "").startswith("en")
