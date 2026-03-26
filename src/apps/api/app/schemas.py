@@ -429,6 +429,14 @@ class CreateRevisionRequest(StrictModel):
     content: str = Field(..., min_length=1, max_length=12000)
     citations: List[Citation] = Field(default_factory=list)
 
+    @field_validator("content", mode="before")
+    @classmethod
+    def validate_content(cls, value: str) -> str:
+        trimmed = _trim_and_reject_blank(value)
+        if trimmed is None:
+            raise ValueError("Value cannot be blank.")
+        return trimmed
+
 
 class ApplyRevisionRequest(StrictModel):
     revision_id: UUID
@@ -465,7 +473,8 @@ class ChatSessionRenameRequest(StrictModel):
     @classmethod
     def validate_title(cls, value: str) -> str:
         trimmed = _trim_and_reject_blank(value)
-        assert trimmed is not None
+        if trimmed is None:
+            raise ValueError("Value cannot be blank.")
         return trimmed
 
 

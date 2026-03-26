@@ -1,40 +1,46 @@
 import type { ActivityEvent } from './types';
 
 export function describeEventParts(event: ActivityEvent, currentUserId?: string): { action: string; subject: string } {
+  const actorLabel = resolveActorLabel(event, currentUserId);
   const name = (event.metadata?.name as string) || (event.metadata?.title as string) || '';
   const msg = (event.metadata?.message as string) || '';
   let action: string;
   let subject = '';
   switch (event.resource_type) {
-    case 'hub': action = 'Created hub'; subject = name; break;
+    case 'hub': action = `${actorLabel} created hub`; subject = name; break;
     case 'source':
-      if (event.action === 'deleted') { action = 'Deleted source'; subject = name; }
-      else { action = `Added ${(event.metadata?.type as string) || ''} source`.trim(); subject = name; }
+      if (event.action === 'deleted') { action = `${actorLabel} deleted source`; subject = name; }
+      else { action = `${actorLabel} added ${((event.metadata?.type as string) || '').trim()} source`.replace(/\s+/g, ' ').trim(); subject = name; }
       break;
     case 'member':
       if (event.action === 'invited') {
         const role = (event.metadata?.role as string);
         const email = (event.metadata?.email as string) || 'a member';
-        action = 'Invited';
+        action = `${actorLabel} invited`;
         subject = role ? `${email} (${role})` : email;
       }
-      else if (event.action === 'removed') { action = 'Removed a member'; }
-      else { action = 'Joined hub'; }
+      else if (event.action === 'removed') { action = `${actorLabel} removed`; subject = 'a member'; }
+      else { action = `${actorLabel} joined hub`; }
       break;
     case 'reminder':
-      if (event.action === 'complete') { action = 'Completed reminder'; subject = msg; }
-      else if (event.action === 'cancel') { action = 'Cancelled reminder'; subject = msg; }
-      else { action = 'Created reminder'; subject = msg || name; }
+      if (event.action === 'complete') { action = `${actorLabel} completed reminder`; subject = msg; }
+      else if (event.action === 'cancel') { action = `${actorLabel} cancelled reminder`; subject = msg; }
+      else { action = `${actorLabel} created reminder`; subject = msg || name; }
       break;
-    case 'faq': action = `Generated ${(event.metadata?.count as number) || ''} FAQs`; break;
-    case 'guide': action = 'Generated guide'; subject = name; break;
-    case 'chat': action = 'Started chat'; subject = name; break;
-    default: action = `${event.action} ${event.resource_type}`;
-  }
-  if (currentUserId && event.user_id === currentUserId) {
-    action = 'You ' + action.charAt(0).toLowerCase() + action.slice(1);
+    case 'faq': action = `${actorLabel} generated ${((event.metadata?.count as number) || '')} FAQs`.replace(/\s+/g, ' ').trim(); break;
+    case 'guide': action = `${actorLabel} generated guide`; subject = name; break;
+    case 'chat': action = `${actorLabel} started chat`; subject = name; break;
+    default: action = `${actorLabel} ${event.action} ${event.resource_type}`.replace(/\s+/g, ' ').trim();
   }
   return { action, subject };
+}
+
+function resolveActorLabel(event: ActivityEvent, currentUserId?: string): string {
+  if (currentUserId && event.user_id === currentUserId) {
+    return 'You';
+  }
+  const actorLabel = (event.metadata?.actor_label as string | undefined)?.trim();
+  return actorLabel || 'Someone';
 }
 
 export function getEventTone(event: ActivityEvent): 'destructive' | 'positive' | 'neutral' {

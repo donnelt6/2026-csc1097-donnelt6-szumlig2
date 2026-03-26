@@ -35,7 +35,7 @@ export function DashboardActivity() {
   const items = activityEvents ?? [];
   const filtered = filterQuery.trim()
     ? items.filter((event) => {
-        const { action, subject } = describeEventParts(event);
+        const { action, subject } = describeEventParts(event, user?.id);
         const text = `${action} ${subject}`.toLowerCase();
         const hubName = (hubNameMap.get(event.hub_id) ?? '').toLowerCase();
         const q = filterQuery.toLowerCase();

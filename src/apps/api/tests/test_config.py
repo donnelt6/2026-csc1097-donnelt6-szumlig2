@@ -42,3 +42,12 @@ def test_allowed_origins_are_normalized_from_comma_separated_string(monkeypatch)
         "https://app.example.com",
         "https://admin.example.com",
     ]
+
+
+def test_cors_allowed_origins_are_stored_after_initial_parse(monkeypatch) -> None:
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.setenv("ALLOWED_ORIGINS", "https://app.example.com")
+
+    settings = get_settings()
+
+    assert settings.cors_allowed_origins is settings.cors_allowed_origins

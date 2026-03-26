@@ -118,6 +118,9 @@ export function HubsList({ searchQuery, filters, onHubCountChange, onPaginationV
   const toggleFavourite = async (hubId: string, currentState: boolean, e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    const currentHubs = queryClient.getQueryData<Hub[]>(["hubs"]) ?? [];
+    const targetHub = currentHubs.find((hub) => hub.id === hubId);
+    if (hubId.startsWith("temp-hub-") || targetHub?._isPendingClientSync) return;
     const newState = !currentState;
     queryClient.setQueryData(["hubs"], (oldHubs: typeof data) => {
       if (!oldHubs) return oldHubs;
@@ -282,6 +285,7 @@ export function HubsList({ searchQuery, filters, onHubCountChange, onPaginationV
           const canEditAppearance = hub.role === "owner" || hub.role === "admin";
           const canArchiveHub = hub.role === "owner";
           const canOpenMenu = canEditAppearance || canArchiveHub;
+          const isPendingHub = hub.id.startsWith("temp-hub-") || hub._isPendingClientSync;
 
           return (
           <Link key={hub.id} href={`/hubs/${hub.id}`} className="hub-card">
@@ -299,7 +303,14 @@ export function HubsList({ searchQuery, filters, onHubCountChange, onPaginationV
                 <button
                   onClick={(e) => toggleFavourite(hub.id, hub.is_favourite ?? false, e)}
                   className="hub-favourite-button"
-                  aria-label={hub.is_favourite ? "Remove from starred" : "Add to starred"}
+                  aria-label={
+                    isPendingHub
+                      ? "Hub is still being created"
+                      : hub.is_favourite
+                        ? "Remove from starred"
+                        : "Add to starred"
+                  }
+                  disabled={isPendingHub}
                 >
                   {hub.is_favourite ? (
                     <StarSolid className="hub-favourite-icon filled" />

@@ -32,6 +32,7 @@ export function HubModerationPanel({ hubId, hubRole }: HubModerationPanelProps) 
   const [selectedRevisionId, setSelectedRevisionId] = useState<string>("");
   const [draftContent, setDraftContent] = useState("");
   const [draftCitations, setDraftCitations] = useState("[]");
+  const [draftError, setDraftError] = useState<string | null>(null);
   const [loadedCaseId, setLoadedCaseId] = useState<string | null>(null);
   const [pendingRevisionSelectionId, setPendingRevisionSelectionId] = useState<string | null>(null);
   const [syncDraftFromDetail, setSyncDraftFromDetail] = useState(false);
@@ -45,6 +46,9 @@ export function HubModerationPanel({ hubId, hubRole }: HubModerationPanelProps) 
         status: statusFilter === "all" ? undefined : statusFilter,
       }),
     enabled: canModerate,
+    refetchInterval: canModerate ? 5000 : false,
+    refetchIntervalInBackground: true,
+    refetchOnWindowFocus: true,
   });
 
   useEffect(() => {
@@ -60,6 +64,9 @@ export function HubModerationPanel({ hubId, hubRole }: HubModerationPanelProps) 
     queryKey: ["flagged-chat", hubId, selectedFlagId],
     queryFn: () => getFlaggedChat(hubId, selectedFlagId!),
     enabled: canModerate && !!selectedFlagId,
+    refetchInterval: canModerate && !!selectedFlagId ? 5000 : false,
+    refetchIntervalInBackground: true,
+    refetchOnWindowFocus: true,
   });
 
   useEffect(() => {
@@ -105,6 +112,7 @@ export function HubModerationPanel({ hubId, hubRole }: HubModerationPanelProps) 
   const regenerateMutation = useMutation({
     mutationFn: (flagId: string) => regenerateFlaggedChat(hubId, flagId),
     onSuccess: async (revision, flagId) => {
+      setDraftError(null);
       setPendingRevisionSelectionId(revision.id);
       setSyncDraftFromDetail(true);
       await refreshQueries(flagId);
@@ -113,18 +121,26 @@ export function HubModerationPanel({ hubId, hubRole }: HubModerationPanelProps) 
 
   const manualRevisionMutation = useMutation({
     mutationFn: async (flagId: string) => {
+      const trimmedContent = draftContent.trim();
+      if (!trimmedContent) {
+        throw new Error("Draft content cannot be blank.");
+      }
       let citations: Citation[] = [];
       try {
         citations = JSON.parse(draftCitations) as Citation[];
       } catch {
         throw new Error("Citations must be valid JSON.");
       }
-      return createFlaggedChatRevision(hubId, flagId, { content: draftContent, citations });
+      return createFlaggedChatRevision(hubId, flagId, { content: trimmedContent, citations });
     },
     onSuccess: async (revision, flagId) => {
+      setDraftError(null);
       setPendingRevisionSelectionId(revision.id);
       setSyncDraftFromDetail(true);
       await refreshQueries(flagId);
+    },
+    onError: (error) => {
+      setDraftError((error as Error).message);
     },
   });
 
@@ -149,6 +165,7 @@ export function HubModerationPanel({ hubId, hubRole }: HubModerationPanelProps) 
   const selectedRevision: MessageRevision | undefined = detailQuery.data?.revisions.find(
     (revision) => revision.id === selectedRevisionId
   );
+  const isDraftBlank = draftContent.trim().length === 0;
 
   if (!canModerate) {
     return (
@@ -281,13 +298,19 @@ export function HubModerationPanel({ hubId, hubRole }: HubModerationPanelProps) 
                   <h4 style={{ margin: 0 }}>Manual edit draft</h4>
                   <textarea
                     value={draftContent}
-                    onChange={(event) => setDraftContent(event.target.value)}
+                    onChange={(event) => {
+                      setDraftContent(event.target.value);
+                      if (draftError) setDraftError(null);
+                    }}
                     rows={12}
                     style={{ width: "100%" }}
                   />
                   <textarea
                     value={draftCitations}
-                    onChange={(event) => setDraftCitations(event.target.value)}
+                    onChange={(event) => {
+                      setDraftCitations(event.target.value);
+                      if (draftError) setDraftError(null);
+                    }}
                     rows={8}
                     style={{ width: "100%", fontFamily: "monospace" }}
                   />
@@ -295,12 +318,19 @@ export function HubModerationPanel({ hubId, hubRole }: HubModerationPanelProps) 
                     className="button"
                     type="button"
                     onClick={() => manualRevisionMutation.mutate(detailQuery.data.case.id)}
-                    disabled={manualRevisionMutation.isPending || !["open", "in_review"].includes(detailQuery.data.case.status)}
+                    disabled={
+                      manualRevisionMutation.isPending ||
+                      isDraftBlank ||
+                      !["open", "in_review"].includes(detailQuery.data.case.status)
+                    }
                   >
                     {manualRevisionMutation.isPending ? "Saving..." : "Save manual draft"}
                   </button>
+                  {draftError && (
+                    <p className="muted">{draftError}</p>
+                  )}
                   {manualRevisionMutation.error && (
-                    <p className="muted">Draft save failed: {(manualRevisionMutation.error as Error).message}</p>
+                    !draftError ? <p className="muted">Draft save failed: {(manualRevisionMutation.error as Error).message}</p> : null
                   )}
                 </div>
 
@@ -327,6 +357,7 @@ export function HubModerationPanel({ hubId, hubRole }: HubModerationPanelProps) 
                     !selectedRevisionId ||
                     applyMutation.isPending ||
                     !selectedRevision ||
+                    isDraftBlank ||
                     selectedRevision.revision_type === "original" ||
                     !["open", "in_review"].includes(detailQuery.data.case.status)
                   }

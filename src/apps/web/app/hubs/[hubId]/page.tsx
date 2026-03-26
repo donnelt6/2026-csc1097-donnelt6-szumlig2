@@ -1,6 +1,6 @@
 'use client';
 
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { ChatPanel } from "../../../components/ChatPanel";
@@ -13,7 +13,7 @@ import { UploadPanel } from "../../../components/UploadPanel";
 import { MembersPanel } from "../../../components/MembersPanel";
 import { RemindersPanel } from "../../../components/RemindersPanel";
 import { ReminderCandidatesPanel } from "../../../components/ReminderCandidatesPanel";
-import { listSources, trackHubAccess } from "../../../lib/api";
+import { acceptInvite, listInvites, listSources, trackHubAccess } from "../../../lib/api";
 import { useCurrentHub } from "../../../lib/CurrentHubContext";
 import { useHubTab } from "../../../lib/HubTabContext";
 import type { HubTab } from "../../../lib/HubTabContext";
@@ -33,7 +33,7 @@ export default function HubDetail({ params }: { params: { hubId: string } }) {
   const searchParams = useSearchParams();
   const hasTrackedAccess = useRef(false);
   const { activeTab, setActiveTab } = useHubTab();
-  const { currentHub: hub } = useCurrentHub();
+  const { currentHub: hub, isLoading: currentHubLoading } = useCurrentHub();
   const [reminderSubTab, setReminderSubTab] = useState('suggested');
 
   // Switch to the tab specified in ?tab= URL param (e.g. from dashboard prompt links)
@@ -50,9 +50,28 @@ export default function HubDetail({ params }: { params: { hubId: string } }) {
   const canUpload = hub?.role === 'owner' || hub?.role === 'admin' || hub?.role === 'editor';
   const canModerate = hub?.role === 'owner' || hub?.role === 'admin';
 
+  const { data: invites = [] } = useQuery({
+    queryKey: ['invites'],
+    queryFn: listInvites,
+    enabled: !hubResolved,
+    staleTime: 0,
+  });
+
+  const pendingInvite = invites.find((invite) => invite.hub.id === params.hubId) ?? null;
+  const acceptInviteMutation = useMutation({
+    mutationFn: () => acceptInvite(params.hubId),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['invites'] }),
+        queryClient.invalidateQueries({ queryKey: ['hubs'] }),
+      ]);
+    },
+  });
+
   const { data: sources, refetch: refetchSources, isLoading: sourcesLoading } = useQuery({
     queryKey: ['sources', params.hubId],
     queryFn: () => listSources(params.hubId),
+    enabled: hubResolved,
     refetchInterval: activeTab === 'sources' ? 4000 : false,
   });
 
@@ -102,6 +121,40 @@ export default function HubDetail({ params }: { params: { hubId: string } }) {
       setActiveTab('chat');
     }
   }, [activeTab, canModerate, hubResolved, setActiveTab]);
+
+  if (!currentHubLoading && !hubResolved) {
+    return (
+      <main className="page-content page-content--no-hero">
+        <div className="content-inner">
+          <div className="card" style={{ maxWidth: '720px', margin: '0 auto', padding: '24px' }}>
+            <h2 style={{ marginTop: 0 }}>
+              {pendingInvite ? 'Accept your invite to open this hub' : 'Hub access required'}
+            </h2>
+            <p className="muted" style={{ marginBottom: '16px' }}>
+              {pendingInvite
+                ? 'This invite has not been accepted yet. Accept it before viewing chat, sources, or other hub content.'
+                : 'This hub is not available from your accepted memberships.'}
+            </p>
+            {pendingInvite && (
+              <button
+                type="button"
+                className="button"
+                onClick={() => acceptInviteMutation.mutate()}
+                disabled={acceptInviteMutation.isPending}
+              >
+                {acceptInviteMutation.isPending ? 'Accepting...' : 'Accept invite'}
+              </button>
+            )}
+            {acceptInviteMutation.error && (
+              <p className="muted" role="alert" style={{ marginTop: '12px' }}>
+                {(acceptInviteMutation.error as Error).message}
+              </p>
+            )}
+          </div>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className={`page-content page-content--no-hero${activeTab === 'chat' ? ' page-content--fullscreen' : ''}`}>
