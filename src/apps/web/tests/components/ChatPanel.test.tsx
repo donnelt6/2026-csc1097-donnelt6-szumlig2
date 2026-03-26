@@ -215,11 +215,11 @@ describe("ChatPanel", () => {
   });
 
   it("blocks composer input and submission while the chat is bootstrapping", async () => {
-    let resolveSessions: ((value: []) => void) | null = null;
+    let resolveSessions: (() => void) | null = null;
     vi.mocked(listChatSessions).mockImplementation(
       () =>
         new Promise((resolve) => {
-          resolveSessions = resolve;
+          resolveSessions = () => resolve([]);
         })
     );
 
@@ -240,7 +240,7 @@ describe("ChatPanel", () => {
 
     expect(askQuestion).not.toHaveBeenCalled();
 
-    resolveSessions?.([]);
+    resolveSessions?.();
     await waitFor(() => expect(screen.getByText("Ask a question about your hub")).toBeInTheDocument());
     expect(textarea).not.toBeDisabled();
   });
