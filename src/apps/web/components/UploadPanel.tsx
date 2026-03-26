@@ -85,7 +85,6 @@ export function UploadPanel({
 
   // Reset page when navbar search changes
   useEffect(() => { setPage(0); }, [searchQuery]);
-  const [showFilterMenu] = useState(false);
   const autoOpenHandled = useRef(false);
 
   // Auto-open modal when triggered from sidebar
@@ -243,7 +242,9 @@ export function UploadPanel({
   const selectedCount = filteredSelectableIds.filter((id) => selectedSourceSet.has(id)).length;
   const selectableCount = filteredSelectableIds.length;
   const totalPages = Math.max(1, Math.ceil(filteredSources.length / pageSize));
-  const pagedSources = filteredSources.slice(page * pageSize, (page + 1) * pageSize);
+  const clampedPage = Math.min(page, totalPages - 1);
+  if (clampedPage !== page) setPage(clampedPage);
+  const pagedSources = filteredSources.slice(clampedPage * pageSize, (clampedPage + 1) * pageSize);
 
   return (
     <div className="sources">
@@ -275,7 +276,7 @@ export function UploadPanel({
       {statusMessage && <p className={`sources__status sources__status--${statusMessage.type}`}>{statusMessage.text}</p>}
 
       {/* Filters + selection row */}
-      {(showFilterMenu || sortedSources.length > 0) && (
+      {sortedSources.length > 0 && (
         <div className="sources__toolbar">
           <div className="sources__filter-groups">
             <div className="sources__filter-pills">
@@ -510,6 +511,7 @@ export function UploadPanel({
               {[10, 25, 50].map((size) => (
                 <button
                   key={size}
+                  type="button"
                   className={`sources__pagination-page${size === pageSize ? " sources__pagination-page--active" : ""}`}
                   onClick={() => { setPageSize(size); setPage(0); }}
                 >
@@ -519,6 +521,7 @@ export function UploadPanel({
             </div>
             <div className="sources__pagination-buttons">
               <button
+                type="button"
                 className="sources__pagination-arrow"
                 onClick={() => setPage((p) => Math.max(0, p - 1))}
                 disabled={page === 0}
@@ -528,6 +531,7 @@ export function UploadPanel({
               {Array.from({ length: totalPages }, (_, i) => i).map((p) => (
                 <button
                   key={p}
+                  type="button"
                   className={`sources__pagination-page${p === page ? " sources__pagination-page--active" : ""}`}
                   onClick={() => setPage(p)}
                 >
@@ -535,6 +539,7 @@ export function UploadPanel({
                 </button>
               ))}
               <button
+                type="button"
                 className="sources__pagination-arrow"
                 onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
                 disabled={page >= totalPages - 1}

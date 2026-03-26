@@ -81,8 +81,8 @@ export default function HubDetail({ params }: { params: { hubId: string } }) {
   const completeSourceIds = (sources ?? EMPTY_SOURCES).filter((s) => s.status === 'complete').map((s) => s.id);
   const handleChatSourceChange = useCallback((ids: string[]) => setChatSourceIds(ids), []);
   const handleToggleSource = useCallback((sourceId: string) => chatPanelRef.current?.toggleSource(sourceId), []);
-  const handleSelectAllSources = useCallback(() => chatPanelRef.current?.selectAllSources(), []);
-  const handleClearSourceSelection = useCallback(() => chatPanelRef.current?.clearSourceSelection(), []);
+  const handleSelectAllSources = useCallback((scope?: string[]) => chatPanelRef.current?.selectAllSources(scope), []);
+  const handleClearSourceSelection = useCallback((scope?: string[]) => chatPanelRef.current?.clearSourceSelection(scope), []);
 
   useEffect(() => {
     hasTrackedAccess.current = false;

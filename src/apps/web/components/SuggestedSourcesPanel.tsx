@@ -21,6 +21,7 @@ interface Props {
 export function SuggestedSourcesPanel({ hubId, canReview, onAccepted }: Props) {
   const queryClient = useQueryClient();
   const [expanded, setExpanded] = useState(false);
+  const [busySuggestionId, setBusySuggestionId] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const { data, isLoading, error } = useQuery({
     queryKey: ["source-suggestions", hubId],
@@ -31,12 +32,18 @@ export function SuggestedSourcesPanel({ hubId, canReview, onAccepted }: Props) {
   const decisionMutation = useMutation({
     mutationFn: ({ suggestionId, action }: { suggestionId: string; action: "accepted" | "declined" }) =>
       decideSourceSuggestion(suggestionId, { action }),
+    onMutate: ({ suggestionId }) => {
+      setBusySuggestionId(suggestionId);
+    },
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["source-suggestions", hubId] });
       if (variables.action === "accepted") {
         queryClient.invalidateQueries({ queryKey: ["sources", hubId] });
         onAccepted?.();
       }
+    },
+    onSettled: () => {
+      setBusySuggestionId(null);
     },
   });
 
@@ -78,7 +85,7 @@ export function SuggestedSourcesPanel({ hubId, canReview, onAccepted }: Props) {
           {error && <p className="suggested-sources__error">Failed to load suggestions.</p>}
 
           {suggestions.map((suggestion) => {
-            const isBusy = decisionMutation.isPending;
+            const isBusy = busySuggestionId === suggestion.id;
             return (
               <div key={suggestion.id} className="suggested-sources__item">
                 <div className={`sources__resource-icon sources__resource-icon--${suggestion.type}`}>

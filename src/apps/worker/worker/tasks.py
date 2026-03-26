@@ -488,7 +488,7 @@ def _select_caption_track(
 
     if not allow_auto and (info.get("automatic_captions") or {}):
         raise ValueError("No manual captions found. Try enabling auto-captions.")
-    raise ValueError("No captions available for the requested language")
+    raise ValueError("No captions available for this video")
 
 
 def _pick_caption_preferred(

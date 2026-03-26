@@ -51,8 +51,8 @@ interface DraftState extends ChatControlState {
 
 export interface ChatPanelHandle {
   toggleSource: (sourceId: string) => void;
-  selectAllSources: () => void;
-  clearSourceSelection: () => void;
+  selectAllSources: (scope?: string[]) => void;
+  clearSourceSelection: (scope?: string[]) => void;
 }
 
 interface Props {
@@ -496,12 +496,25 @@ export const ChatPanel = forwardRef<ChatPanelHandle, Props>(function ChatPanel({
     );
   }
 
-  function handleSelectAllSources() {
-    setSelectedSourceIds([...completeSourceIds]);
+  function handleSelectAllSources(scope?: string[]) {
+    if (scope) {
+      setSelectedSourceIds((prev) => {
+        const set = new Set(prev);
+        for (const id of scope) set.add(id);
+        return [...set];
+      });
+    } else {
+      setSelectedSourceIds([...completeSourceIds]);
+    }
   }
 
-  function handleClearSourceSelection() {
-    setSelectedSourceIds([]);
+  function handleClearSourceSelection(scope?: string[]) {
+    if (scope) {
+      const remove = new Set(scope);
+      setSelectedSourceIds((prev) => prev.filter((id) => !remove.has(id)));
+    } else {
+      setSelectedSourceIds([]);
+    }
   }
 
   useImperativeHandle(ref, () => ({

@@ -305,15 +305,12 @@ export function AddSourceModal({ hubId, open, onClose, onRefresh }: Props) {
   }, [youtubeUrl, youtubeLanguage, youtubeAutoCaptions]);
 
   const removeFromQueue = useCallback((itemId: string) => {
-    setQueue((prev) => {
-      const item = prev.find((i) => i.id === itemId);
-      // Clean up orphaned backend record for failed file uploads
-      if (item?.kind === "file" && item.sourceId && item.status === "error") {
-        deleteSource(item.sourceId).then(() => onRefresh()).catch(() => {});
-      }
-      return prev.filter((i) => i.id !== itemId);
-    });
-  }, [onRefresh]);
+    const item = queue.find((i) => i.id === itemId);
+    if (item?.kind === "file" && item.sourceId && item.status === "error") {
+      deleteSource(item.sourceId).then(() => onRefresh()).catch(() => {});
+    }
+    setQueue((prev) => prev.filter((i) => i.id !== itemId));
+  }, [queue, onRefresh]);
 
   // Drag-and-drop handlers
   const handleDragOver = useCallback((e: React.DragEvent) => {
