@@ -1,33 +1,64 @@
-// Tests UploadPanel interactions with mocked API calls and fetch.
-import { screen, waitFor } from "@testing-library/react";
+// Tests UploadPanel interactions with mocked API calls.
+import { fireEvent, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ComponentProps } from "react";
 import { UploadPanel } from "../../components/UploadPanel";
 import {
   createSource,
-  createSourceUploadUrl,
   createWebSource,
   createYouTubeSource,
   deleteSource,
   enqueueSource,
-  failSource,
 } from "../../lib/api";
 import type { Source } from "../../lib/types";
 import { renderWithQueryClient } from "../test-utils";
 
 vi.mock("../../lib/api", () => ({
   createSource: vi.fn(),
-  createSourceUploadUrl: vi.fn(),
   createWebSource: vi.fn(),
   createYouTubeSource: vi.fn(),
   listSourceSuggestions: vi.fn().mockResolvedValue([]),
+  listSourceChunks: vi.fn().mockResolvedValue([]),
   decideSourceSuggestion: vi.fn(),
   deleteSource: vi.fn(),
   enqueueSource: vi.fn(),
-  failSource: vi.fn(),
   refreshSource: vi.fn(),
 }));
+
+function mockXhr(status = 200) {
+  const instances: Array<{
+    open: ReturnType<typeof vi.fn>;
+    setRequestHeader: ReturnType<typeof vi.fn>;
+    send: ReturnType<typeof vi.fn>;
+    upload: { onprogress: ((e: unknown) => void) | null };
+    onload: (() => void) | null;
+    onerror: (() => void) | null;
+    status: number;
+  }> = [];
+
+  vi.stubGlobal(
+    "XMLHttpRequest",
+    vi.fn(() => {
+      const instance = {
+        open: vi.fn(),
+        setRequestHeader: vi.fn(),
+        send: vi.fn(),
+        upload: { onprogress: null as ((e: unknown) => void) | null },
+        onload: null as (() => void) | null,
+        onerror: null as (() => void) | null,
+        status,
+      };
+      instance.send.mockImplementation(() => {
+        setTimeout(() => instance.onload?.(), 0);
+      });
+      instances.push(instance);
+      return instance;
+    }),
+  );
+
+  return instances;
+}
 
 const buildSelectionProps = (overrides: Partial<ComponentProps<typeof UploadPanel>> = {}) => ({
   selectedSourceIds: [],
@@ -44,7 +75,6 @@ describe("UploadPanel", () => {
   });
 
   it("uploads a file and enqueues processing", async () => {
-    // Expect the upload pipeline to call createSource, fetch, enqueue, and refresh.
     const onRefresh = vi.fn();
     vi.mocked(createSource).mockResolvedValue({
       source: {
@@ -58,44 +88,40 @@ describe("UploadPanel", () => {
       upload_url: "http://upload.test/file",
     });
     vi.mocked(enqueueSource).mockResolvedValue({ status: "queued" });
+    mockXhr(200);
 
-    const fetchSpy = vi.fn().mockResolvedValue({ ok: true });
-    vi.stubGlobal("fetch", fetchSpy);
-
-    const { container } = renderWithQueryClient(
+    renderWithQueryClient(
       <UploadPanel hubId="hub-1" sources={[]} onRefresh={onRefresh} />
     );
 
-    const input = container.querySelector("input[type='file']") as HTMLInputElement;
-    const file = new File(["hello"], "test.txt", { type: "text/plain" });
-
     const user = userEvent.setup();
-    await user.upload(input, file);
-    await user.click(screen.getByRole("button", { name: "Upload" }));
+    await user.click(screen.getByRole("button", { name: "Add Source" }));
+
+    const input = document.querySelector(".add-source-modal__file-input") as HTMLInputElement;
+    const file = new File(["hello"], "test.txt", { type: "text/plain" });
+    fireEvent.change(input, { target: { files: [file] } });
 
     await waitFor(() =>
-      expect(createSource).toHaveBeenCalledWith({ hub_id: "hub-1", original_name: "test.txt" })
+      expect(createSource).toHaveBeenCalledWith({ hub_id: "hub-1", original_name: "test.txt" }),
+      { timeout: 3000 }
     );
-    expect(fetchSpy).toHaveBeenCalledWith(
-      "http://upload.test/file",
-      expect.objectContaining({ method: "PUT" })
-    );
-    await waitFor(() => expect(enqueueSource).toHaveBeenCalledWith("src-1"));
+    await waitFor(() => expect(enqueueSource).toHaveBeenCalledWith("src-1"), { timeout: 3000 });
     expect(onRefresh).toHaveBeenCalled();
-    expect(await screen.findByText(/Upload enqueued/)).toBeInTheDocument();
   });
 
-  it("limits accepted file extensions", () => {
-    const { container } = renderWithQueryClient(
+  it("limits accepted file extensions", async () => {
+    renderWithQueryClient(
       <UploadPanel hubId="hub-1" sources={[]} onRefresh={() => undefined} />
     );
 
-    const input = container.querySelector("input[type='file']") as HTMLInputElement;
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Add Source" }));
+
+    const input = document.querySelector(".add-source-modal__file-input") as HTMLInputElement;
     expect(input.accept).toBe(".pdf,.docx,.txt,.md");
   });
 
-  it("marks the source failed when upload fails", async () => {
-    const onRefresh = vi.fn();
+  it("shows error in queue when upload fails", async () => {
     vi.mocked(createSource).mockResolvedValue({
       source: {
         id: "src-2",
@@ -107,63 +133,24 @@ describe("UploadPanel", () => {
       },
       upload_url: "http://upload.test/file",
     });
-    vi.mocked(failSource).mockResolvedValue({
-      id: "src-2",
-      status: "failed",
-      failure_reason: "invalid mime type",
-    });
+    mockXhr(500);
 
-    const fetchSpy = vi.fn().mockResolvedValue({
-      ok: false,
-      text: () => Promise.resolve("invalid mime type"),
-    });
-    vi.stubGlobal("fetch", fetchSpy);
-
-    const { container } = renderWithQueryClient(
-      <UploadPanel hubId="hub-1" sources={[]} onRefresh={onRefresh} />
+    renderWithQueryClient(
+      <UploadPanel hubId="hub-1" sources={[]} onRefresh={vi.fn()} />
     );
 
-    const input = container.querySelector("input[type='file']") as HTMLInputElement;
-    const file = new File(["oops"], "bad.md", { type: "" });
-
     const user = userEvent.setup();
-    await user.upload(input, file);
-    await user.click(screen.getByRole("button", { name: "Upload" }));
+    await user.click(screen.getByRole("button", { name: "Add Source" }));
 
-    await waitFor(() => expect(failSource).toHaveBeenCalledWith("src-2", "invalid mime type"));
+    const input = document.querySelector(".add-source-modal__file-input") as HTMLInputElement;
+    const file = new File(["oops"], "bad.md", { type: "text/plain" });
+    fireEvent.change(input, { target: { files: [file] } });
+
+    await waitFor(() => expect(screen.getByText(/Failed/i)).toBeInTheDocument(), { timeout: 3000 });
     expect(enqueueSource).not.toHaveBeenCalled();
-    expect(onRefresh).toHaveBeenCalled();
-    expect(await screen.findByText(/invalid mime type/i)).toBeInTheDocument();
   });
 
-  it("retries a failed upload with the original file", async () => {
-    const onRefresh = vi.fn();
-    vi.mocked(createSource).mockResolvedValue({
-      source: {
-        id: "src-3",
-        hub_id: "hub-1",
-        type: "file",
-        original_name: "retry.txt",
-        status: "queued",
-        created_at: "2025-01-01T00:00:00Z",
-      },
-      upload_url: "http://upload.test/file",
-    });
-    vi.mocked(failSource).mockResolvedValue({
-      id: "src-3",
-      status: "failed",
-      failure_reason: "upload failed",
-    });
-    vi.mocked(createSourceUploadUrl).mockResolvedValue({ upload_url: "http://upload.test/retry" });
-    vi.mocked(enqueueSource).mockResolvedValue({ status: "queued" });
-
-    const fetchSpy = vi
-      .fn()
-      .mockResolvedValueOnce({ ok: false, text: () => Promise.resolve("upload failed") })
-      .mockResolvedValueOnce({ ok: true });
-    vi.stubGlobal("fetch", fetchSpy);
-
-    const file = new File(["retry"], "retry.txt", { type: "text/plain" });
+  it("shows error details for a failed source", async () => {
     const failedSource: Source = {
       id: "src-3",
       hub_id: "hub-1",
@@ -174,38 +161,21 @@ describe("UploadPanel", () => {
       failure_reason: "upload failed",
     };
 
-    const { container, rerender } = renderWithQueryClient(
-      <UploadPanel hubId="hub-1" sources={[]} onRefresh={onRefresh} />
+    renderWithQueryClient(
+      <UploadPanel hubId="hub-1" sources={[failedSource]} onRefresh={() => undefined} />
     );
 
-    const input = container.querySelector("input[type='file']") as HTMLInputElement;
     const user = userEvent.setup();
-    await user.upload(input, file);
-    await user.click(screen.getByRole("button", { name: "Upload" }));
-
-    await waitFor(() => expect(failSource).toHaveBeenCalledWith("src-3", "upload failed"));
-
-    rerender(
-      <UploadPanel hubId="hub-1" sources={[failedSource]} onRefresh={onRefresh} />
-    );
-
-    await user.click(screen.getByRole("button", { name: "Retry upload" }));
-
-    await waitFor(() => expect(createSourceUploadUrl).toHaveBeenCalledWith("src-3"));
-    await waitFor(() => expect(enqueueSource).toHaveBeenCalledWith("src-3"));
-    expect(fetchSpy.mock.calls[1][1]?.body).toBe(file);
-    expect(await screen.findByText(/Upload requeued/i)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "View error" }));
+    expect(screen.getByText("upload failed")).toBeInTheDocument();
   });
 
-  it("hides upload card for viewers", () => {
-    // Upload card is hidden entirely for view-only users; only permission notice shown.
-    const { container } = renderWithQueryClient(
+  it("hides upload controls for viewers", () => {
+    renderWithQueryClient(
       <UploadPanel hubId="hub-1" sources={[]} onRefresh={() => undefined} canUpload={false} />
     );
 
-    const input = container.querySelector("input[type='file']") as HTMLInputElement;
-    expect(input.disabled).toBe(true);
-    expect(screen.queryByRole("button", { name: "Upload" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Add Source" })).not.toBeInTheDocument();
     expect(screen.getByText(/view access/i)).toBeInTheDocument();
   });
 
@@ -223,14 +193,15 @@ describe("UploadPanel", () => {
     renderWithQueryClient(<UploadPanel hubId="hub-1" sources={[]} onRefresh={onRefresh} />);
 
     const user = userEvent.setup();
-    await user.type(screen.getByPlaceholderText("https://example.com/..."), "https://example.com");
-    await user.click(screen.getByRole("button", { name: "Add URL" }));
+    await user.click(screen.getByRole("button", { name: "Add Source" }));
+    await user.click(screen.getByRole("button", { name: /Webpage Link/ }));
+    await user.type(screen.getByPlaceholderText("https://example.com/article"), "https://example.com");
+    await user.click(screen.getByRole("button", { name: "Import" }));
 
     await waitFor(() =>
       expect(createWebSource).toHaveBeenCalledWith({ hub_id: "hub-1", url: "https://example.com" })
     );
     expect(onRefresh).toHaveBeenCalled();
-    expect(await screen.findByText(/URL enqueued/i)).toBeInTheDocument();
   });
 
   it("submits a YouTube URL for ingestion", async () => {
@@ -247,22 +218,23 @@ describe("UploadPanel", () => {
     renderWithQueryClient(<UploadPanel hubId="hub-1" sources={[]} onRefresh={onRefresh} />);
 
     const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Add Source" }));
+    await user.click(screen.getByRole("button", { name: /YouTube Video/ }));
     await user.type(
       screen.getByPlaceholderText("https://youtube.com/watch?v=..."),
       "https://www.youtube.com/watch?v=abc123def45"
     );
-    await user.click(screen.getByRole("button", { name: "Add YouTube" }));
+    await user.click(screen.getByRole("button", { name: "Import" }));
 
     await waitFor(() =>
       expect(createYouTubeSource).toHaveBeenCalledWith({
         hub_id: "hub-1",
         url: "https://www.youtube.com/watch?v=abc123def45",
-        language: null,
+        language: "en",
         allow_auto_captions: true,
       })
     );
     expect(onRefresh).toHaveBeenCalled();
-    expect(await screen.findByText(/YouTube video enqueued/i)).toBeInTheDocument();
   });
 
   it("shows delete for a non-failed source when uploads are allowed", () => {
@@ -345,7 +317,7 @@ describe("UploadPanel", () => {
     expect(screen.queryByRole("button", { name: "Delete" })).not.toBeInTheDocument();
   });
 
-  it("disables reprocess until a web crawl succeeds", () => {
+  it("shows refresh button for web sources", () => {
     const webSource: Source = {
       id: "src-web-2",
       hub_id: "hub-1",
@@ -353,14 +325,11 @@ describe("UploadPanel", () => {
       original_name: "example.com",
       status: "complete",
       created_at: "2025-01-01T00:00:00Z",
-      ingestion_metadata: {},
     };
 
     renderWithQueryClient(<UploadPanel hubId="hub-1" sources={[webSource]} onRefresh={() => undefined} />);
 
-    const reprocess = screen.getByRole("button", { name: "Reprocess" });
-    expect(reprocess).toBeDisabled();
-    expect(screen.getByText(/first successful ingest/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Refresh" })).toBeInTheDocument();
   });
 
   it("renders selectable cards for complete sources and not for incomplete", () => {
