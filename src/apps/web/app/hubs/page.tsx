@@ -74,6 +74,7 @@ export default function HomePage() {
         last_accessed_at: new Date().toISOString(),
         is_favourite: false,
         member_emails: [],
+        _isPendingClientSync: true,
       };
       queryClient.setQueryData<Hub[]>(["hubs"], (current = []) => [optimisticHub, ...current]);
       setCreateModalOpen(false);
@@ -81,7 +82,11 @@ export default function HomePage() {
     },
     onSuccess: (hub, _payload, context) => {
       queryClient.setQueryData<Hub[]>(["hubs"], (current = []) =>
-        current.map((item) => (item.id === context?.tempId ? hub : item))
+        current.map((item) => (
+          item.id === context?.tempId
+            ? { ...hub, _isPendingClientSync: true }
+            : item
+        ))
       );
       setName("");
       setDescription("");

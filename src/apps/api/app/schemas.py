@@ -429,6 +429,13 @@ class CreateRevisionRequest(StrictModel):
     content: str = Field(..., min_length=1, max_length=12000)
     citations: List[Citation] = Field(default_factory=list)
 
+    @field_validator("content", mode="before")
+    @classmethod
+    def validate_content(cls, value: str) -> str:
+        trimmed = _trim_and_reject_blank(value)
+        assert trimmed is not None
+        return trimmed
+
 
 class ApplyRevisionRequest(StrictModel):
     revision_id: UUID

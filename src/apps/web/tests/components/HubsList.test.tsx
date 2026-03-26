@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { HubsList } from "../../components/HubsList";
 import type { HubsFilterState } from "../../components/HubsToolbar";
-import { archiveHub, listHubs, unarchiveHub, updateHub } from "../../lib/api";
+import { archiveHub, listHubs, toggleHubFavourite, unarchiveHub, updateHub } from "../../lib/api";
 import { renderWithQueryClient } from "../test-utils";
 
 vi.mock("next/link", () => ({
@@ -445,6 +445,55 @@ describe("HubsList", () => {
 
     expect(await screen.findByText("Failed to archive hub: Owner role required.")).toBeInTheDocument();
     confirmSpy.mockRestore();
+  });
+
+  it("disables favouriting for optimistic hubs until creation finishes", async () => {
+    const user = userEvent.setup();
+    vi.mocked(listHubs).mockResolvedValue([
+      {
+        id: "temp-hub-123",
+        owner_id: "pending",
+        name: "Creating Hub",
+        description: "Docs",
+        created_at: "2025-01-01T00:00:00Z",
+        role: "owner",
+        is_favourite: false,
+      },
+    ]);
+
+    renderWithQueryClient(<HubsList searchQuery="" filters={defaultFilters} />);
+
+    const button = await screen.findByLabelText("Hub is still being created");
+    expect(button).toBeDisabled();
+
+    await user.click(button);
+
+    expect(toggleHubFavourite).not.toHaveBeenCalled();
+  });
+
+  it("disables favouriting while a newly created hub is still syncing", async () => {
+    const user = userEvent.setup();
+    vi.mocked(listHubs).mockResolvedValue([
+      {
+        id: "hub-1",
+        owner_id: "user-1",
+        name: "Fresh Hub",
+        description: "Docs",
+        created_at: "2025-01-01T00:00:00Z",
+        role: "owner",
+        is_favourite: false,
+        _isPendingClientSync: true,
+      },
+    ]);
+
+    renderWithQueryClient(<HubsList searchQuery="" filters={defaultFilters} />);
+
+    const button = await screen.findByLabelText("Hub is still being created");
+    expect(button).toBeDisabled();
+
+    await user.click(button);
+
+    expect(toggleHubFavourite).not.toHaveBeenCalled();
   });
 
   it("hides pagination when no hubs match the current filters", async () => {

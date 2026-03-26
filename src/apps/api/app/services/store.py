@@ -1,12 +1,14 @@
 import json
 import math
 import re
+import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import PurePath
 from urllib.parse import parse_qs, urlparse, urlunparse
 from typing import Any, Dict, List, Optional, Tuple
 
+import httpx
 from openai import OpenAI
 from postgrest.exceptions import APIError
 from supabase import Client, create_client
@@ -1247,14 +1249,30 @@ class SupabaseStore:
         return FlagMessageResponse(flag_case=self._serialize_flag_case(data[0]), created=True)
 
     def _list_flag_case_revisions(self, flag_case_id: str) -> List[MessageRevision]:
-        response = (
-            self.service_client.table("message_revisions")
-            .select("*")
-            .eq("flag_case_id", str(flag_case_id))
-            .order("created_at", desc=False)
-            .execute()
+        response = self._execute_service_query_with_retry(
+            lambda: (
+                self.service_client.table("message_revisions")
+                .select("*")
+                .eq("flag_case_id", str(flag_case_id))
+                .order("created_at", desc=False)
+                .execute()
+            )
         )
         return [self._serialize_message_revision(row) for row in (response.data or [])]
+
+    def _execute_service_query_with_retry(self, query_fn, *, attempts: int = 3, delay_seconds: float = 0.2):
+        last_error: Exception | None = None
+        for attempt in range(attempts):
+            try:
+                return query_fn()
+            except (httpx.RemoteProtocolError, httpx.ReadError, httpx.ReadTimeout) as exc:
+                last_error = exc
+                if attempt == attempts - 1:
+                    raise
+                time.sleep(delay_seconds * (attempt + 1))
+        if last_error is not None:
+            raise last_error
+        raise RuntimeError("Retry helper exited without a result.")
 
     def _ensure_flag_case_open(self, case_row: Dict[str, Any]) -> None:
         if str(case_row.get("status") or "") not in {FlagCaseStatus.open.value, FlagCaseStatus.in_review.value}:
@@ -2533,19 +2551,51 @@ class SupabaseStore:
     def list_activity(
         self,
         client: Client,
+        user_id: str,
         hub_id: Optional[str] = None,
+        hub_ids: Optional[List[str]] = None,
         limit: int = 50,
     ) -> List[ActivityEvent]:
         query = client.table("activity_events").select("*")
         if hub_id:
             query = query.eq("hub_id", hub_id)
+        elif hub_ids is not None:
+            if not hub_ids:
+                return []
+            query = query.in_("hub_id", hub_ids)
         response = (
             query
             .order("created_at", desc=True)
             .limit(limit)
             .execute()
         )
-        return [ActivityEvent(**row) for row in response.data]
+
+        rows = [dict(row) for row in (response.data or [])]
+        actor_ids = sorted({str(row.get("user_id") or "") for row in rows if row.get("user_id")})
+        actor_lookup: Dict[str, str] = {}
+        if actor_ids:
+            try:
+                users = self.service_client.auth.admin.list_users()
+                for user in users:
+                    if not user.id:
+                        continue
+                    actor_id = str(user.id)
+                    if actor_id not in actor_ids:
+                        continue
+                    metadata = getattr(user, "user_metadata", None) or {}
+                    full_name = (metadata.get("full_name") or "").strip() if isinstance(metadata, dict) else ""
+                    actor_lookup[actor_id] = full_name or (user.email or actor_id)
+            except Exception:
+                actor_lookup = {}
+
+        events: List[ActivityEvent] = []
+        for row in rows:
+            metadata = dict(row.get("metadata") or {})
+            actor_id = str(row.get("user_id") or "")
+            metadata["actor_label"] = "You" if actor_id == str(user_id) else actor_lookup.get(actor_id, "Someone")
+            row["metadata"] = metadata
+            events.append(ActivityEvent(**row))
+        return events
 
     def _answer_with_web_search(
         self,

@@ -92,8 +92,12 @@ describe("ChatPanel", () => {
 
     const user = userEvent.setup();
     await waitFor(() => expect(screen.getByText("New Chat")).toBeInTheDocument());
-    await user.type(screen.getByLabelText("Ask a question"), "How do I submit assignments?");
-    await user.click(screen.getByRole("button", { name: "Send message" }));
+    const textarea = screen.getByLabelText("Ask a question");
+    const sendButton = screen.getByRole("button", { name: "Send message" });
+    await waitFor(() => expect(textarea).not.toBeDisabled());
+    await user.type(textarea, "How do I submit assignments?");
+    await waitFor(() => expect(sendButton).not.toBeDisabled());
+    await user.click(sendButton);
 
     await waitFor(() => expect(askQuestion).toHaveBeenCalled());
     expect(askQuestion).toHaveBeenCalledWith({
@@ -118,8 +122,12 @@ describe("ChatPanel", () => {
 
     const user = userEvent.setup();
     await waitFor(() => expect(screen.getByText("New Chat")).toBeInTheDocument());
-    await user.type(screen.getByLabelText("Ask a question"), "How do I submit assignments?");
-    await user.click(screen.getByRole("button", { name: "Send message" }));
+    const textarea = screen.getByLabelText("Ask a question");
+    const sendButton = screen.getByRole("button", { name: "Send message" });
+    await waitFor(() => expect(textarea).not.toBeDisabled());
+    await user.type(textarea, "How do I submit assignments?");
+    await waitFor(() => expect(sendButton).not.toBeDisabled());
+    await user.click(sendButton);
 
     await waitFor(() => expect(screen.getByText("Error: Request failed")).toBeInTheDocument());
     expect(screen.queryByText("Assignment Help")).not.toBeInTheDocument();
@@ -145,8 +153,12 @@ describe("ChatPanel", () => {
     await user.click(screen.getByRole("button", { name: "Sources (2/2)" }));
     await user.click(screen.getByRole("button", { name: "Clear" }));
     await user.click(screen.getByRole("button", { name: "Hub + global" }));
-    await user.type(screen.getByLabelText("Ask a question"), "What should I know before starting?");
-    await user.click(screen.getByRole("button", { name: "Send message" }));
+    const textarea = screen.getByLabelText("Ask a question");
+    const sendButton = screen.getByRole("button", { name: "Send message" });
+    await waitFor(() => expect(textarea).not.toBeDisabled());
+    await user.type(textarea, "What should I know before starting?");
+    await waitFor(() => expect(sendButton).not.toBeDisabled());
+    await user.click(sendButton);
 
     await waitFor(() => expect(askQuestion).toHaveBeenCalled());
     expect(askQuestion).toHaveBeenCalledWith({
@@ -200,6 +212,37 @@ describe("ChatPanel", () => {
 
     await waitFor(() => expect(screen.getByText("How do I submit assignments?")).toBeInTheDocument());
     expect(screen.getByText("Assignments")).toBeInTheDocument();
+  });
+
+  it("blocks composer input and submission while the chat is bootstrapping", async () => {
+    let resolveSessions: ((value: []) => void) | null = null;
+    vi.mocked(listChatSessions).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveSessions = resolve;
+        })
+    );
+
+    renderWithQueryClient(
+      <ChatPanel hubId="hub-1" sources={sources} />
+    );
+
+    expect(await screen.findByText("Loading chat...")).toBeInTheDocument();
+    const textarea = screen.getByLabelText("Ask a question");
+    const sendButton = screen.getByRole("button", { name: "Send message" });
+
+    expect(textarea).toBeDisabled();
+    expect(sendButton).toBeDisabled();
+
+    const user = userEvent.setup();
+    await user.type(textarea, "How do I submit assignments?");
+    await user.keyboard("{Enter}");
+
+    expect(askQuestion).not.toHaveBeenCalled();
+
+    resolveSessions?.([]);
+    await waitFor(() => expect(screen.getByText("Ask a question about your hub")).toBeInTheDocument());
+    expect(textarea).not.toBeDisabled();
   });
 
   it("updates the active session title when the shared session cache changes", async () => {
@@ -316,8 +359,12 @@ describe("ChatPanel", () => {
 
     const user = userEvent.setup();
     await waitFor(() => expect(screen.getByText("New Chat")).toBeInTheDocument());
-    await user.type(screen.getByLabelText("Ask a question"), "How do I submit assignments?");
-    await user.click(screen.getByRole("button", { name: "Send message" }));
+    const textarea = screen.getByLabelText("Ask a question");
+    const sendButton = screen.getByRole("button", { name: "Send message" });
+    await waitFor(() => expect(textarea).not.toBeDisabled());
+    await user.type(textarea, "How do I submit assignments?");
+    await waitFor(() => expect(sendButton).not.toBeDisabled());
+    await user.click(sendButton);
 
     await waitFor(() => expect(screen.getByText("Report")).toBeInTheDocument());
     await user.click(screen.getByText("Report"));

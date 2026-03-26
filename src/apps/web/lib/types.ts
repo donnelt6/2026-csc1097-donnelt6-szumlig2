@@ -21,6 +21,7 @@ export interface Hub {
   last_accessed_at?: string | null;
   is_favourite?: boolean | null;
   member_emails?: string[] | null;
+  _isPendingClientSync?: boolean;
 }
 
 export interface Source {
