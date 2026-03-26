@@ -2571,22 +2571,12 @@ class SupabaseStore:
         )
 
         rows = [dict(row) for row in (response.data or [])]
-        actor_ids = sorted({str(row.get("user_id") or "") for row in rows if row.get("user_id")})
-        actor_lookup: Dict[str, str] = {}
-        if actor_ids:
-            try:
-                users = self.service_client.auth.admin.list_users()
-                for user in users:
-                    if not user.id:
-                        continue
-                    actor_id = str(user.id)
-                    if actor_id not in actor_ids:
-                        continue
-                    metadata = getattr(user, "user_metadata", None) or {}
-                    full_name = (metadata.get("full_name") or "").strip() if isinstance(metadata, dict) else ""
-                    actor_lookup[actor_id] = full_name or (user.email or actor_id)
-            except Exception:
-                actor_lookup = {}
+        actor_ids = {
+            str(row.get("user_id") or "")
+            for row in rows
+            if row.get("user_id") and str(row.get("user_id")) != str(user_id)
+        }
+        actor_lookup = self._resolve_user_labels_by_ids(actor_ids)
 
         events: List[ActivityEvent] = []
         for row in rows:
@@ -2596,6 +2586,71 @@ class SupabaseStore:
             row["metadata"] = metadata
             events.append(ActivityEvent(**row))
         return events
+
+    def _resolve_user_labels_by_ids(self, user_ids: set[str]) -> Dict[str, str]:
+        if not user_ids:
+            return {}
+
+        actor_lookup: Dict[str, str] = {}
+        remaining = set(user_ids)
+        page = 1
+        per_page = 100
+
+        try:
+            while remaining:
+                try:
+                    response = self.service_client.auth.admin.list_users(page=page, per_page=per_page)
+                except TypeError:
+                    response = self.service_client.auth.admin.list_users()
+                    users = self._extract_admin_users(response)
+                    for user in users:
+                        actor_id = str(getattr(user, "id", "") or "")
+                        if actor_id not in remaining:
+                            continue
+                        actor_lookup[actor_id] = self._display_label_for_user(user, actor_id)
+                        remaining.discard(actor_id)
+                    break
+
+                users = self._extract_admin_users(response)
+                if not users:
+                    break
+                for user in users:
+                    actor_id = str(getattr(user, "id", "") or "")
+                    if actor_id not in remaining:
+                        continue
+                    actor_lookup[actor_id] = self._display_label_for_user(user, actor_id)
+                    remaining.discard(actor_id)
+                if len(users) < per_page:
+                    break
+                page += 1
+        except Exception:
+            return {}
+
+        return actor_lookup
+
+    @staticmethod
+    def _extract_admin_users(response: Any) -> List[Any]:
+        if isinstance(response, list):
+            return response
+        if hasattr(response, "users"):
+            return list(getattr(response, "users") or [])
+        data = getattr(response, "data", None)
+        if isinstance(data, list):
+            return data
+        if hasattr(data, "users"):
+            return list(getattr(data, "users") or [])
+        if isinstance(data, dict):
+            users = data.get("users")
+            if isinstance(users, list):
+                return users
+        return []
+
+    @staticmethod
+    def _display_label_for_user(user: Any, fallback: str) -> str:
+        metadata = getattr(user, "user_metadata", None) or {}
+        full_name = (metadata.get("full_name") or "").strip() if isinstance(metadata, dict) else ""
+        email = getattr(user, "email", None) or ""
+        return full_name or email or fallback
 
     def _answer_with_web_search(
         self,

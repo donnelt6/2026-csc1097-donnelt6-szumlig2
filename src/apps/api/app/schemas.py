@@ -433,7 +433,8 @@ class CreateRevisionRequest(StrictModel):
     @classmethod
     def validate_content(cls, value: str) -> str:
         trimmed = _trim_and_reject_blank(value)
-        assert trimmed is not None
+        if trimmed is None:
+            raise ValueError("Value cannot be blank.")
         return trimmed
 
 
@@ -472,7 +473,8 @@ class ChatSessionRenameRequest(StrictModel):
     @classmethod
     def validate_title(cls, value: str) -> str:
         trimmed = _trim_and_reject_blank(value)
-        assert trimmed is not None
+        if trimmed is None:
+            raise ValueError("Value cannot be blank.")
         return trimmed
 
 

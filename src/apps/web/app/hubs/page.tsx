@@ -84,7 +84,7 @@ export default function HomePage() {
       queryClient.setQueryData<Hub[]>(["hubs"], (current = []) =>
         current.map((item) => (
           item.id === context?.tempId
-            ? { ...hub, _isPendingClientSync: true }
+            ? { ...hub, _isPendingClientSync: false }
             : item
         ))
       );
