@@ -14,6 +14,8 @@ import {
   PlusIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
+  ExclamationTriangleIcon,
+  ClipboardDocumentIcon,
 } from "@heroicons/react/24/outline";
 import {
   deleteSource,
@@ -28,7 +30,7 @@ import type { Source } from "../lib/types";
 interface Props {
   hubId: string;
   sources: Source[];
-  onRefresh: () => void;
+  onRefresh: () => void | Promise<unknown>;
   canUpload?: boolean;
   canReviewSuggestions?: boolean;
   selectedSourceIds?: string[];
@@ -55,7 +57,7 @@ export function UploadPanel({
   const queryClient = useQueryClient();
   const { searchQuery } = useSearch();
   const [statusMessage, setStatusMessage] = useState<{ text: string; type: "success" | "error" } | null>(null);
-  const [deletingSourceId, setDeletingSourceId] = useState<string | null>(null);
+  const [deletingSourceIds, setDeletingSourceIds] = useState<Set<string>>(new Set());
   const [refreshingSourceId, setRefreshingSourceId] = useState<string | null>(null);
   const [typeFilter, setTypeFilter] = useState<"all" | "file" | "web" | "youtube">("all");
   const [statusFilter, setStatusFilter] = useState<"all" | "complete" | "incomplete">("all");
@@ -66,6 +68,20 @@ export function UploadPanel({
   const [viewChunks, setViewChunks] = useState<{ chunk_index: number; text: string }[]>([]);
   const [isLoadingChunks, setIsLoadingChunks] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [errorPopoverId, setErrorPopoverId] = useState<string | null>(null);
+  const errorPopoverRef = useRef<HTMLDivElement>(null);
+
+  // Close error popover on click outside
+  useEffect(() => {
+    if (!errorPopoverId) return;
+    const handleClick = (e: MouseEvent) => {
+      if (errorPopoverRef.current && !errorPopoverRef.current.contains(e.target as Node)) {
+        setErrorPopoverId(null);
+      }
+    };
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [errorPopoverId]);
 
   // Reset page when navbar search changes
   useEffect(() => { setPage(0); }, [searchQuery]);
@@ -101,19 +117,16 @@ export function UploadPanel({
       );
       if (!confirmed) return;
     }
-    setDeletingSourceId(sourceId);
-    const previousSources = queryClient.getQueryData<Source[]>(["sources", hubId]) ?? [];
-    updateSourcesCache((current) => current.filter((source) => source.id !== sourceId));
+    setDeletingSourceIds((prev) => new Set(prev).add(sourceId));
     try {
       await deleteSource(sourceId);
       setPage(0);
-      onRefresh();
+      await onRefresh();
       setStatusMessage({ text: "Source deleted.", type: "success" });
     } catch (err) {
-      queryClient.setQueryData(["sources", hubId], previousSources);
       setStatusMessage({ text: (err as Error).message, type: "error" });
     } finally {
-      setDeletingSourceId(null);
+      setDeletingSourceIds((prev) => { const next = new Set(prev); next.delete(sourceId); return next; });
     }
   };
 
@@ -344,7 +357,7 @@ export function UploadPanel({
           const isSelectable = source.status === "complete";
           const isSelected = isSelectable && selectedSourceSet.has(source.id);
           const isRemoteSource = source.type === "web" || source.type === "youtube";
-          const isDeleting = deletingSourceId === source.id;
+          const isDeleting = deletingSourceIds.has(source.id);
           const isRefreshingThis = refreshingSourceId === source.id;
           return (
             <div
@@ -380,9 +393,6 @@ export function UploadPanel({
                       <span className="sources__auto-caption-badge" title="Auto-generated captions">&#x26A0; Auto-captions</span>
                     )}
                   </span>
-                  {source.failure_reason && (
-                    <span className="sources__resource-error">{source.failure_reason}</span>
-                  )}
                 </div>
               </div>
 
@@ -395,12 +405,35 @@ export function UploadPanel({
 
               {/* Status */}
               <div className="sources__cell sources__cell--status">
-                <StatusIndicator status={source.status} />
+                {isDeleting ? (
+                  <span className="sources__status-indicator sources__status-indicator--processing">
+                    <span className="sources__status-spinner" />
+                    Deleting
+                  </span>
+                ) : (
+                  <StatusIndicator status={source.status} />
+                )}
               </div>
 
-              {/* Actions */}
+              {/* Actions — fixed 3-slot layout: refresh | eye/warning | delete */}
               <div className="sources__cell sources__cell--actions">
-                {source.status === "complete" && (
+                {/* Slot 1: refresh (remote sources) or placeholder */}
+                {isRemoteSource ? (
+                  <button
+                    className="sources__action-btn"
+                    type="button"
+                    onClick={() => handleRefreshSource(source.id)}
+                    disabled={isRefreshingThis}
+                    title="Refresh"
+                  >
+                    <ArrowPathIcon className={`sources__action-icon${isRefreshingThis ? " sources__action-icon--spin" : ""}`} />
+                  </button>
+                ) : (
+                  <span className="sources__action-btn sources__action-btn--placeholder" />
+                )}
+
+                {/* Slot 2: eye (complete) or warning (failed) or placeholder */}
+                {source.status === "complete" ? (
                   <button
                     className="sources__action-btn"
                     type="button"
@@ -409,29 +442,35 @@ export function UploadPanel({
                   >
                     <EyeIcon className="sources__action-icon" />
                   </button>
+                ) : source.status === "failed" && source.failure_reason ? (
+                  <div className="sources__error-popover-wrapper" ref={errorPopoverId === source.id ? errorPopoverRef : undefined}>
+                    <button
+                      className="sources__action-btn sources__action-btn--warning"
+                      type="button"
+                      onClick={() => setErrorPopoverId(errorPopoverId === source.id ? null : source.id)}
+                      title="View error"
+                    >
+                      <ExclamationTriangleIcon className="sources__action-icon" />
+                    </button>
+                    {errorPopoverId === source.id && (
+                      <div className="sources__error-popover">
+                        <p className="sources__error-popover-text">{source.failure_reason}</p>
+                        <button
+                          className="sources__error-popover-copy"
+                          type="button"
+                          onClick={() => navigator.clipboard.writeText(source.failure_reason!)}
+                          title="Copy error"
+                        >
+                          <ClipboardDocumentIcon className="sources__error-popover-copy-icon" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <span className="sources__action-btn sources__action-btn--placeholder" />
                 )}
-                {source.status === "failed" && isRemoteSource && (
-                  <button
-                    className="sources__action-btn"
-                    type="button"
-                    onClick={() => handleRefreshSource(source.id)}
-                    disabled={isRefreshingThis}
-                    title="Refresh"
-                  >
-                    <ArrowPathIcon className={`sources__action-icon${isRefreshingThis ? " sources__action-icon--spin" : ""}`} />
-                  </button>
-                )}
-                {isRemoteSource && source.status !== "failed" && (
-                  <button
-                    className="sources__action-btn"
-                    type="button"
-                    onClick={() => handleRefreshSource(source.id)}
-                    disabled={isRefreshingThis}
-                    title="Refresh"
-                  >
-                    <ArrowPathIcon className={`sources__action-icon${isRefreshingThis ? " sources__action-icon--spin" : ""}`} />
-                  </button>
-                )}
+
+                {/* Slot 3: delete */}
                 {canUpload && (
                   <button
                     className="sources__action-btn sources__action-btn--danger"

@@ -436,26 +436,66 @@ def _select_caption_track(
     preferred_language: Optional[str],
     allow_auto: bool,
 ) -> tuple[str, str, str, str]:
+    """Select the best caption track, prioritising language match over source.
+
+    Priority order:
+      1. Manual captions in preferred language
+      2. Auto captions in preferred language (if allowed)
+      3. Manual captions in English (if preferred wasn't English)
+      4. Auto captions in English (if allowed, and preferred wasn't English)
+      5. Manual captions in any language
+      6. Auto captions in any language (if allowed)
+    """
     subtitles = info.get("subtitles") or {}
-    selected = _pick_caption_from_map(subtitles, preferred_language)
+    auto_caps = info.get("automatic_captions") or {} if allow_auto else {}
+
+    preferred_norm = _normalize_language(preferred_language) if preferred_language else None
+    preferred_is_english = preferred_norm in (None, "en") or (preferred_norm or "").startswith("en")
+
+    # Tier 1 — preferred language, manual then auto
+    selected = _pick_caption_preferred(subtitles, preferred_language)
     if selected:
         lang, url, ext = selected
         return "manual", lang, url, ext
-    if allow_auto:
-        auto = info.get("automatic_captions") or {}
-        selected = _pick_caption_from_map(auto, preferred_language)
+    if auto_caps:
+        selected = _pick_caption_preferred(auto_caps, preferred_language)
         if selected:
             lang, url, ext = selected
             return "auto", lang, url, ext
+
+    # Tier 2 — English fallback (skip if preferred was already English)
+    if not preferred_is_english:
+        selected = _pick_caption_preferred(subtitles, "en")
+        if selected:
+            lang, url, ext = selected
+            return "manual", lang, url, ext
+        if auto_caps:
+            selected = _pick_caption_preferred(auto_caps, "en")
+            if selected:
+                lang, url, ext = selected
+                return "auto", lang, url, ext
+
+    # Tier 3 — any language, manual then auto
+    selected = _pick_caption_any(subtitles)
+    if selected:
+        lang, url, ext = selected
+        return "manual", lang, url, ext
+    if auto_caps:
+        selected = _pick_caption_any(auto_caps)
+        if selected:
+            lang, url, ext = selected
+            return "auto", lang, url, ext
+
     if not allow_auto and (info.get("automatic_captions") or {}):
         raise ValueError("No manual captions found. Try enabling auto-captions.")
     raise ValueError("No captions available for the requested language")
 
 
-def _pick_caption_from_map(
+def _pick_caption_preferred(
     captions: dict,
     preferred_language: Optional[str],
 ) -> Optional[tuple[str, str, str]]:
+    """Try to find a caption track matching the preferred language (or English if none set)."""
     if not captions:
         return None
     preferred_norm = _normalize_language(preferred_language) if preferred_language else None
@@ -474,7 +514,15 @@ def _pick_caption_from_map(
                 selected = _select_caption_format(lang_key, formats)
                 if selected:
                     return selected
+    return None
 
+
+def _pick_caption_any(
+    captions: dict,
+) -> Optional[tuple[str, str, str]]:
+    """Pick the first available caption track regardless of language."""
+    if not captions:
+        return None
     for lang_key, formats in captions.items():
         selected = _select_caption_format(lang_key, formats)
         if selected:
