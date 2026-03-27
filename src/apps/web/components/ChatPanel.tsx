@@ -214,6 +214,7 @@ export const ChatPanel = forwardRef<ChatPanelHandle, Props>(function ChatPanel({
     [selectedSourceIds, completeSourceIds]
   );
   const canAsk = scope === "global" || !hasSelectableSources || normalizedSelectedSourceIds.length > 0;
+  const isComposerLocked = isBootstrapping || isLoadingSession;
   const canFlagResponses = !!hubRole;
   const activeSessionTitle = useMemo(() => {
     if (activeSessionId === null) {
@@ -519,7 +520,7 @@ export const ChatPanel = forwardRef<ChatPanelHandle, Props>(function ChatPanel({
   async function submitQuestion(event?: React.FormEvent, overrideQuestion?: string) {
     event?.preventDefault();
     const trimmed = (overrideQuestion ?? question).trim();
-    if (!trimmed || isSending || !canAsk) {
+    if (!trimmed || isSending || isComposerLocked || !canAsk) {
       return;
     }
 
@@ -650,6 +651,10 @@ export const ChatPanel = forwardRef<ChatPanelHandle, Props>(function ChatPanel({
           };
         })
       );
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["flagged-chats", hubId] }),
+        queryClient.invalidateQueries({ queryKey: ["flagged-chat", hubId, result.flag_case.id] }),
+      ]);
     } catch (error) {
       setPanelError(error instanceof Error ? error.message : String(error));
     } finally {
@@ -690,13 +695,13 @@ export const ChatPanel = forwardRef<ChatPanelHandle, Props>(function ChatPanel({
           </div>
 
           <div className="chat__messages">
-            {(isBootstrapping || isLoadingSession) && (
+            {isComposerLocked && (
               <div className="chat__empty">
                 <p className="chat__empty-text">Loading chat...</p>
               </div>
             )}
 
-            {!isBootstrapping && !isLoadingSession && messages.length === 0 && (
+            {!isComposerLocked && messages.length === 0 && (
               <div className="chat__empty">
                 <p className="chat__empty-text">Ask a question about your hub</p>
                 <p className="muted">Caddie will search your selected sources for answers.</p>
@@ -715,7 +720,7 @@ export const ChatPanel = forwardRef<ChatPanelHandle, Props>(function ChatPanel({
               </div>
             )}
 
-            {!isBootstrapping && !isLoadingSession && messages.map((message) => (
+            {!isComposerLocked && messages.map((message) => (
               <div key={message.id} className="chat__pair">
                 <div className="chat__message chat__message--user">
                   <div className="chat__bubble chat__bubble--user">
@@ -869,6 +874,7 @@ export const ChatPanel = forwardRef<ChatPanelHandle, Props>(function ChatPanel({
                 value={question}
                 onChange={handleTextareaChange}
                 onKeyDown={handleComposerKeyDown}
+                disabled={isComposerLocked}
                 placeholder="Ask a question..."
                 aria-label="Ask a question"
                 rows={1}
@@ -876,7 +882,7 @@ export const ChatPanel = forwardRef<ChatPanelHandle, Props>(function ChatPanel({
               <button
                 className="chat__send"
                 type="submit"
-                disabled={isSending || isBootstrapping || isLoadingSession || !canAsk || !question.trim()}
+                disabled={isSending || isComposerLocked || !canAsk || !question.trim()}
                 aria-label="Send message"
               >
                 <PaperAirplaneIcon className="chat__send-icon" />

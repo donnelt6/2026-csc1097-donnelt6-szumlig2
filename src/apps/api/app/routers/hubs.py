@@ -5,21 +5,10 @@ from supabase import Client
 from ..dependencies import CurrentUser, get_current_user, get_supabase_user_client, rate_limit_user_ip
 from ..schemas import Hub, HubCreate, HubFavouriteToggle, HubMember, MembershipRole, HubUpdate
 from ..services.store import store
+from .access import require_accepted, require_hub_member
 from .errors import raise_postgrest_error
 
 router = APIRouter(prefix="/hubs", tags=["hubs"])
-
-
-def _require_hub_member(client: Client, hub_id: str, user_id: str) -> HubMember:
-    try:
-        return store.get_member_role(client, hub_id, user_id)
-    except KeyError as exc:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Hub access required.") from exc
-
-
-def _require_accepted(member: HubMember) -> None:
-    if not member.accepted_at:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invite not accepted yet.")
 
 
 def _require_owner_or_admin(member: HubMember) -> None:
@@ -80,8 +69,8 @@ def update_hub(
     client: Client = Depends(get_supabase_user_client),
 ) -> Hub:
     try:
-        member = _require_hub_member(client, hub_id, current_user.id)
-        _require_accepted(member)
+        member = require_hub_member(client, hub_id, current_user.id)
+        require_accepted(member)
         _require_owner_or_admin(member)
         return store.update_hub(client, hub_id, payload)
     except KeyError as exc:
@@ -140,8 +129,8 @@ def archive_hub(
     client: Client = Depends(get_supabase_user_client),
 ) -> Hub:
     try:
-        member = _require_hub_member(client, hub_id, current_user.id)
-        _require_accepted(member)
+        member = require_hub_member(client, hub_id, current_user.id)
+        require_accepted(member)
         _require_owner(member)
         return store.archive_hub(client, hub_id)
     except KeyError as exc:
@@ -161,8 +150,8 @@ def unarchive_hub(
     client: Client = Depends(get_supabase_user_client),
 ) -> Hub:
     try:
-        member = _require_hub_member(client, hub_id, current_user.id)
-        _require_accepted(member)
+        member = require_hub_member(client, hub_id, current_user.id)
+        require_accepted(member)
         _require_owner(member)
         return store.unarchive_hub(client, hub_id)
     except KeyError as exc:

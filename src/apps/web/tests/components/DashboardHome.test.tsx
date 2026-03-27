@@ -72,4 +72,52 @@ describe("DashboardHome", () => {
     expect(secondIcon).toHaveAttribute("data-icon-key", "beaker");
     expect(secondIcon).toHaveAttribute("data-color-key", "emerald");
   });
+
+  it("shows actor attribution in recent activity entries", async () => {
+    vi.mocked(listHubs).mockResolvedValue([
+      {
+        id: "hub-1",
+        owner_id: "owner-1",
+        name: "Launch Hub",
+        description: null,
+        created_at: "2025-01-01T00:00:00Z",
+      },
+    ]);
+    vi.mocked(listReminders).mockResolvedValue([]);
+    vi.mocked(listChatSessions).mockResolvedValue([]);
+    vi.mocked(listActivity).mockResolvedValue([
+      {
+        id: "activity-1",
+        hub_id: "hub-1",
+        user_id: "user-2",
+        action: "invited",
+        resource_type: "member",
+        metadata: {
+          actor_label: "Alice",
+          email: "target@example.com",
+          role: "viewer",
+        },
+        created_at: "2025-01-02T00:00:00Z",
+      },
+      {
+        id: "activity-2",
+        hub_id: "hub-1",
+        user_id: "user-1",
+        action: "created",
+        resource_type: "hub",
+        metadata: {
+          actor_label: "You",
+          name: "Launch Hub",
+        },
+        created_at: "2025-01-03T00:00:00Z",
+      },
+    ]);
+
+    renderWithQueryClient(<DashboardHome />);
+
+    expect(await screen.findByText("Alice invited")).toBeInTheDocument();
+    expect(screen.getByText("target@example.com (viewer)")).toBeInTheDocument();
+    expect(screen.getByText("You created hub")).toBeInTheDocument();
+    expect(screen.getAllByText("Launch Hub")[0]).toBeInTheDocument();
+  });
 });

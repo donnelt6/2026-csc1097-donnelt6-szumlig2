@@ -10,6 +10,7 @@ from supabase import Client
 from ..dependencies import CurrentUser, get_current_user, get_supabase_user_client, rate_limit_user_ip
 from ..schemas import ChatRequest, ChatResponse, ChatSessionDetail, ChatSessionRenameRequest, ChatSessionSummary, HistoryMessage
 from ..services.store import store
+from .access import require_accepted, require_hub_member
 from .errors import raise_postgrest_error
 
 router = APIRouter(prefix="/chat", tags=["chat"])
@@ -28,6 +29,8 @@ def ask(
 ) -> ChatResponse:
     is_new_session = payload.session_id is None
     try:
+        member = require_hub_member(client, str(payload.hub_id), current_user.id)
+        require_accepted(member)
         response = store.chat(client, current_user.id, payload)
     except KeyError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Chat session not found.") from exc
@@ -58,6 +61,8 @@ def list_sessions(
     current_user: CurrentUser = Depends(get_current_user),
 ) -> List[ChatSessionSummary]:
     try:
+        member = require_hub_member(client, str(hub_id), current_user.id)
+        require_accepted(member)
         return store.list_chat_sessions(client, current_user.id, str(hub_id))
     except APIError as exc:
         raise_postgrest_error(exc)
@@ -75,6 +80,8 @@ def get_session_messages(
     current_user: CurrentUser = Depends(get_current_user),
 ) -> ChatSessionDetail:
     try:
+        member = require_hub_member(client, str(hub_id), current_user.id)
+        require_accepted(member)
         return store.get_chat_session_with_messages(client, current_user.id, str(hub_id), str(session_id))
     except KeyError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Chat session not found.") from exc
@@ -136,6 +143,8 @@ def chat_history(
     current_user: CurrentUser = Depends(get_current_user),
 ) -> List[HistoryMessage]:
     try:
+        member = require_hub_member(client, str(hub_id), current_user.id)
+        require_accepted(member)
         return store.chat_history(client, current_user.id, str(hub_id))
     except APIError as exc:
         raise_postgrest_error(exc)

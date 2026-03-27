@@ -41,6 +41,9 @@ export function NotificationsMenu() {
     queryKey: ["invites"],
     queryFn: listInvites,
     enabled: !!user,
+    refetchInterval: 5000,
+    refetchIntervalInBackground: true,
+    refetchOnWindowFocus: true,
   });
 
   const {
