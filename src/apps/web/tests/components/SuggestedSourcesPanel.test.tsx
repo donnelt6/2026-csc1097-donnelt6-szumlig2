@@ -62,6 +62,9 @@ describe("SuggestedSourcesPanel", () => {
     const user = userEvent.setup();
     renderWithQueryClient(<SuggestedSourcesPanel hubId="hub-1" canReview={true} onAccepted={onAccepted} />);
 
+    await waitFor(() => expect(screen.getByText(/1 Suggested Source/)).toBeInTheDocument());
+    await user.click(screen.getByRole("button", { name: /Suggested Source/ }));
+
     expect(await screen.findByText("Example docs")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Accept" }));
 
@@ -89,8 +92,12 @@ describe("SuggestedSourcesPanel", () => {
 
     renderWithQueryClient(<SuggestedSourcesPanel hubId="hub-1" canReview={false} />);
 
+    await waitFor(() => expect(screen.getByText(/1 Suggested Source/)).toBeInTheDocument());
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: /Suggested Source/ }));
+
     expect(await screen.findByText("Demo video")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Accept" })).not.toBeInTheDocument();
-    expect(screen.getByText("Only owners, admins, and editors can review suggestions.")).toBeInTheDocument();
+    expect(screen.getByText("Review not permitted")).toBeInTheDocument();
   });
 });

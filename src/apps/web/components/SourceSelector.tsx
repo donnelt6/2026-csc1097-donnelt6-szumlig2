@@ -85,7 +85,7 @@ export function SourceSelector({
               type="button"
               className="button--small"
               disabled={selectedCount === totalCount}
-              onClick={onSelectAllSources}
+              onClick={() => onSelectAllSources()}
             >
               Select all
             </button>
@@ -93,7 +93,7 @@ export function SourceSelector({
               type="button"
               className="button--small"
               disabled={selectedCount === 0}
-              onClick={onClearSourceSelection}
+              onClick={() => onClearSourceSelection()}
             >
               Clear
             </button>

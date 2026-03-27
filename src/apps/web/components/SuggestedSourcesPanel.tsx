@@ -1,7 +1,14 @@
 'use client';
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowTopRightOnSquareIcon, GlobeAltIcon, PlayCircleIcon } from "@heroicons/react/24/outline";
+import { useEffect, useRef, useState } from "react";
+import {
+  ArrowTopRightOnSquareIcon,
+  ChevronDownIcon,
+  GlobeAltIcon,
+  PlayCircleIcon,
+  SparklesIcon,
+} from "@heroicons/react/24/outline";
 import { decideSourceSuggestion, listSourceSuggestions } from "../lib/api";
 import type { SourceSuggestion } from "../lib/types";
 
@@ -13,6 +20,9 @@ interface Props {
 
 export function SuggestedSourcesPanel({ hubId, canReview, onAccepted }: Props) {
   const queryClient = useQueryClient();
+  const [expanded, setExpanded] = useState(false);
+  const [busySuggestionId, setBusySuggestionId] = useState<string | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const { data, isLoading, error } = useQuery({
     queryKey: ["source-suggestions", hubId],
     queryFn: () => listSourceSuggestions({ hubId, status: "pending" }),
@@ -22,6 +32,9 @@ export function SuggestedSourcesPanel({ hubId, canReview, onAccepted }: Props) {
   const decisionMutation = useMutation({
     mutationFn: ({ suggestionId, action }: { suggestionId: string; action: "accepted" | "declined" }) =>
       decideSourceSuggestion(suggestionId, { action }),
+    onMutate: ({ suggestionId }) => {
+      setBusySuggestionId(suggestionId);
+    },
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["source-suggestions", hubId] });
       if (variables.action === "accepted") {
@@ -29,84 +42,117 @@ export function SuggestedSourcesPanel({ hubId, canReview, onAccepted }: Props) {
         onAccepted?.();
       }
     },
+    onSettled: () => {
+      setBusySuggestionId(null);
+    },
   });
+
+  // Click-outside to close
+  useEffect(() => {
+    if (!expanded) return;
+    function handleClick(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setExpanded(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [expanded]);
 
   const suggestions = data ?? [];
 
+  if (!isLoading && !error && suggestions.length === 0) return null;
+
   return (
-    <div className="card grid" style={{ gap: "12px" }}>
-      <div>
-        <h3 style={{ margin: 0 }}>Suggested sources</h3>
-        <p className="muted" style={{ marginTop: "4px" }}>
-          Review automatically discovered web pages and videos related to this hub.
-        </p>
-      </div>
-      {isLoading && <p className="muted">Loading suggestions...</p>}
-      {error && <p className="muted">Failed to load suggestions: {(error as Error).message}</p>}
-      {!isLoading && !error && suggestions.length === 0 && (
-        <p className="muted">No pending source suggestions.</p>
-      )}
-      <div className="grid" style={{ gap: "12px" }}>
-        {suggestions.map((suggestion) => {
-          const isBusy = decisionMutation.isPending;
-          return (
-            <div key={suggestion.id} className="card" style={{ borderColor: "#283042" }}>
-              <div className="grid" style={{ gap: "10px" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "flex-start" }}>
-                  <div style={{ display: "flex", gap: "10px" }}>
-                    {suggestion.type === "web" ? (
-                      <GlobeAltIcon className="sources__type-icon sources__type-icon--web" />
-                    ) : (
-                      <PlayCircleIcon className="sources__type-icon sources__type-icon--youtube" />
-                    )}
-                    <div>
-                      <strong>{suggestion.title || readableTarget(suggestion)}</strong>
-                      <p className="muted" style={{ margin: "4px 0 0" }}>
-                        {suggestion.type === "web" ? "Web page" : "YouTube"} | Confidence {Math.round(suggestion.confidence * 100)}%
-                      </p>
-                    </div>
+    <div className={`suggested-sources${expanded ? " suggested-sources--open" : ""}`} ref={containerRef}>
+      <button
+        type="button"
+        className="suggested-sources__toggle"
+        onClick={() => setExpanded(!expanded)}
+      >
+        <div className="suggested-sources__toggle-left">
+          <SparklesIcon className="suggested-sources__toggle-icon" />
+          <span className="suggested-sources__toggle-text">
+            {isLoading ? "Loading..." : `${suggestions.length} Suggested Source${suggestions.length === 1 ? "" : "s"}`}
+          </span>
+        </div>
+        <ChevronDownIcon className={`suggested-sources__toggle-chevron${expanded ? " suggested-sources__toggle-chevron--open" : ""}`} />
+      </button>
+
+      {expanded && (
+        <div className="suggested-sources__body">
+          <h4 className="suggested-sources__heading">Suggested Sources</h4>
+          {error && <p className="suggested-sources__error">Failed to load suggestions.</p>}
+
+          {suggestions.map((suggestion) => {
+            const isBusy = busySuggestionId === suggestion.id;
+            return (
+              <div key={suggestion.id} className="suggested-sources__item">
+                <div className={`sources__resource-icon sources__resource-icon--${suggestion.type}`}>
+                  {suggestion.type === "web" ? (
+                    <GlobeAltIcon className="sources__type-icon sources__type-icon--web" />
+                  ) : (
+                    <PlayCircleIcon className="sources__type-icon sources__type-icon--youtube" />
+                  )}
+                </div>
+
+                <div className="suggested-sources__item-content">
+                  <span className="suggested-sources__item-name">
+                    {suggestion.title || readableTarget(suggestion)}
+                  </span>
+                  <div className="suggested-sources__item-meta">
+                    <span className="suggested-sources__item-type">
+                      {suggestion.type === "web" ? "Web" : "YouTube"}
+                    </span>
+                    <span className="suggested-sources__item-match">
+                      {Math.round(suggestion.confidence * 100)}% match
+                    </span>
                   </div>
+                  {suggestion.description && (
+                    <span className="suggested-sources__item-desc">
+                      {suggestion.description}
+                    </span>
+                  )}
+                </div>
+
+                <div className="suggested-sources__item-actions">
                   <a
-                    className="button--small"
+                    className="suggested-sources__inspect"
                     href={suggestion.url}
                     target="_blank"
                     rel="noreferrer"
-                    style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
+                    title="Open in new tab"
                   >
-                    Inspect
-                    <ArrowTopRightOnSquareIcon style={{ width: "16px", height: "16px" }} />
+                    <ArrowTopRightOnSquareIcon className="suggested-sources__inspect-icon" />
                   </a>
+                  {canReview ? (
+                    <>
+                      <button
+                        className="suggested-sources__btn suggested-sources__btn--accept"
+                        type="button"
+                        onClick={() => decisionMutation.mutate({ suggestionId: suggestion.id, action: "accepted" })}
+                        disabled={isBusy}
+                      >
+                        {isBusy ? "..." : "Accept"}
+                      </button>
+                      <button
+                        className="suggested-sources__btn suggested-sources__btn--decline"
+                        type="button"
+                        onClick={() => decisionMutation.mutate({ suggestionId: suggestion.id, action: "declined" })}
+                        disabled={isBusy}
+                      >
+                        Decline
+                      </button>
+                    </>
+                  ) : (
+                    <span className="suggested-sources__no-permission">Review not permitted</span>
+                  )}
                 </div>
-                <p className="muted" style={{ margin: 0 }}>{readableTarget(suggestion)}</p>
-                {suggestion.description && <p style={{ margin: 0 }}>{suggestion.description}</p>}
-                {suggestion.rationale && <p className="muted" style={{ margin: 0 }}>{suggestion.rationale}</p>}
-                {canReview ? (
-                  <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-                    <button
-                      className="button"
-                      type="button"
-                      onClick={() => decisionMutation.mutate({ suggestionId: suggestion.id, action: "accepted" })}
-                      disabled={isBusy}
-                    >
-                      {isBusy ? "Saving..." : "Accept"}
-                    </button>
-                    <button
-                      className="button"
-                      type="button"
-                      onClick={() => decisionMutation.mutate({ suggestionId: suggestion.id, action: "declined" })}
-                      disabled={isBusy}
-                    >
-                      Decline
-                    </button>
-                  </div>
-                ) : (
-                  <p className="muted" style={{ margin: 0 }}>Only owners, admins, and editors can review suggestions.</p>
-                )}
               </div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -116,7 +162,7 @@ function readableTarget(suggestion: SourceSuggestion) {
     const parsed = new URL(suggestion.url);
     const host = parsed.hostname.replace(/^www\./, "");
     if (suggestion.type === "youtube" && suggestion.video_id) {
-      return `${host} • ${suggestion.video_id}`;
+      return `${host} \u2022 ${suggestion.video_id}`;
     }
     return `${host}${parsed.pathname === "/" ? "" : parsed.pathname}`;
   } catch {

@@ -361,8 +361,6 @@ export function Sidebar({ state, onStateChange, mobileOpen, onMobileClose, onCre
             <span className="sidebar-item-text">New Hub</span>
           </button>
         )}
-        <div className="sidebar-footer-links">
-        </div>
       </div>
     </aside>
   );
