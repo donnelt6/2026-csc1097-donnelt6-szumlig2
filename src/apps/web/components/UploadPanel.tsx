@@ -58,7 +58,7 @@ export function UploadPanel({
   const { searchQuery } = useSearch();
   const [statusMessage, setStatusMessage] = useState<{ text: string; type: "success" | "error" } | null>(null);
   const [deletingSourceIds, setDeletingSourceIds] = useState<Set<string>>(new Set());
-  const [refreshingSourceId, setRefreshingSourceId] = useState<string | null>(null);
+  const [refreshingSourceIds, setRefreshingSourceIds] = useState<Set<string>>(new Set());
   const [typeFilter, setTypeFilter] = useState<"all" | "file" | "web" | "youtube">("all");
   const [statusFilter, setStatusFilter] = useState<"all" | "complete" | "incomplete">("all");
   const [pageSize, setPageSize] = useState(10);
@@ -169,7 +169,7 @@ export function UploadPanel({
   };
 
   const handleRefreshSource = async (sourceId: string) => {
-    setRefreshingSourceId(sourceId);
+    setRefreshingSourceIds((prev) => new Set(prev).add(sourceId));
     const previousSources = queryClient.getQueryData<Source[]>(["sources", hubId]) ?? [];
     updateSourcesCache((current) =>
       current.map((source) =>
@@ -186,7 +186,7 @@ export function UploadPanel({
       queryClient.setQueryData(["sources", hubId], previousSources);
       setStatusMessage({ text: (err as Error).message, type: "error" });
     } finally {
-      setRefreshingSourceId(null);
+      setRefreshingSourceIds((prev) => { const next = new Set(prev); next.delete(sourceId); return next; });
     }
   };
 
@@ -365,7 +365,7 @@ export function UploadPanel({
           const isSelected = isSelectable && selectedSourceSet.has(source.id);
           const isRemoteSource = source.type === "web" || source.type === "youtube";
           const isDeleting = deletingSourceIds.has(source.id);
-          const isRefreshingThis = refreshingSourceId === source.id;
+          const isRefreshingThis = refreshingSourceIds.has(source.id);
           return (
             <div
               key={source.id}
@@ -524,7 +524,7 @@ export function UploadPanel({
       {filteredSources.length > 0 && (
         <div className="sources__pagination">
           <p className="sources__pagination-info">
-            Showing {page * pageSize + 1}&ndash;{Math.min((page + 1) * pageSize, filteredSources.length)} of {filteredSources.length} Sources
+            Showing {safePage * pageSize + 1}&ndash;{Math.min((safePage + 1) * pageSize, filteredSources.length)} of {filteredSources.length} Sources
           </p>
           <div className="sources__pagination-controls">
             <div className="sources__pagination-per-page">

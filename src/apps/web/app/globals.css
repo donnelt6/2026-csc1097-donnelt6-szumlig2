@@ -4741,42 +4741,27 @@ textarea {
   transition: border-color var(--transition-fast), background var(--transition-fast);
 }
 
-.sources__row::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 4px;
-  background: transparent;
-  border-radius: 14px 0 0 14px;
-  transition: background var(--transition-fast);
-}
-
 .sources__row--selectable {
   cursor: pointer;
 }
 
 .sources__row--selectable:hover {
   border-color: var(--border-hover);
-}
-
-.sources__row--selectable:hover::before {
-  background: var(--border-hover);
+  border-left: 4px solid var(--border-hover);
+  padding-left: 21px;
 }
 
 .sources__row--selected {
   border-color: var(--text-secondary);
+  border-left: 4px solid var(--text);
+  padding-left: 21px;
   background: color-mix(in srgb, var(--text) 4%, var(--card));
-}
-
-.sources__row--selected::before,
-.sources__row--selected:hover::before {
-  background: var(--text);
 }
 
 .sources__row--selected:hover {
   border-color: var(--text-secondary);
+  border-left: 4px solid var(--text);
+  padding-left: 21px;
 }
 
 .sources__cell {

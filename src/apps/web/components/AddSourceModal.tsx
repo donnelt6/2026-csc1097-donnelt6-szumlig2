@@ -135,19 +135,7 @@ export function AddSourceModal({ hubId, open, onClose, onRefresh }: Props) {
     isProcessingRef.current = true;
 
     while (true) {
-      let nextItem: QueueItem | undefined;
-      setQueue((prev) => {
-        nextItem = prev.find((item) => item.status === "pending");
-        return prev;
-      });
-
-      // Need to await a tick for setState to flush
-      await new Promise((r) => setTimeout(r, 0));
-
-      setQueue((prev) => {
-        nextItem = prev.find((item) => item.status === "pending");
-        return prev;
-      });
+      const nextItem = queueRef.current.find((item) => item.status === "pending");
 
       if (!nextItem) break;
 
@@ -395,7 +383,7 @@ export function AddSourceModal({ hubId, open, onClose, onRefresh }: Props) {
 
   const pendingCount = queue.filter((item) => item.status === "pending" || item.status === "uploading" || item.status === "enqueuing").length;
   const completedCount = queue.filter((item) => item.status === "complete").length;
-  const allDone = queue.length > 0 && pendingCount === 0;
+  const allDone = queue.length > 0 && pendingCount === 0 && completedCount > 0;
 
   if (!open) return null;
 

@@ -328,7 +328,7 @@ def _fetch_url_content(url: str) -> tuple[bytes, str, str]:
 
 def _extract_web_text(raw: bytes, content_type: str) -> tuple[str, Optional[str]]:
     encoding = "utf-8"
-    match = re.search(r"charset=([\\w-]+)", content_type, re.IGNORECASE)
+    match = re.search(r"charset=([\w-]+)", content_type, re.IGNORECASE)
     if match:
         encoding = match.group(1)
     html = raw.decode(encoding, errors="ignore")
