@@ -115,10 +115,17 @@ export function AddSourceModal({ hubId, open, onClose, onRefresh }: Props) {
     return () => window.clearTimeout(timeout);
   }, [statusMessage]);
 
-  // Clear completed uploads when modal opens
+  // Clear completed/errored uploads when modal opens, cleaning up any orphaned backend sources
   useEffect(() => {
     if (open) {
-      setQueue((prev) => prev.filter((item) => item.status !== "complete" && item.status !== "error"));
+      setQueue((prev) => {
+        for (const item of prev) {
+          if (item.status === "error" && item.kind === "file" && item.sourceId) {
+            deleteSource(item.sourceId).catch(() => {});
+          }
+        }
+        return prev.filter((item) => item.status !== "complete" && item.status !== "error");
+      });
     }
   }, [open]);
 
@@ -236,6 +243,15 @@ export function AddSourceModal({ hubId, open, onClose, onRefresh }: Props) {
             item.id === itemId ? { ...item, status: "error" as UploadStatus, error: reason } : item
           )
         );
+
+        // Clean up the orphaned backend source record for failed file uploads
+        if (nextItem.kind === "file") {
+          const match = queueRef.current.find((i) => i.id === itemId && i.kind === "file");
+          const sourceId = match?.kind === "file" ? match.sourceId : undefined;
+          if (sourceId) {
+            try { await deleteSource(sourceId); onRefresh(); } catch {}
+          }
+        }
       }
     }
 

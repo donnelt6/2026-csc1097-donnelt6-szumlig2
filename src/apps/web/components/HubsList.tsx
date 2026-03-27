@@ -122,6 +122,7 @@ export function HubsList({ searchQuery, filters, onHubCountChange, onPaginationV
     const targetHub = currentHubs.find((hub) => hub.id === hubId);
     if (hubId.startsWith("temp-hub-") || targetHub?._isPendingClientSync) return;
     const newState = !currentState;
+    await queryClient.cancelQueries({ queryKey: ["hubs"] });
     queryClient.setQueryData(["hubs"], (oldHubs: typeof data) => {
       if (!oldHubs) return oldHubs;
       return oldHubs.map((h) => h.id === hubId ? { ...h, is_favourite: newState } : h);
@@ -129,8 +130,9 @@ export function HubsList({ searchQuery, filters, onHubCountChange, onPaginationV
     try {
       await toggleHubFavourite(hubId, newState);
     } catch {
-      queryClient.invalidateQueries({ queryKey: ["hubs"] });
+      // revert on failure
     }
+    queryClient.invalidateQueries({ queryKey: ["hubs"] });
   };
 
   const normalizedQuery = searchQuery.trim().toLowerCase();

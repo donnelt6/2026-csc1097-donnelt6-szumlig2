@@ -4738,7 +4738,6 @@ textarea {
   border: 1px solid var(--border);
   border-radius: 14px;
   position: relative;
-  overflow: hidden;
   transition: border-color var(--transition-fast), background var(--transition-fast);
 }
 
@@ -5296,7 +5295,7 @@ textarea {
 .sources__error-popover {
   position: absolute;
   right: 0;
-  top: calc(100% + 6px);
+  bottom: calc(100% + 6px);
   width: 300px;
   padding: 10px 14px;
   background: var(--card);
@@ -5304,6 +5303,11 @@ textarea {
   border-radius: 10px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
   z-index: 10;
+}
+
+.sources__error-popover--below {
+  bottom: auto;
+  top: calc(100% + 6px);
 }
 
 .sources__error-popover-text {

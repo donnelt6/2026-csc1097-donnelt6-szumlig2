@@ -69,6 +69,7 @@ export function UploadPanel({
   const [isLoadingChunks, setIsLoadingChunks] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [errorPopoverId, setErrorPopoverId] = useState<string | null>(null);
+  const [errorPopoverFlip, setErrorPopoverFlip] = useState(false);
   const errorPopoverRef = useRef<HTMLDivElement>(null);
 
   // Close error popover on click outside
@@ -448,27 +449,42 @@ export function UploadPanel({
                   >
                     <EyeIcon className="sources__action-icon" />
                   </button>
-                ) : source.status === "failed" && source.failure_reason ? (
+                ) : source.status === "failed" ? (
                   <div className="sources__error-popover-wrapper" ref={errorPopoverId === source.id ? errorPopoverRef : undefined}>
                     <button
                       className="sources__action-btn sources__action-btn--warning"
                       type="button"
-                      onClick={() => setErrorPopoverId(errorPopoverId === source.id ? null : source.id)}
+                      onClick={(e) => {
+                        if (errorPopoverId === source.id) {
+                          setErrorPopoverId(null);
+                        } else {
+                          const btn = e.currentTarget as HTMLElement;
+                          const scroller = btn.closest(".sources__table-body");
+                          if (scroller) {
+                            const btnRect = btn.getBoundingClientRect();
+                            const scrollRect = scroller.getBoundingClientRect();
+                            setErrorPopoverFlip(btnRect.top - scrollRect.top < 160);
+                          }
+                          setErrorPopoverId(source.id);
+                        }
+                      }}
                       title="View error"
                     >
                       <ExclamationTriangleIcon className="sources__action-icon" />
                     </button>
                     {errorPopoverId === source.id && (
-                      <div className="sources__error-popover">
-                        <p className="sources__error-popover-text">{source.failure_reason}</p>
-                        <button
-                          className="sources__error-popover-copy"
-                          type="button"
-                          onClick={() => navigator.clipboard.writeText(source.failure_reason!)}
-                          title="Copy error"
-                        >
-                          <ClipboardDocumentIcon className="sources__error-popover-copy-icon" />
-                        </button>
+                      <div className={`sources__error-popover${errorPopoverFlip ? " sources__error-popover--below" : ""}`}>
+                        <p className="sources__error-popover-text">{source.failure_reason || "Processing failed. Try deleting and re-uploading."}</p>
+                        {source.failure_reason && (
+                          <button
+                            className="sources__error-popover-copy"
+                            type="button"
+                            onClick={() => navigator.clipboard.writeText(source.failure_reason!)}
+                            title="Copy error"
+                          >
+                            <ClipboardDocumentIcon className="sources__error-popover-copy-icon" />
+                          </button>
+                        )}
                       </div>
                     )}
                   </div>
