@@ -100,4 +100,15 @@ describe("AuthCallbackPageClient", () => {
     await waitFor(() => expect(getSession).toHaveBeenCalled());
     expect(replaceMock).toHaveBeenCalledWith("/");
   });
+
+  it("routes authenticated users into the app when the callback state is empty", async () => {
+    getSession.mockResolvedValue({ data: { session: { access_token: "token" } } });
+    getUser.mockResolvedValue({ data: { user: { id: "user-1" } } });
+    window.history.replaceState({}, "", "/auth/callback#");
+
+    render(<AuthCallbackPageClient />);
+
+    await waitFor(() => expect(getSession).toHaveBeenCalled());
+    expect(replaceMock).toHaveBeenCalledWith("/");
+  });
 });

@@ -107,6 +107,9 @@ export function AuthCallbackPageClient() {
           return;
         }
 
+        if (await redirectAuthenticatedUser()) {
+          return;
+        }
         setError("This email link is invalid or has expired. Request a new one and try again.");
       } catch (cause) {
         console.error("auth.callback.failed", cause);
