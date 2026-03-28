@@ -18,6 +18,7 @@ export function AuthCallbackPageClient() {
       setError("Supabase is not configured. Add your env vars to enable email auth.");
       return;
     }
+    const supabaseClient = supabase;
 
     let cancelled = false;
 
@@ -32,12 +33,12 @@ export function AuthCallbackPageClient() {
         if (state.intent === "recovery") {
           setStatus("Opening password recovery...");
           if (state.code) {
-            const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(state.code);
+            const { error: exchangeError } = await supabaseClient.auth.exchangeCodeForSession(state.code);
             if (exchangeError) {
               throw exchangeError;
             }
           } else if (state.tokenHash && state.type === "recovery") {
-            const { error: verifyError } = await supabase.auth.verifyOtp({
+            const { error: verifyError } = await supabaseClient.auth.verifyOtp({
               token_hash: state.tokenHash,
               type: "recovery",
             });
@@ -62,12 +63,12 @@ export function AuthCallbackPageClient() {
         if (state.intent === "confirmation") {
           setStatus("Confirming your email...");
           if (state.code) {
-            const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(state.code);
+            const { error: exchangeError } = await supabaseClient.auth.exchangeCodeForSession(state.code);
             if (exchangeError) {
               throw exchangeError;
             }
-          } else if (state.tokenHash && state.type) {
-            const { error: verifyError } = await supabase.auth.verifyOtp({
+          } else if (state.tokenHash && isSupportedConfirmationType(state.type)) {
+            const { error: verifyError } = await supabaseClient.auth.verifyOtp({
               token_hash: state.tokenHash,
               type: state.type,
             });
@@ -78,7 +79,7 @@ export function AuthCallbackPageClient() {
             throw new Error("Unsupported confirmation link");
           }
 
-          await supabase.auth.signOut();
+          await supabaseClient.auth.signOut();
           if (!cancelled) {
             router.replace("/auth?mode=sign-in&verified=1");
           }
@@ -121,4 +122,8 @@ export function AuthCallbackPageClient() {
       )}
     </main>
   );
+}
+
+function isSupportedConfirmationType(value: string | null): value is "signup" | "invite" | "magiclink" | "email_change" | "email" {
+  return value === "signup" || value === "invite" || value === "magiclink" || value === "email_change" || value === "email";
 }

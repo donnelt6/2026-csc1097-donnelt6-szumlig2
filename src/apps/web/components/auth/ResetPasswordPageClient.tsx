@@ -24,6 +24,7 @@ export function ResetPasswordPageClient() {
       setStatus("Supabase is not configured. Add your env vars to enable password recovery.");
       return;
     }
+    const supabaseClient = supabase;
 
     let mounted = true;
     let recoveryReady = false;
@@ -46,12 +47,12 @@ export function ResetPasswordPageClient() {
 
       try {
         if (linkState.code && linkState.intent === "recovery") {
-          const { error } = await supabase.auth.exchangeCodeForSession(linkState.code);
+          const { error } = await supabaseClient.auth.exchangeCodeForSession(linkState.code);
           if (error) {
             throw error;
           }
         } else if (linkState.tokenHash && linkState.intent === "recovery") {
-          const { error } = await supabase.auth.verifyOtp({
+          const { error } = await supabaseClient.auth.verifyOtp({
             token_hash: linkState.tokenHash,
             type: "recovery",
           });
@@ -75,7 +76,7 @@ export function ResetPasswordPageClient() {
           return;
         }
 
-        const { data, error } = await supabase.auth.getSession();
+        const { data, error } = await supabaseClient.auth.getSession();
         if (error) {
           throw error;
         }
@@ -105,7 +106,7 @@ export function ResetPasswordPageClient() {
       }
     };
 
-    const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
+    const { data: listener } = supabaseClient.auth.onAuthStateChange((event, session) => {
       if (!mounted) {
         return;
       }
@@ -133,13 +134,14 @@ export function ResetPasswordPageClient() {
       setStatus("Supabase is not configured. Add your env vars to enable password recovery.");
       return;
     }
+    const supabaseClient = supabase;
     if (password !== confirmPassword) {
       setStatus("Passwords do not match.");
       return;
     }
 
     setLoading(true);
-    const { error } = await supabase.auth.updateUser({ password });
+    const { error } = await supabaseClient.auth.updateUser({ password });
 
     if (error) {
       setLoading(false);
@@ -149,7 +151,7 @@ export function ResetPasswordPageClient() {
     }
 
     sessionStorage.removeItem(RECOVERY_SESSION_KEY);
-    await supabase.auth.signOut();
+    await supabaseClient.auth.signOut();
     setLoading(false);
     router.replace("/auth?reset=success");
   };
@@ -207,9 +209,10 @@ async function waitForRecoverySession() {
   if (!supabase) {
     return null;
   }
+  const supabaseClient = supabase;
 
   for (let attempt = 0; attempt < 5; attempt += 1) {
-    const { data, error } = await supabase.auth.getSession();
+    const { data, error } = await supabaseClient.auth.getSession();
     if (error) {
       throw error;
     }

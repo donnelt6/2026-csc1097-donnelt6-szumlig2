@@ -54,6 +54,7 @@ export function AuthPageClient() {
       </main>
     );
   }
+  const supabaseClient = supabase;
 
   const setMode = (nextMode: AuthMode) => {
     const params = new URLSearchParams();
@@ -68,7 +69,7 @@ export function AuthPageClient() {
     event.preventDefault();
     setStatus(null);
     setLoading(true);
-    const { error } = await supabase.auth.signInWithPassword({
+    const { error } = await supabaseClient.auth.signInWithPassword({
       email: signInEmail,
       password: signInPassword,
     });
@@ -99,7 +100,7 @@ export function AuthPageClient() {
     }
 
     setLoading(true);
-    const { data, error } = await supabase.auth.signUp({
+    const { data, error } = await supabaseClient.auth.signUp({
       email: signUpEmail,
       password: signUpPassword,
       options: {
