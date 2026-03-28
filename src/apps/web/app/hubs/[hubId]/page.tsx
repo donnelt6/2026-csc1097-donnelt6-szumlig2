@@ -16,6 +16,7 @@ import { ReminderCandidatesPanel } from "../../../components/ReminderCandidatesP
 import { acceptInvite, listInvites, listSources, trackHubAccess } from "../../../lib/api";
 import { useCurrentHub } from "../../../lib/CurrentHubContext";
 import { useHubTab } from "../../../lib/HubTabContext";
+import { useSearch } from "../../../lib/SearchContext";
 import type { HubTab } from "../../../lib/HubTabContext";
 import type { Hub } from "../../../lib/types";
 
@@ -35,6 +36,7 @@ export default function HubDetail({ params }: { params: { hubId: string } }) {
   const hasTrackedAccess = useRef(false);
   const { activeTab, setActiveTab } = useHubTab();
   const { currentHub: hub, isLoading: currentHubLoading } = useCurrentHub();
+  const { setSearchQuery } = useSearch();
   const [reminderSubTab, setReminderSubTab] = useState('suggested');
 
   // Switch to the tab specified in ?tab= URL param (e.g. from dashboard prompt links)
@@ -46,6 +48,11 @@ export default function HubDetail({ params }: { params: { hubId: string } }) {
       setActiveTab('chat');
     }
   }, [params.hubId, searchParams, setActiveTab]);
+
+  // Clear search when switching tabs so stale queries don't carry over
+  useEffect(() => {
+    setSearchQuery('');
+  }, [activeTab, setSearchQuery]);
 
   const hubResolved = !!hub;
   const canUpload = hub?.role === 'owner' || hub?.role === 'admin' || hub?.role === 'editor';

@@ -214,6 +214,15 @@
   white-space: nowrap;
 }
 
+.members__member-email {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-top: 1px;
+}
+
 .members__you-badge {
   font-size: 0.75rem;
   color: var(--text-secondary);
@@ -229,6 +238,7 @@
 .members__dropdown-btn {
   display: inline-flex;
   align-items: center;
+  justify-content: space-between;
   gap: 6px;
   background: var(--input-bg);
   color: var(--text);
@@ -239,7 +249,6 @@
   font-family: var(--font-sans);
   cursor: pointer;
   transition: border-color var(--transition-fast);
-  white-space: nowrap;
 }
 
 .members__dropdown-btn:hover {
@@ -262,6 +271,7 @@
   position: absolute;
   top: calc(100% + 4px);
   left: 0;
+  right: 0;
   z-index: 20;
   min-width: 140px;
   background: var(--card);
@@ -273,7 +283,9 @@
 }
 
 .members__dropdown-item {
-  display: block;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
   width: 100%;
   padding: 8px 12px;
   border: none;
@@ -295,6 +307,33 @@
   background: color-mix(in srgb, var(--accent) 12%, transparent);
   color: var(--accent);
   font-weight: var(--font-semibold);
+}
+
+.members__dropdown-selected {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  line-height: 1.3;
+  min-width: 0;
+  flex: 1;
+}
+
+.members__dropdown-subtitle {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-weight: var(--font-regular);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.members__dropdown-selected > span,
+.members__dropdown-item > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
 }
 
 .members__role-label {
@@ -335,6 +374,24 @@
   color: #f59e0b;
 }
 
+.members__status-badge--deleting {
+  color: var(--text-secondary);
+}
+
+.members__status-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: members-spin 0.8s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes members-spin {
+  to { transform: rotate(360deg); }
+}
+
 /* Action buttons */
 
 .members__action-btn {
@@ -372,33 +429,42 @@
   height: 20px;
 }
 
-/* Transfer ownership section */
+/* Transfer ownership modal */
 
-.members__transfer-section {
-  border-top: 1px solid var(--border);
-  padding-top: 16px;
-  margin-top: 8px;
+.members__transfer-modal {
+  width: 520px;
+  max-width: calc(100vw - 32px);
 }
 
-.members__section-title {
-  font-size: 1rem;
-  font-weight: var(--font-semibold);
-  color: var(--text);
-  margin: 0 0 4px;
-  font-family: var(--font-headline, inherit);
+.members__transfer-form {
+  padding: 0 24px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 
-.members__section-desc {
-  font-size: 0.8125rem;
-  color: var(--text-secondary);
-  margin: 0 0 12px;
-  line-height: 1.4;
-}
-
-.members__transfer-controls {
+.members__transfer-row {
   display: flex;
   align-items: center;
   gap: 10px;
+}
+
+.members__transfer-row .members__dropdown {
+  flex: 1;
+  min-width: 0;
+  z-index: 10;
+}
+
+.members__transfer-row .members__dropdown-btn {
+  width: 100%;
+}
+
+.members__transfer-row .button {
+  flex-shrink: 0;
+}
+
+.members__transfer-btn {
+  font-size: 0.8125rem;
 }
 
 /* Sidebar */
@@ -574,11 +640,15 @@
   color: var(--muted);
 }
 
-.members__form-actions {
+.members__invite-row {
   display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-top: 4px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.members__invite-row .button {
+  flex-shrink: 0;
 }
 
 /* Responsive */
@@ -613,10 +683,6 @@
   .members__cell--role { grid-column: 1; grid-row: 2; }
   .members__cell--status { display: none; }
   .members__cell--actions { grid-column: 2; grid-row: 1 / 3; }
-  .members__transfer-controls {
-    flex-direction: column;
-    align-items: stretch;
-  }
 }
 
 /* Toast */

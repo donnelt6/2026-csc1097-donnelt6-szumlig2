@@ -1,4 +1,4 @@
-import { screen, waitFor } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MembersPanel } from "../../components/MembersPanel";
@@ -52,8 +52,13 @@ describe("MembersPanel", () => {
     renderWithQueryClient(<MembersPanel hubId="hub-1" role="owner" />);
 
     await waitFor(() => expect(screen.getByText("owner@example.com")).toBeInTheDocument());
-    expect(screen.queryByRole("option", { name: "Owner" })).not.toBeInTheDocument();
-    expect(screen.getByText("Owner role is fixed.")).toBeInTheDocument();
+    // Owner row shows a static "Owner" label, not a dropdown
+    const ownerRow = screen.getByText("owner@example.com").closest(".members__row") as HTMLElement;
+    const roleCell = within(ownerRow).getByText("Owner");
+    expect(roleCell.classList.contains("members__role-label")).toBe(true);
+    // No dropdown button in the owner's role cell
+    const roleCellContainer = roleCell.closest(".members__cell--role") as HTMLElement;
+    expect(within(roleCellContainer).queryByRole("button")).not.toBeInTheDocument();
   });
 
   it("limits ownership transfer targets to accepted admins", async () => {
@@ -81,18 +86,22 @@ describe("MembersPanel", () => {
       },
     ]);
 
+    const user = userEvent.setup();
     renderWithQueryClient(<MembersPanel hubId="hub-1" role="owner" />);
 
-    await waitFor(() => {
-      const options = Array.from((screen.getByLabelText("Target admin") as HTMLSelectElement).options).map(
-        (option) => option.text
-      );
-      expect(options).toContain("admin@example.com");
-    });
-    const transferSelect = screen.getByLabelText("Target admin") as HTMLSelectElement;
-    const options = Array.from(transferSelect.options).map((option) => option.text);
-    expect(options).toContain("admin@example.com");
-    expect(options).not.toContain("viewer@example.com");
+    // Open the transfer modal
+    await user.click(await screen.findByRole("button", { name: "Transfer Ownership" }));
+
+    // Open the admin dropdown inside the modal
+    const modal = screen.getByText("Transfer Ownership", { selector: "h3" }).closest(".modal") as HTMLElement;
+    const dropdownBtn = within(modal).getAllByRole("button").find(
+      (btn) => btn.classList.contains("members__dropdown-btn")
+    )!;
+    await user.click(dropdownBtn);
+
+    // Should contain the admin but not the viewer
+    expect(within(modal).getByText("admin@example.com")).toBeInTheDocument();
+    expect(within(modal).queryByText("viewer@example.com")).not.toBeInTheDocument();
   });
 
   it("requires confirmation before transferring ownership", async () => {
@@ -114,18 +123,24 @@ describe("MembersPanel", () => {
     ]);
     vi.stubGlobal("confirm", vi.fn(() => false));
 
+    const user = userEvent.setup();
     renderWithQueryClient(<MembersPanel hubId="hub-1" role="owner" />);
 
-    const user = userEvent.setup();
-    await waitFor(() => {
-      const options = Array.from((screen.getByLabelText("Target admin") as HTMLSelectElement).options).map(
-        (option) => option.value
-      );
-      expect(options).toContain("admin-1");
-    });
-    await user.selectOptions(screen.getByLabelText("Target admin"), "admin-1");
-    await user.click(screen.getByRole("button", { name: "Transfer ownership" }));
+    // Open the transfer modal
+    await user.click(await screen.findByRole("button", { name: "Transfer Ownership" }));
 
+    // Select the admin from the dropdown
+    const modal = screen.getByText("Transfer Ownership", { selector: "h3" }).closest(".modal") as HTMLElement;
+    const dropdownBtn = within(modal).getAllByRole("button").find(
+      (btn) => btn.classList.contains("members__dropdown-btn")
+    )!;
+    await user.click(dropdownBtn);
+    await user.click(within(modal).getByText("admin@example.com"));
+
+    // Click "Transfer ownership" button
+    await user.click(within(modal).getByRole("button", { name: "Transfer ownership" }));
+
+    // confirm() returned false, so the API should not have been called
     expect(transferHubOwnership).not.toHaveBeenCalled();
   });
 });

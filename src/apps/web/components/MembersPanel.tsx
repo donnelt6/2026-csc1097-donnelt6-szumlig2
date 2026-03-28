@@ -37,7 +37,7 @@ function RoleDropdown({
   onChange,
 }: {
   value: string;
-  options: { value: string; label: string }[];
+  options: { value: string; label: string; subtitle?: string }[];
   disabled?: boolean;
   onChange: (value: string) => void;
 }) {
@@ -65,7 +65,12 @@ function RoleDropdown({
         onClick={() => !disabled && setOpen((prev) => !prev)}
         disabled={disabled}
       >
-        <span>{selected?.label ?? value}</span>
+        <span className={selected?.subtitle ? "members__dropdown-selected" : ""}>
+          <span>{selected?.label ?? value}</span>
+          {selected?.subtitle && (
+            <span className="members__dropdown-subtitle">{selected.subtitle}</span>
+          )}
+        </span>
         <ChevronDownIcon className="members__dropdown-chevron" />
       </button>
       {open && (
@@ -80,7 +85,10 @@ function RoleDropdown({
                 setOpen(false);
               }}
             >
-              {opt.label}
+              <span>{opt.label}</span>
+              {opt.subtitle && (
+                <span className="members__dropdown-subtitle">{opt.subtitle}</span>
+              )}
             </button>
           ))}
         </div>
@@ -97,6 +105,7 @@ export function MembersPanel({ hubId, role }: Props) {
   const { user } = useAuth();
   const { searchQuery } = useSearch();
   const [showInviteModal, setShowInviteModal] = useState(false);
+  const [showTransferModal, setShowTransferModal] = useState(false);
   const [email, setEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<AssignableMembershipRole>("viewer");
   const [transferTargetId, setTransferTargetId] = useState<string>("");
@@ -104,6 +113,8 @@ export function MembersPanel({ hubId, role }: Props) {
   const statusTimer = useRef<ReturnType<typeof setTimeout>>();
   const [roleFilter, setRoleFilter] = useState<RoleFilter>("all");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [deletingMemberIds, setDeletingMemberIds] = useState<Set<string>>(new Set());
+  const pendingDeletes = useRef(0);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["members", hubId],
@@ -120,6 +131,7 @@ export function MembersPanel({ hubId, role }: Props) {
     mutationFn: () => inviteMember(hubId, { email, role: inviteRole }),
     onSuccess: () => {
       setEmail("");
+      setInviteRole("viewer");
       setShowInviteModal(false);
       queryClient.invalidateQueries({ queryKey: ["members", hubId] });
       queryClient.invalidateQueries({ queryKey: ["hubs"] });
@@ -140,18 +152,34 @@ export function MembersPanel({ hubId, role }: Props) {
     },
   });
 
-  const removeMutation = useMutation({
-    mutationFn: (userId: string) => removeMember(hubId, userId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["members", hubId] });
-      queryClient.invalidateQueries({ queryKey: ["hubs"] });
+  const handleRemoveMember = async (userId: string, displayName: string) => {
+    if (typeof window !== "undefined") {
+      const confirmed = window.confirm(`Remove ${displayName} from this hub?`);
+      if (!confirmed) return;
+    }
+    setDeletingMemberIds((prev) => new Set(prev).add(userId));
+    pendingDeletes.current++;
+    try {
+      await removeMember(hubId, userId);
       showStatus("Member removed.", "success");
-    },
-  });
+    } catch (err) {
+      setDeletingMemberIds((prev) => { const next = new Set(prev); next.delete(userId); return next; });
+      showStatus(`Remove failed: ${(err as Error).message}`, "error");
+    } finally {
+      pendingDeletes.current--;
+      // Once all pending deletes are done, do a single refetch to sync
+      if (pendingDeletes.current === 0) {
+        queryClient.invalidateQueries({ queryKey: ["members", hubId] });
+        queryClient.invalidateQueries({ queryKey: ["hubs"] });
+      }
+    }
+  };
 
   const transferMutation = useMutation({
     mutationFn: (userId: string) => transferHubOwnership(hubId, userId),
     onSuccess: () => {
+      setShowTransferModal(false);
+      setTransferTargetId("");
       queryClient.invalidateQueries({ queryKey: ["members", hubId] });
       queryClient.invalidateQueries({ queryKey: ["hubs"] });
       showStatus("Ownership transferred.", "success");
@@ -174,9 +202,11 @@ export function MembersPanel({ hubId, role }: Props) {
     let members = data ?? [];
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
-      members = members.filter((m) =>
-        (m.email ?? m.user_id).toLowerCase().includes(q)
-      );
+      members = members.filter((m) => {
+        const name = resolveProfile(m).displayName.toLowerCase();
+        const identifier = (m.email ?? m.user_id).toLowerCase();
+        return name.includes(q) || identifier.includes(q);
+      });
     }
     if (roleFilter !== "all") {
       members = members.filter((m) =>
@@ -226,6 +256,15 @@ export function MembersPanel({ hubId, role }: Props) {
           Manage hub roles, invites, and ownership transfer.
         </p>
         <div className="members__header-actions">
+          {isOwner && acceptedAdmins.length > 0 && (
+            <button
+              className="button button--danger members__transfer-btn"
+              type="button"
+              onClick={() => setShowTransferModal(true)}
+            >
+              Transfer Ownership
+            </button>
+          )}
           {isOwner && (
             <button
               className="button button--primary members__invite-btn"
@@ -297,8 +336,11 @@ export function MembersPanel({ hubId, role }: Props) {
             {filteredMembers.map((member: HubMember) => {
               const isSelf = member.user_id === user?.id;
               const isMemberOwner = member.role === "owner";
+              const isDeleting = deletingMemberIds.has(member.user_id);
               const profile = resolveProfile(member);
               const displayName = profile.displayName;
+              const emailOrId = member.email ?? member.user_id;
+              const showEmail = emailOrId !== displayName;
               const isActive = !!member.accepted_at;
 
               return (
@@ -308,6 +350,7 @@ export function MembersPanel({ hubId, role }: Props) {
                     <ProfileAvatar className="members__avatar" profile={member} />
                     <div className="members__member-details">
                       <span className="members__member-name">{displayName}</span>
+                      {showEmail && <span className="members__member-email">{emailOrId}</span>}
                       {isSelf && <span className="members__you-badge">You</span>}
                     </div>
                   </div>
@@ -335,10 +378,17 @@ export function MembersPanel({ hubId, role }: Props) {
 
                   {/* Status cell */}
                   <div className="members__cell members__cell--status">
-                    <span className={`members__status-badge members__status-badge--${isActive ? "active" : "pending"}`}>
-                      <span className={`members__status-dot members__status-dot--${isActive ? "active" : "pending"}`} />
-                      {isActive ? "Active" : "Pending"}
-                    </span>
+                    {isDeleting ? (
+                      <span className="members__status-badge members__status-badge--deleting">
+                        <span className="members__status-spinner" />
+                        Removing
+                      </span>
+                    ) : (
+                      <span className={`members__status-badge members__status-badge--${isActive ? "active" : "pending"}`}>
+                        <span className={`members__status-dot members__status-dot--${isActive ? "active" : "pending"}`} />
+                        {isActive ? "Active" : "Pending"}
+                      </span>
+                    )}
                   </div>
 
                   {/* Actions cell */}
@@ -348,14 +398,8 @@ export function MembersPanel({ hubId, role }: Props) {
                         className="members__action-btn members__action-btn--danger"
                         type="button"
                         title="Remove member"
-                        onClick={() => {
-                          if (typeof window !== "undefined") {
-                            const confirmed = window.confirm(`Remove ${displayName} from this hub?`);
-                            if (!confirmed) return;
-                          }
-                          removeMutation.mutate(member.user_id);
-                        }}
-                        disabled={removeMutation.isPending}
+                        onClick={() => handleRemoveMember(member.user_id, displayName)}
+                        disabled={isDeleting}
                       >
                         <TrashIcon className="members__action-icon" />
                       </button>
@@ -366,44 +410,6 @@ export function MembersPanel({ hubId, role }: Props) {
             })}
           </div>
 
-          {/* Transfer ownership (owner only) */}
-          {isOwner && acceptedAdmins.length > 0 && (
-            <div className="members__transfer-section">
-              <h4 className="members__section-title">Transfer ownership</h4>
-              <p className="members__section-desc">
-                Ownership can only transfer to an accepted admin. The current owner becomes an admin.
-              </p>
-              <div className="members__transfer-controls">
-                <RoleDropdown
-                  value={transferTargetId || ""}
-                  options={[
-                    { value: "", label: "Select an admin" },
-                    ...acceptedAdmins.map((m) => ({
-                      value: m.user_id,
-                      label: resolveProfile(m).displayName,
-                    })),
-                  ]}
-                  onChange={(id) => setTransferTargetId(id)}
-                />
-                <button
-                  className="button button--danger"
-                  type="button"
-                  disabled={!transferTargetId || transferMutation.isPending}
-                  onClick={() => {
-                    if (typeof window !== "undefined") {
-                      const confirmed = window.confirm(
-                        "Transfer ownership to this admin? You will become an admin, and you cannot undo this change from this screen."
-                      );
-                      if (!confirmed) return;
-                    }
-                    transferMutation.mutate(transferTargetId);
-                  }}
-                >
-                  {transferMutation.isPending ? "Transferring..." : "Transfer ownership"}
-                </button>
-              </div>
-            </div>
-          )}
         </div>
 
         {/* Sidebar */}
@@ -465,7 +471,7 @@ export function MembersPanel({ hubId, role }: Props) {
 
       {/* Invite modal */}
       {showInviteModal && (
-        <div className="modal-backdrop" onClick={() => setShowInviteModal(false)}>
+        <div className="modal-backdrop" onClick={() => { setShowInviteModal(false); setEmail(""); setInviteRole("viewer"); }}>
           <div className="modal members__invite-modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal__header">
               <div>
@@ -476,7 +482,7 @@ export function MembersPanel({ hubId, role }: Props) {
             <button
               className="modal__close"
               type="button"
-              onClick={() => setShowInviteModal(false)}
+              onClick={() => { setShowInviteModal(false); setEmail(""); setInviteRole("viewer"); }}
             >
               <XMarkIcon style={{ width: 20, height: 20 }} />
             </button>
@@ -500,31 +506,85 @@ export function MembersPanel({ hubId, role }: Props) {
                   autoFocus
                 />
               </label>
-              <label className="members__form-label">
+              <div className="members__form-label">
                 <span className="members__form-label-text">Role</span>
-                <RoleDropdown
-                  value={inviteRole}
-                  options={roleOptions}
-                  onChange={(v) => setInviteRole(v as AssignableMembershipRole)}
-                />
-              </label>
-              <div className="members__form-actions">
-                <button
-                  className="button"
-                  type="button"
-                  onClick={() => setShowInviteModal(false)}
-                >
-                  Cancel
-                </button>
-                <button
-                  className="button button--primary"
-                  type="submit"
-                  disabled={inviteMutation.isPending}
-                >
-                  {inviteMutation.isPending ? "Sending..." : "Send invite"}
-                </button>
+                <div className="members__invite-row">
+                  <RoleDropdown
+                    value={inviteRole}
+                    options={roleOptions}
+                    onChange={(v) => setInviteRole(v as AssignableMembershipRole)}
+                  />
+                  <button
+                    className="button button--primary"
+                    type="submit"
+                    disabled={inviteMutation.isPending}
+                  >
+                    {inviteMutation.isPending ? "Sending..." : "Send invite"}
+                  </button>
+                </div>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Transfer ownership modal */}
+      {showTransferModal && (
+        <div className="modal-backdrop" onClick={() => setShowTransferModal(false)}>
+          <div className="modal members__transfer-modal" onClick={(e) => e.stopPropagation()}>
+            <button
+              className="modal__close"
+              type="button"
+              onClick={() => setShowTransferModal(false)}
+            >
+              <XMarkIcon style={{ width: 20, height: 20 }} />
+            </button>
+            <div className="modal__header">
+              <div>
+                <h3 className="modal__title">Transfer Ownership</h3>
+                <p className="modal__subtitle">
+                  Select an accepted admin to transfer ownership to. You will become an admin and this cannot be undone.
+                </p>
+              </div>
+            </div>
+            <div className="members__transfer-form">
+              <span className="members__form-label-text">Target admin</span>
+              <div className="members__transfer-row">
+                <RoleDropdown
+                  value={transferTargetId || ""}
+                  options={[
+                    { value: "", label: "Select an admin" },
+                    ...acceptedAdmins.map((m) => {
+                      const profile = resolveProfile(m);
+                      const name = profile.displayName;
+                      const email = m.email ?? "";
+                      return {
+                        value: m.user_id,
+                        label: name,
+                        subtitle: email && email !== name ? email : undefined,
+                      };
+                    }),
+                  ]}
+                  onChange={(id) => setTransferTargetId(id)}
+                />
+                <button
+                  className="button button--danger"
+                  type="button"
+                  disabled={!transferTargetId || transferMutation.isPending}
+                  onClick={() => {
+                    if (typeof window !== "undefined") {
+                      const confirmed = window.confirm(
+                        "Transfer ownership to this admin? You will become an admin, and you cannot undo this change from this screen."
+                      );
+                      if (!confirmed) return;
+                    }
+                    transferMutation.mutate(transferTargetId);
+                  }}
+                >
+                  {transferMutation.isPending ? "Transferring..." : "Transfer ownership"}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

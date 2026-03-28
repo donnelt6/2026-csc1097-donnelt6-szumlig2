@@ -2460,6 +2460,7 @@ textarea {
 }
 
 .modal {
+  position: relative;
   width: 420px;
   max-width: calc(100vw - 32px);
   padding: 28px;
@@ -3680,7 +3681,8 @@ textarea {
 
 .button--danger {
   color: var(--danger);
-  border-color: var(--danger);
+  border: 1px solid var(--danger);
+  background: transparent;
 }
 
 .button--danger:hover:not(:disabled) {
