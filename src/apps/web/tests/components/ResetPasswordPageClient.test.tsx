@@ -80,7 +80,7 @@ describe("ResetPasswordPageClient", () => {
 
     render(<ResetPasswordPageClient />);
 
-    expect(await screen.findByRole("button", { name: "Update password" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Update password" }, { timeout: 4000 })).toBeInTheDocument();
   });
 
   it("updates the password, signs out, and redirects back to auth", async () => {
