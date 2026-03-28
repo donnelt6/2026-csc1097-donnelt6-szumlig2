@@ -23,11 +23,17 @@ def _require_owner(member: HubMember) -> None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Owner role required.")
 
 
-def _attach_emails(members: List[HubMember]) -> List[HubMember]:
-    users = store.service_client.auth.admin.list_users()
-    email_by_id = {user.id: user.email for user in users if user.id}
+def _attach_profiles(members: List[HubMember]) -> List[HubMember]:
+    profile_by_id = store._resolve_user_profiles_by_ids({member.user_id for member in members})
     for member in members:
-        member.email = email_by_id.get(member.user_id)
+        profile = profile_by_id.get(member.user_id)
+        if not profile:
+            continue
+        member.email = profile.email
+        member.display_name = profile.display_name
+        member.avatar_mode = profile.avatar_mode
+        member.avatar_key = profile.avatar_key
+        member.avatar_color = profile.avatar_color
     return members
 
 
@@ -46,7 +52,7 @@ def list_members(
         _require_accepted(member)
         include_pending = member.role == "owner"
         members = store.list_members(client, hub_id, include_pending=include_pending)
-        return _attach_emails(members)
+        return _attach_profiles(members)
     except KeyError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except APIError as exc:

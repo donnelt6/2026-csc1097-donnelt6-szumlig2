@@ -68,6 +68,7 @@ from ..schemas import (
     SourceStatus,
     SourceStatusResponse,
     SourceType,
+    UserProfileSummary,
     WebSourceCreate,
     YouTubeSourceCreate,
     SessionMessage,
@@ -175,20 +176,30 @@ class SupabaseStore:
                     .not_.is_("accepted_at", "null")
                     .execute()
                 )
-                users = self.service_client.auth.admin.list_users()
-                email_lookup = {str(u.id): u.email or "" for u in users if u.id}
+                user_ids = {
+                    str(member.get("user_id") or "")
+                    for member in (members_response.data or [])
+                    if member.get("user_id")
+                }
+                profile_lookup = self._resolve_user_profiles_by_ids(user_ids)
                 emails_by_hub: dict[str, List[str]] = {}
+                profiles_by_hub: dict[str, List[UserProfileSummary]] = {}
                 for m in members_response.data:
                     hid = m.get("hub_id")
-                    uid = m.get("user_id")
-                    email = email_lookup.get(uid, "")
-                    if hid and email:
-                        emails_by_hub.setdefault(hid, []).append(email)
+                    uid = str(m.get("user_id") or "")
+                    profile = profile_lookup.get(uid)
+                    if not hid or not profile:
+                        continue
+                    if profile.email:
+                        emails_by_hub.setdefault(hid, []).append(profile.email)
+                    profiles_by_hub.setdefault(hid, []).append(profile)
                 for hub in hubs:
                     hub.member_emails = emails_by_hub.get(hub.id, [])
+                    hub.member_profiles = profiles_by_hub.get(hub.id, [])
             except Exception:
                 for hub in hubs:
                     hub.member_emails = []
+                    hub.member_profiles = []
 
         return hubs
 
@@ -2591,7 +2602,17 @@ class SupabaseStore:
         if not user_ids:
             return {}
 
-        actor_lookup: Dict[str, str] = {}
+        profile_lookup = self._resolve_user_profiles_by_ids(user_ids)
+        return {
+            user_id: profile.display_name or profile.email or user_id
+            for user_id, profile in profile_lookup.items()
+        }
+
+    def _resolve_user_profiles_by_ids(self, user_ids: set[str]) -> Dict[str, UserProfileSummary]:
+        if not user_ids:
+            return {}
+
+        profile_lookup: Dict[str, UserProfileSummary] = {}
         remaining = set(user_ids)
         page = 1
         per_page = 100
@@ -2607,7 +2628,7 @@ class SupabaseStore:
                         actor_id = str(getattr(user, "id", "") or "")
                         if actor_id not in remaining:
                             continue
-                        actor_lookup[actor_id] = self._display_label_for_user(user, actor_id)
+                        profile_lookup[actor_id] = self._profile_summary_for_user(user, actor_id)
                         remaining.discard(actor_id)
                     break
 
@@ -2618,7 +2639,7 @@ class SupabaseStore:
                     actor_id = str(getattr(user, "id", "") or "")
                     if actor_id not in remaining:
                         continue
-                    actor_lookup[actor_id] = self._display_label_for_user(user, actor_id)
+                    profile_lookup[actor_id] = self._profile_summary_for_user(user, actor_id)
                     remaining.discard(actor_id)
                 if len(users) < per_page:
                     break
@@ -2626,7 +2647,7 @@ class SupabaseStore:
         except Exception:
             return {}
 
-        return actor_lookup
+        return profile_lookup
 
     @staticmethod
     def _extract_admin_users(response: Any) -> List[Any]:
@@ -2647,10 +2668,25 @@ class SupabaseStore:
 
     @staticmethod
     def _display_label_for_user(user: Any, fallback: str) -> str:
+        profile = SupabaseStore._profile_summary_for_user(user, fallback)
+        return profile.display_name or profile.email or fallback
+
+    @staticmethod
+    def _profile_summary_for_user(user: Any, fallback: str) -> UserProfileSummary:
         metadata = getattr(user, "user_metadata", None) or {}
         full_name = (metadata.get("full_name") or "").strip() if isinstance(metadata, dict) else ""
         email = getattr(user, "email", None) or ""
-        return full_name or email or fallback
+        avatar_mode = (metadata.get("avatar_mode") or "").strip() if isinstance(metadata, dict) else ""
+        avatar_key = (metadata.get("avatar_key") or "").strip() if isinstance(metadata, dict) else ""
+        avatar_color = (metadata.get("avatar_color") or "").strip() if isinstance(metadata, dict) else ""
+        return UserProfileSummary(
+            user_id=str(getattr(user, "id", "") or fallback),
+            email=email or None,
+            display_name=full_name or email or fallback,
+            avatar_mode=avatar_mode or None,
+            avatar_key=avatar_key or None,
+            avatar_color=avatar_color or None,
+        )
 
     def _answer_with_web_search(
         self,

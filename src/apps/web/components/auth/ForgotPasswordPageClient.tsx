@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { buildRecoveryRedirectUrl, mapAuthErrorMessage } from "../../lib/authRecovery";
+import { buildRecoveryRedirectUrl, getAuthRedirectConfigError, mapAuthErrorMessage } from "../../lib/authRecovery";
 import { supabase } from "../../lib/supabaseClient";
 
 export function ForgotPasswordPageClient() {
@@ -21,7 +21,7 @@ export function ForgotPasswordPageClient() {
 
     const redirectTo = buildRecoveryRedirectUrl();
     if (!redirectTo) {
-      setStatus("Password recovery is not configured yet. Set the recovery redirect URL and try again.");
+      setStatus(getAuthRedirectConfigError() ?? "Password recovery is not configured yet. Set the recovery redirect URL and try again.");
       return;
     }
 
