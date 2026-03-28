@@ -92,7 +92,9 @@ describe("AuthPageClient", () => {
           emailRedirectTo: expect.stringContaining("/auth/callback"),
           data: expect.objectContaining({
             full_name: "Ada Lovelace",
-            avatar_mode: "initials",
+            avatar_mode: "preset",
+            avatar_key: "ava",
+            avatar_color: null,
           }),
         }),
       }),

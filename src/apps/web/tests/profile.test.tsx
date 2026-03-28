@@ -51,15 +51,15 @@ describe("profile helpers", () => {
   });
 
   it("renders preset and initials avatars distinctly", () => {
-    const { container, rerender } = render(
+    const { container: presetContainer, rerender } = render(
       <ProfileAvatar
         className="profile-avatar"
         profile={{ full_name: "Ada Lovelace", avatar_mode: "preset", avatar_key: "ava" }}
       />,
     );
 
-    expect(container.querySelector("[data-avatar-mode='preset']")).toBeInTheDocument();
-    expect(container.querySelector("img[alt='Ava avatar']")).toBeInTheDocument();
+    expect(presetContainer.querySelector("[data-avatar-mode='preset']")).toBeInTheDocument();
+    expect(presetContainer.querySelector("img[alt='Avatar 1 avatar']")).toBeInTheDocument();
 
     rerender(
       <ProfileAvatar
@@ -68,6 +68,6 @@ describe("profile helpers", () => {
       />,
     );
 
-    expect(container.querySelector("[data-avatar-mode='initials']")).toBeInTheDocument();
+    expect(presetContainer.querySelector("[data-avatar-mode='initials']")).toBeInTheDocument();
   });
 });

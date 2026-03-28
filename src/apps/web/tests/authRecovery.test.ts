@@ -14,6 +14,8 @@ describe("authRecovery helpers", () => {
   });
 
   it("builds an auth callback URL from a configured base URL", () => {
+    vi.stubGlobal("window", undefined);
+
     expect(buildRecoveryRedirectUrl("https://caddie.example.com")).toBe(
       "https://caddie.example.com/auth/callback",
     );
@@ -28,6 +30,8 @@ describe("authRecovery helpers", () => {
   });
 
   it("rejects placeholder redirect URLs outside local development", () => {
+    vi.stubGlobal("window", undefined);
+
     expect(buildRecoveryRedirectUrl("https://placeholder.netlify.app")).toBeNull();
     expect(getAuthRedirectConfigError("https://placeholder.netlify.app")).toContain("placeholder");
   });
