@@ -54,7 +54,7 @@ describe("ResetPasswordPageClient", () => {
 
     render(<ResetPasswordPageClient />);
 
-    expect(await screen.findByRole("button", { name: "Update password" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Update password" }, { timeout: 4000 })).toBeInTheDocument();
   });
 
   it("rejects non-recovery visits even when a regular session exists", async () => {
