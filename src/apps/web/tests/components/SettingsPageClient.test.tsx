@@ -3,10 +3,20 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { SettingsPageClient } from "../../components/settings/SettingsPageClient";
 
-const { updateUser, back, push } = vi.hoisted(() => ({
+const { updateUser, back, push, mockUser } = vi.hoisted(() => ({
   updateUser: vi.fn(),
   back: vi.fn(),
   push: vi.fn(),
+  mockUser: {
+    id: "user-1",
+    email: "ada@example.com",
+    user_metadata: {
+      full_name: "Ada Lovelace",
+      avatar_mode: "preset",
+      avatar_key: "rocket",
+      avatar_color: null,
+    },
+  },
 }));
 
 vi.mock("next/navigation", () => ({
@@ -18,16 +28,7 @@ vi.mock("next/navigation", () => ({
 
 vi.mock("../../components/auth/AuthProvider", () => ({
   useAuth: () => ({
-    user: {
-      id: "user-1",
-      email: "ada@example.com",
-      user_metadata: {
-        full_name: "Ada Lovelace",
-        avatar_mode: "preset",
-        avatar_key: "rocket",
-        avatar_color: null,
-      },
-    },
+    user: mockUser,
   }),
 }));
 
