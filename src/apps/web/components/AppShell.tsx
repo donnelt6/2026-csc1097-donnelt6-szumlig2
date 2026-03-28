@@ -174,7 +174,7 @@ export function AppShell({ children }: AppShellProps) {
                   <MagnifyingGlassIcon className="nav-search-icon" />
                   <input
                     type="text"
-                    placeholder={activeTab === 'sources' ? "Search sources..." : "Search conversations..."}
+                    placeholder={activeTab === 'sources' ? "Search sources..." : activeTab === 'members' ? "Search members..." : "Search conversations..."}
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     className="nav-search-input"

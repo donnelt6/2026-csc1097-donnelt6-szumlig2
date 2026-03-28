@@ -160,7 +160,7 @@ export default function HubDetail({ params }: { params: { hubId: string } }) {
   return (
     <main className={`page-content page-content--no-hero${activeTab === 'chat' ? ' page-content--fullscreen' : ''}`}>
       <div className="content-inner">
-        {activeTab !== 'chat' && activeTab !== 'admin' && activeTab !== 'sources' && (
+        {activeTab !== 'chat' && activeTab !== 'admin' && activeTab !== 'sources' && activeTab !== 'members' && (
           <header className="hub-header">
             <h2 className="hub-header__name">{hub?.name ?? "Hub"}</h2>
             {hub?.description && (
