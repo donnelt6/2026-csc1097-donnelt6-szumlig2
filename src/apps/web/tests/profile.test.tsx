@@ -50,7 +50,7 @@ describe("profile helpers", () => {
     expect(form.avatar_key).toBe("ava");
   });
 
-  it("renders preset and initials avatars distinctly", () => {
+  it("renders preset avatars and falls back to the default preset avatar", () => {
     const { container: presetContainer, rerender } = render(
       <ProfileAvatar
         className="profile-avatar"
@@ -68,6 +68,7 @@ describe("profile helpers", () => {
       />,
     );
 
-    expect(presetContainer.querySelector("[data-avatar-mode='initials']")).toBeInTheDocument();
+    expect(presetContainer.querySelector("[data-avatar-mode='preset']")).toBeInTheDocument();
+    expect(presetContainer.querySelector("[data-avatar-key='ava']")).toBeInTheDocument();
   });
 });
