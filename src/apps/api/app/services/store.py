@@ -2982,10 +2982,9 @@ def _canonicalize_web_url(url: str) -> Optional[str]:
         if normalized_key.startswith("utm_") or normalized_key in {"fbclid", "gclid"}:
             continue
         for value in values:
-            filtered_items.append((key, value))
-    normalized_query = "&".join(
-        f"{key}={value}" for key, value in filtered_items if value is not None and value != ""
-    )
+            if value:
+                filtered_items.append((key, value))
+    normalized_query = "&".join(f"{key}={value}" for key, value in filtered_items)
     return urlunparse((parsed.scheme.lower(), netloc, path, "", normalized_query, ""))
 
 

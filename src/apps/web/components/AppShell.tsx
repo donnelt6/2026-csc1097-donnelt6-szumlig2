@@ -10,6 +10,7 @@ import { ProfileMenu } from './navigation/ProfileMenu';
 import { NotificationsMenu } from './navigation/NotificationsMenu';
 import { useAuth } from './auth/AuthProvider';
 import { useSearch } from '../lib/SearchContext';
+import { useHubTab } from '../lib/HubTabContext';
 import { listHubs } from '../lib/api';
 import { CurrentHubProvider } from '../lib/CurrentHubContext';
 import { resolveHubAppearance } from '../lib/hubAppearance';
@@ -30,6 +31,7 @@ export function AppShell({ children }: AppShellProps) {
   const searchParams = useSearchParams();
   const { user, loading } = useAuth();
   const { searchQuery, setSearchQuery } = useSearch();
+  const { activeTab } = useHubTab();
 
   const isAuthPage = pathname.startsWith('/auth');
   const isHome = pathname === '/';
@@ -172,7 +174,7 @@ export function AppShell({ children }: AppShellProps) {
                   <MagnifyingGlassIcon className="nav-search-icon" />
                   <input
                     type="text"
-                    placeholder="Search conversations..."
+                    placeholder={activeTab === 'sources' ? "Search sources..." : "Search conversations..."}
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     className="nav-search-input"
