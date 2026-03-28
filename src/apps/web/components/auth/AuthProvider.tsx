@@ -28,11 +28,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setLoading(false);
       return;
     }
+    const supabaseClient = supabase;
     let isMounted = true;
     const syncAuthState = async () => {
       const [{ data: sessionData }, { data: userData }] = await Promise.all([
-        supabase.auth.getSession(),
-        supabase.auth.getUser(),
+        supabaseClient.auth.getSession(),
+        supabaseClient.auth.getUser(),
       ]);
 
       if (!isMounted) return;
@@ -46,7 +47,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     void syncAuthState();
 
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+    const { data: listener } = supabaseClient.auth.onAuthStateChange((_event, nextSession) => {
       if (!isMounted) return;
       setSession(nextSession);
       setUser(nextSession?.user ?? null);
@@ -68,10 +69,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setUser(null);
           return;
         }
+        const supabaseClient = supabase;
 
         const [{ data: sessionData }, { data: userData }] = await Promise.all([
-          supabase.auth.getSession(),
-          supabase.auth.getUser(),
+          supabaseClient.auth.getSession(),
+          supabaseClient.auth.getUser(),
         ]);
         const nextSession = sessionData.session ?? null;
         const nextUser = userData.user ?? nextSession?.user ?? null;
