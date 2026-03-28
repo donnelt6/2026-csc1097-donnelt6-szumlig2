@@ -22,9 +22,30 @@ export function AuthCallbackPageClient() {
 
     let cancelled = false;
 
+    const redirectAuthenticatedUser = async () => {
+      const [{ data: sessionData }, { data: userData }] = await Promise.all([
+        supabaseClient.auth.getSession(),
+        supabaseClient.auth.getUser(),
+      ]);
+
+      if (cancelled) {
+        return true;
+      }
+
+      if (sessionData.session || userData.user) {
+        router.replace("/");
+        return true;
+      }
+
+      return false;
+    };
+
     const finishEmailLink = async () => {
       const state = readAuthLinkState();
       if (state.errorDescription) {
+        if (await redirectAuthenticatedUser()) {
+          return;
+        }
         setError(state.errorDescription);
         return;
       }
@@ -90,6 +111,9 @@ export function AuthCallbackPageClient() {
       } catch (cause) {
         console.error("auth.callback.failed", cause);
         if (!cancelled) {
+          if (await redirectAuthenticatedUser()) {
+            return;
+          }
           setError(
             mapAuthErrorMessage(cause, "This email link is invalid or has expired. Request a new one and try again."),
           );
