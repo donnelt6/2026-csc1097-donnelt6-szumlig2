@@ -1258,6 +1258,7 @@ a {
 
 .profile-menu {
   position: relative;
+  top: 4px;
 }
 
 .profile-trigger {
@@ -1292,9 +1293,9 @@ a {
 }
 
 .profile-avatar {
-  width: 36px;
-  height: 36px;
-  border-radius: 12px;
+  width: 48px;
+  height: 48px;
+  border-radius: 16px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1302,6 +1303,132 @@ a {
   color: white;
   background: linear-gradient(315deg, var(--accent), var(--gradient-end));
   box-shadow: none;
+}
+
+.profile-avatar[data-avatar-mode='preset'] {
+  background: transparent !important;
+}
+
+.profile-badge__image {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.profile-badge__initials {
+  line-height: 1;
+}
+
+.profile-picker {
+  display: grid;
+  gap: 14px;
+}
+
+.profile-avatar-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.profile-avatar-tile {
+  aspect-ratio: 1 / 1;
+  border-radius: 10px;
+  border: none;
+  background: transparent;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  padding: 0;
+  transition: transform var(--transition-fast), opacity var(--transition-fast);
+}
+
+.profile-avatar-tile:hover {
+  background: transparent;
+  opacity: 0.92;
+}
+
+.profile-avatar-tile--active {
+  background: transparent;
+  transform: scale(1.04);
+}
+
+.profile-avatar-tile__badge {
+  width: 68px;
+  height: 68px;
+  border-radius: 22px;
+}
+
+.profile-avatar-tile__badge[data-avatar-mode='preset'],
+.settings-profile-builder__preview[data-avatar-mode='preset'],
+.hub-avatar[data-avatar-mode='preset'],
+.chat__avatar[data-avatar-mode='preset'] {
+  background: transparent !important;
+  box-shadow: none;
+}
+
+.settings-page {
+  display: grid;
+  gap: 0;
+  justify-items: center;
+}
+
+.settings-page__header {
+  display: grid;
+  gap: 2px;
+  width: min(100%, 720px);
+  justify-items: start;
+}
+
+.settings-profile-builder {
+  width: min(100%, 720px);
+  padding: 28px 28px 18px;
+  display: grid;
+  gap: 24px;
+  border-radius: 22px;
+  border: none;
+  box-shadow: none;
+  margin-top: -36px;
+}
+
+.settings-profile-builder__preview {
+  width: 200px;
+  height: 116px;
+  border-radius: 28px;
+}
+
+.settings-profile-builder__hero-copy {
+  width: min(100%, 420px);
+}
+
+.settings-profile-builder__fields {
+  margin-bottom: 0;
+}
+
+.settings-profile-builder__actions {
+  gap: 12px;
+}
+
+.settings-profile-builder__actions .button + .button {
+  margin-left: 0;
+}
+
+@media (max-width: 960px) {
+  .profile-avatar-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .settings-profile-builder {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-profile-builder .modal__hero-preview {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .settings-profile-builder__hero-copy {
+    width: 100%;
+  }
 }
 
 .profile-text {
@@ -1551,10 +1678,16 @@ a {
   gap: 8px;
   width: fit-content;
   margin-bottom: 8px;
+  padding: 0;
+  border: none;
+  background: transparent;
   color: var(--text);
   font-size: 0.875rem;
   font-weight: var(--font-semibold);
   transition: opacity var(--transition-fast);
+  box-shadow: none;
+  appearance: none;
+  -webkit-appearance: none;
 }
 
 .hubs-page-back-link:hover {
@@ -2010,11 +2143,10 @@ a {
 .hub-card-avatars {
   display: flex;
   align-items: center;
-  flex-direction: row-reverse;
 }
 
 .hub-card-avatars > * + * {
-  margin-right: -8px;
+  margin-left: -8px;
 }
 
 /* Pagination */
@@ -2114,12 +2246,17 @@ a {
   width: 28px;
   height: 28px;
   border-radius: 50%;
-  border: 2px solid var(--card);
+  border: none;
   font-size: 0.625rem;
   font-weight: var(--font-bold);
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+.hub-avatar .profile-badge__image {
+  width: 72%;
+  height: 72%;
 }
 
 .hub-avatar--initials {
@@ -2529,7 +2666,7 @@ textarea {
 .hub-appearance-section {
   display: grid;
   gap: 12px;
-  margin-bottom: 24px;
+  margin-bottom: 12px;
 }
 
 .hub-appearance-section--compact {
@@ -2758,7 +2895,7 @@ textarea {
 .modal__footer {
   display: flex;
   justify-content: flex-end;
-  margin-top: 20px;
+  margin-top: 8px;
 }
 
 .modal__footer--split {
@@ -3824,6 +3961,11 @@ textarea {
 
 .chat__avatar-letter {
   line-height: 1;
+}
+
+.chat__avatar .profile-badge__image {
+  width: 72%;
+  height: 72%;
 }
 
 /* Bubbles */

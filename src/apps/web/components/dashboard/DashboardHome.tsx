@@ -20,6 +20,7 @@ import { useAuth } from '../auth/AuthProvider';
 import { describeEventParts, formatRelativeTime, getEventTone } from '../../lib/utils';
 import { MiniCalendar } from './MiniCalendar';
 import { getEventIcon, buildHubNameMap } from './dashboardUtils';
+import { ProfileAvatar } from '../profile/ProfileAvatar';
 
 export function DashboardHome() {
   const { user } = useAuth();
@@ -229,6 +230,9 @@ export function DashboardHome() {
                 recentHubs.map((hub) => {
                   const appearance = resolveHubAppearance(hub.icon_key, hub.color_key);
                   const HubIcon = appearance.icon.icon;
+                  const memberProfiles = hub.member_profiles ?? [];
+                  const memberEmails = hub.member_emails ?? [];
+                  const memberCount = memberProfiles.length || memberEmails.length;
 
                   return (
                     <Link key={hub.id} href={`/hubs/${hub.id}`} className="hub-card">
@@ -260,16 +264,27 @@ export function DashboardHome() {
                           <span className="hub-card-time">
                             Modified {formatRelativeTime(hub.last_accessed_at)}
                           </span>
-                          {(hub.member_emails?.length ?? 0) > 0 && (
+                          {memberCount > 0 && (
                             <div className="hub-card-avatars">
-                              {hub.member_emails!.slice(0, 2).map((email, i) => (
-                                <div key={i} className="hub-avatar hub-avatar--initials" title={email}>
-                                  {email.charAt(0).toUpperCase()}
-                                </div>
+                              {memberProfiles.slice(0, 2).map((member) => (
+                                <ProfileAvatar
+                                  key={member.user_id}
+                                  className="hub-avatar"
+                                  profile={member}
+                                  title={member.display_name ?? member.email ?? "Profile"}
+                                />
                               ))}
-                              {hub.member_emails!.length > 2 && (
+                              {memberProfiles.length === 0 && memberEmails.slice(0, 2).map((email, i) => (
+                                <ProfileAvatar
+                                  key={`${email}-${i}`}
+                                  className="hub-avatar"
+                                  profile={{ email }}
+                                  title={email}
+                                />
+                              ))}
+                              {memberCount > 2 && (
                                 <div className="hub-avatar hub-avatar--count">
-                                  +{hub.member_emails!.length - 2}
+                                  +{memberCount - 2}
                                 </div>
                               )}
                             </div>

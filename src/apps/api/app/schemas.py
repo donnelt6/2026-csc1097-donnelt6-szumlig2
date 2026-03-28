@@ -71,6 +71,15 @@ def _trim_and_reject_blank(value: Optional[str]) -> Optional[str]:
     return trimmed
 
 
+class UserProfileSummary(BaseModel):
+    user_id: str
+    email: Optional[str] = None
+    display_name: Optional[str] = None
+    avatar_mode: Optional[str] = None
+    avatar_key: Optional[str] = None
+    avatar_color: Optional[str] = None
+
+
 class Hub(BaseModel):
     id: str
     owner_id: str
@@ -86,6 +95,7 @@ class Hub(BaseModel):
     sources_count: Optional[int] = None
     is_favourite: Optional[bool] = None
     member_emails: Optional[List[str]] = None
+    member_profiles: Optional[List["UserProfileSummary"]] = None
 
 
 class HubCreate(StrictModel):
@@ -119,6 +129,10 @@ class HubMember(BaseModel):
     invited_at: Optional[datetime] = None
     accepted_at: Optional[datetime] = None
     email: Optional[str] = None
+    display_name: Optional[str] = None
+    avatar_mode: Optional[str] = None
+    avatar_key: Optional[str] = None
+    avatar_color: Optional[str] = None
 
 
 class HubInviteRequest(StrictModel):

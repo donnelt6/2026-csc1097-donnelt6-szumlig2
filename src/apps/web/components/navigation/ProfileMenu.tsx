@@ -1,7 +1,10 @@
 'use client';
 
+import Link from "next/link";
 import { useMemo, useState, useRef, useEffect } from "react";
 import { useAuth } from "../auth/AuthProvider";
+import { ProfileAvatar } from "../profile/ProfileAvatar";
+import { resolveProfile } from "../../lib/profile";
 import { supabase } from "../../lib/supabaseClient";
 
 export function ProfileMenu() {
@@ -9,12 +12,7 @@ export function ProfileMenu() {
   const [loading, setLoading] = useState(false);
   const detailsRef = useRef<HTMLDetailsElement>(null);
 
-  const displayName = useMemo(() => {
-    if (!user) return "Profile";
-    return user.email ?? user.user_metadata?.full_name ?? "Profile";
-  }, [user]);
-
-  const initial = displayName.trim()[0]?.toUpperCase() ?? "U";
+  const profile = useMemo(() => resolveProfile(user ?? undefined), [user]);
 
   const onSignOut = async () => {
     if (!supabase) return;
@@ -39,19 +37,18 @@ export function ProfileMenu() {
   return (
     <details className="profile-menu" ref={detailsRef}>
       <summary className="profile-trigger" aria-label="Open profile menu">
-        <span className="profile-avatar" aria-hidden="true">
-          {initial}
-        </span>
+        <ProfileAvatar className="profile-avatar" profile={user ?? undefined} />
       </summary>
       <div className="menu-card">
         <div className="menu-user">
           <p className="menu-label">Signed in as</p>
-          <p className="menu-email">{displayName}</p>
+          <p className="menu-email">{profile.displayName}</p>
+          {user.email && profile.displayName !== user.email && <p className="muted">{user.email}</p>}
         </div>
         <div className="menu-divider" role="separator" />
-        <a className="menu-item" href="/settings">
+        <Link className="menu-item" href="/settings">
           Settings
-        </a>
+        </Link>
         <div className="menu-divider" role="separator" />
         <button className="menu-item menu-signout" type="button" onClick={onSignOut} disabled={loading}>
           {loading ? "Signing out..." : "Sign Out"}

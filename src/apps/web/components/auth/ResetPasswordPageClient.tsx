@@ -1,85 +1,117 @@
 'use client';
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { mapAuthErrorMessage } from "../../lib/authRecovery";
+import { hasRecoveryEvidence, mapAuthErrorMessage, readAuthLinkState } from "../../lib/authRecovery";
 import { supabase } from "../../lib/supabaseClient";
 
-type RecoveryState = "loading" | "ready" | "invalid" | "success";
+type RecoveryState = "loading" | "ready" | "invalid";
+
+const RECOVERY_SESSION_KEY = "caddie:recovery-intent";
 
 export function ResetPasswordPageClient() {
+  const router = useRouter();
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [status, setStatus] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [recoveryState, setRecoveryState] = useState<RecoveryState>("loading");
-  const client = supabase;
 
   useEffect(() => {
-    if (!client) {
+    if (!supabase) {
       setRecoveryState("invalid");
       setStatus("Supabase is not configured. Add your env vars to enable password recovery.");
       return;
     }
 
     let mounted = true;
+    let recoveryReady = false;
 
     const finishRecoveryCheck = async () => {
+      const linkState = readAuthLinkState();
+      const storedRecoveryIntent = sessionStorage.getItem(RECOVERY_SESSION_KEY) === "1";
+      const recoveryEvidence = hasRecoveryEvidence(linkState);
+
+      if (linkState.errorDescription) {
+        setRecoveryState("invalid");
+        setStatus(linkState.errorDescription);
+        return;
+      }
+      if (!recoveryEvidence && !storedRecoveryIntent) {
+        setRecoveryState("invalid");
+        setStatus("This recovery link is invalid or has expired. Request a new password reset email.");
+        return;
+      }
+
       try {
-        const code = new URLSearchParams(window.location.search).get("code");
-        if (code) {
-          const { error } = await client.auth.exchangeCodeForSession(code);
+        if (linkState.code && linkState.intent === "recovery") {
+          const { error } = await supabase.auth.exchangeCodeForSession(linkState.code);
           if (error) {
             throw error;
           }
-        }
+        } else if (linkState.tokenHash && linkState.intent === "recovery") {
+          const { error } = await supabase.auth.verifyOtp({
+            token_hash: linkState.tokenHash,
+            type: "recovery",
+          });
+          if (error) {
+            throw error;
+          }
+        } else if (linkState.accessToken && linkState.intent === "recovery") {
+          const session = await waitForRecoverySession();
+          if (!mounted || recoveryReady) {
+            return;
+          }
+          if (!session) {
+            setRecoveryState("invalid");
+            setStatus("This recovery link is invalid or has expired. Request a new password reset email.");
+            return;
+          }
 
-        const { data, error } = await client.auth.getSession();
-        if (error) {
-          throw error;
-        }
-        if (!mounted) {
-          return;
-        }
-        if (data.session) {
+          sessionStorage.setItem(RECOVERY_SESSION_KEY, "1");
+          recoveryReady = true;
           setRecoveryState("ready");
           return;
         }
 
-        const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
-        if (hashParams.get("type") === "recovery" || hashParams.get("access_token")) {
-          window.setTimeout(async () => {
-            const { data: delayedData } = await client.auth.getSession();
-            if (!mounted) {
-              return;
-            }
-            if (delayedData.session) {
-              setRecoveryState("ready");
-              return;
-            }
-            setRecoveryState("invalid");
-            setStatus("This recovery link is invalid or has expired. Request a new password reset email.");
-          }, 0);
+        const { data, error } = await supabase.auth.getSession();
+        if (error) {
+          throw error;
+        }
+
+        if (!mounted || recoveryReady) {
           return;
         }
 
-        setRecoveryState("invalid");
-        setStatus("This recovery link is invalid or has expired. Request a new password reset email.");
-      } catch (error) {
-        console.error("auth.recovery.session_failed", error);
+        if (!data.session) {
+          setRecoveryState("invalid");
+          setStatus("This recovery link is invalid or has expired. Request a new password reset email.");
+          return;
+        }
+
+        sessionStorage.setItem(RECOVERY_SESSION_KEY, "1");
+        recoveryReady = true;
+        setRecoveryState("ready");
+      } catch (cause) {
+        console.error("auth.recovery.session_failed", cause);
         if (!mounted) {
           return;
         }
         setRecoveryState("invalid");
-        setStatus(mapAuthErrorMessage(error, "This recovery link is invalid or has expired. Request a new password reset email."));
+        setStatus(
+          mapAuthErrorMessage(cause, "This recovery link is invalid or has expired. Request a new password reset email."),
+        );
       }
     };
 
-    const { data: listener } = client.auth.onAuthStateChange((event, session) => {
+    const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
       if (!mounted) {
         return;
       }
-      if (event === "PASSWORD_RECOVERY" || session) {
+      if (event === "PASSWORD_RECOVERY" && session) {
+        sessionStorage.setItem(RECOVERY_SESSION_KEY, "1");
+        recoveryReady = true;
         setRecoveryState("ready");
         setStatus(null);
       }
@@ -97,7 +129,7 @@ export function ResetPasswordPageClient() {
     event.preventDefault();
     setStatus(null);
 
-    if (!client) {
+    if (!supabase) {
       setStatus("Supabase is not configured. Add your env vars to enable password recovery.");
       return;
     }
@@ -107,17 +139,19 @@ export function ResetPasswordPageClient() {
     }
 
     setLoading(true);
-    const { error } = await client.auth.updateUser({ password });
-    setLoading(false);
+    const { error } = await supabase.auth.updateUser({ password });
 
     if (error) {
+      setLoading(false);
       console.error("auth.recovery.update_failed", error);
       setStatus(mapAuthErrorMessage(error, "We could not update your password right now. Try again."));
       return;
     }
 
-    setRecoveryState("success");
-    setStatus("Your password has been updated. You can continue into Caddie now.");
+    sessionStorage.removeItem(RECOVERY_SESSION_KEY);
+    await supabase.auth.signOut();
+    setLoading(false);
+    router.replace("/auth?reset=success");
   };
 
   return (
@@ -164,21 +198,26 @@ export function ResetPasswordPageClient() {
             {status && <p className="muted">{status}</p>}
           </form>
         )}
-
-        {recoveryState === "success" && (
-          <>
-            <p className="muted">{status}</p>
-            <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
-              <Link href="/" className="button">
-                Go to Caddie
-              </Link>
-              <Link href="/auth" className="button button--secondary">
-                Back to sign in
-              </Link>
-            </div>
-          </>
-        )}
       </section>
     </main>
   );
+}
+
+async function waitForRecoverySession() {
+  if (!supabase) {
+    return null;
+  }
+
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const { data, error } = await supabase.auth.getSession();
+    if (error) {
+      throw error;
+    }
+    if (data.session) {
+      return data.session;
+    }
+    await new Promise((resolve) => window.setTimeout(resolve, 150));
+  }
+
+  return null;
 }

@@ -87,7 +87,8 @@ Sign in via `/auth` using Supabase email/password auth. The web app stores the S
 Password recovery is Supabase-native:
 - `/auth/forgot-password` requests a recovery email through Supabase.
 - `/auth/reset-password` completes the recovery flow and updates the password through Supabase.
-- `NEXT_PUBLIC_AUTH_REDIRECT_BASE_URL` must resolve to the deployed site base URL so the app can build the recovery redirect to `/auth/reset-password`.
+- Local development builds auth email links from the current browser origin, so localhost testing does not depend on `NEXT_PUBLIC_AUTH_REDIRECT_BASE_URL`.
+- Non-local/deployed environments must set `NEXT_PUBLIC_AUTH_REDIRECT_BASE_URL` to the real site base URL; placeholder values are rejected so email links fail closed instead of pointing at the wrong app.
 - Supabase project setup must include recovery email enabled, the deployed recovery redirect URL allowlisted, and recovery token expiry set to 30 minutes if supported by the project settings.
 
 ## Chat note

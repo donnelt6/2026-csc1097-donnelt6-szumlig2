@@ -10,17 +10,20 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   const router = useRouter();
 
   const onAuthRoute = pathname.startsWith("/auth");
-  const allowAuthenticatedAuthRoute = pathname.startsWith("/auth/forgot-password") || pathname.startsWith("/auth/reset-password");
+  const authSpecialRoute =
+    pathname.startsWith("/auth/callback") ||
+    pathname.startsWith("/auth/forgot-password") ||
+    pathname.startsWith("/auth/reset-password");
 
   useEffect(() => {
     if (loading) return;
     if (!user && !onAuthRoute) {
       router.replace("/auth");
     }
-    if (user && onAuthRoute && !allowAuthenticatedAuthRoute) {
+    if (user && onAuthRoute && !authSpecialRoute) {
       router.replace("/");
     }
-  }, [allowAuthenticatedAuthRoute, loading, user, onAuthRoute, router]);
+  }, [authSpecialRoute, loading, user, onAuthRoute, router]);
 
   if (loading) {
     return <main className="page" aria-busy="true" aria-live="polite" />;
