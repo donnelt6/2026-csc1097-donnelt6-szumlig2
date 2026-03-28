@@ -101,6 +101,7 @@ export function MembersPanel({ hubId, role }: Props) {
   const [inviteRole, setInviteRole] = useState<AssignableMembershipRole>("viewer");
   const [transferTargetId, setTransferTargetId] = useState<string>("");
   const [statusMessage, setStatusMessage] = useState<{ text: string; type: "success" | "error" } | null>(null);
+  const statusTimer = useRef<ReturnType<typeof setTimeout>>();
   const [roleFilter, setRoleFilter] = useState<RoleFilter>("all");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
 
@@ -110,8 +111,9 @@ export function MembersPanel({ hubId, role }: Props) {
   });
 
   const showStatus = (text: string, type: "success" | "error") => {
+    clearTimeout(statusTimer.current);
     setStatusMessage({ text, type });
-    setTimeout(() => setStatusMessage(null), 4000);
+    statusTimer.current = setTimeout(() => setStatusMessage(null), 4000);
   };
 
   const inviteMutation = useMutation({
@@ -177,7 +179,9 @@ export function MembersPanel({ hubId, role }: Props) {
       );
     }
     if (roleFilter !== "all") {
-      members = members.filter((m) => m.role === roleFilter);
+      members = members.filter((m) =>
+        roleFilter === "admin" ? m.role === "admin" || m.role === "owner" : m.role === roleFilter
+      );
     }
     if (statusFilter !== "all") {
       members = members.filter((m) =>
@@ -192,7 +196,7 @@ export function MembersPanel({ hubId, role }: Props) {
     return {
       all: members.length,
       owner: members.filter((m) => m.role === "owner").length,
-      admin: members.filter((m) => m.role === "admin").length,
+      admin: members.filter((m) => m.role === "admin" || m.role === "owner").length,
       editor: members.filter((m) => m.role === "editor").length,
       viewer: members.filter((m) => m.role === "viewer").length,
     };
@@ -211,7 +215,7 @@ export function MembersPanel({ hubId, role }: Props) {
     <div className="members">
       {/* Toast */}
       {statusMessage && (
-        <p className={`sources__status sources__status--${statusMessage.type}`}>
+        <p className={`members__status members__status--${statusMessage.type}`}>
           {statusMessage.text}
         </p>
       )}
@@ -243,7 +247,7 @@ export function MembersPanel({ hubId, role }: Props) {
         <div className="members__toolbar">
           <div className="members__filter-groups">
             <div className="members__filter-pills">
-              {(["all", "admin", "editor", "viewer"] as const).map((r) => (
+              {(["all", "owner", "admin", "editor", "viewer"] as const).map((r) => (
                 <button
                   key={r}
                   type="button"
@@ -376,7 +380,7 @@ export function MembersPanel({ hubId, role }: Props) {
                     { value: "", label: "Select an admin" },
                     ...acceptedAdmins.map((m) => ({
                       value: m.user_id,
-                      label: m.email ?? m.user_id.slice(0, 8),
+                      label: resolveProfile(m).displayName,
                     })),
                   ]}
                   onChange={(id) => setTransferTargetId(id)}

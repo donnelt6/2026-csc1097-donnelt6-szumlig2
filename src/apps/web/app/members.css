@@ -618,3 +618,30 @@
     align-items: stretch;
   }
 }
+
+/* Toast */
+
+.members__status {
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+  font-size: 0.875rem;
+  padding: 10px 24px;
+  background: var(--bg-secondary);
+  border-radius: 10px;
+  margin: 0;
+  box-shadow: var(--shadow-md);
+  animation: toast-in 0.3s ease-out;
+}
+
+.members__status--success {
+  color: var(--accent);
+  border: 1px solid color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+.members__status--error {
+  color: var(--danger);
+  border: 1px solid var(--danger);
+}
