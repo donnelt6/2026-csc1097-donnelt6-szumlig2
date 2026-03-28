@@ -35,6 +35,7 @@ export function AppShell({ children }: AppShellProps) {
 
   const isAuthPage = pathname.startsWith('/auth');
   const isHome = pathname === '/';
+  const isSettingsPage = pathname === '/settings';
   const isHubRoute = pathname.startsWith('/hubs/');
   const isOnHub = isHubRoute;
   const hubId = isHubRoute ? params?.hubId ?? null : null;
@@ -180,7 +181,7 @@ export function AppShell({ children }: AppShellProps) {
                   />
                 </div>
               </>
-            ) : (
+            ) : isSettingsPage ? null : (
               <div className="nav-search nav-search--hubs">
                 <MagnifyingGlassIcon className="nav-search-icon" />
                 <input

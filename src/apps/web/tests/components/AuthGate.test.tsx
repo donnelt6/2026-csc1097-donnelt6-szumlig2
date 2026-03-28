@@ -68,4 +68,18 @@ describe("AuthGate", () => {
     );
     expect(screen.getByText("Private")).toBeInTheDocument();
   });
+
+  it("does not redirect signed-in users away from auth special routes", async () => {
+    authState = { user: { id: "user-1", email: "user@example.com" }, loading: false };
+    pathname = "/auth/callback";
+
+    render(
+      <AuthGate>
+        <div>Callback</div>
+      </AuthGate>
+    );
+
+    await waitFor(() => expect(screen.getByText("Callback")).toBeInTheDocument());
+    expect(replaceSpy).not.toHaveBeenCalled();
+  });
 });

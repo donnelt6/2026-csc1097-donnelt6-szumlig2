@@ -3,8 +3,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { inviteMember, listMembers, removeMember, transferHubOwnership, updateMemberRole } from "../lib/api";
+import { resolveProfile } from "../lib/profile";
 import type { AssignableMembershipRole, HubMember, MembershipRole } from "../lib/types";
 import { useAuth } from "./auth/AuthProvider";
+import { ProfileAvatar } from "./profile/ProfileAvatar";
 
 interface Props {
   hubId: string;
@@ -77,16 +79,28 @@ export function MembersPanel({ hubId, role }: Props) {
         {data?.map((member: HubMember) => {
           const isSelf = member.user_id === user?.id;
           const isMemberOwner = member.role === "owner";
+          const profile = resolveProfile(member);
           return (
             <div key={member.user_id} className="card" style={{ borderColor: "#1e2535" }}>
               <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "center" }}>
-                <div>
-                  <strong>{member.email ?? member.user_id.slice(0, 8)}</strong>
-                  <p className="muted" style={{ margin: 0 }}>
-                    {member.accepted_at ? "Active member" : "Pending invite"}
-                  </p>
+                <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                  <ProfileAvatar className="hub-avatar" profile={member} />
+                  <div>
+                    <strong>{profile.displayName}</strong>
+                    {member.email && member.email !== profile.displayName && (
+                      <p className="muted" style={{ margin: 0 }}>{member.email}</p>
+                    )}
+                    <p className="muted" style={{ margin: 0 }}>
+                      {member.accepted_at ? "Active member" : "Pending invite"}
+                    </p>
+                  </div>
                 </div>
-                <span className="role-pill">{member.role}</span>
+                <div style={{ textAlign: "right" }}>
+                  <p className="muted" style={{ margin: 0 }}>
+                    {isSelf ? "You" : "\u00a0"}
+                  </p>
+                  <span className="role-pill">{member.role}</span>
+                </div>
               </div>
               {isOwner && (
                 <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginTop: "10px" }}>
@@ -196,7 +210,7 @@ export function MembersPanel({ hubId, role }: Props) {
                 <option value="">Select an admin</option>
                 {acceptedAdmins.map((member) => (
                   <option key={member.user_id} value={member.user_id}>
-                    {member.email ?? member.user_id.slice(0, 8)}
+                    {resolveProfile(member).displayName}
                   </option>
                 ))}
               </select>

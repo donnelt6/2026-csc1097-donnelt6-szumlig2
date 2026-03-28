@@ -8,12 +8,19 @@ interface AuthState {
   session: Session | null;
   user: User | null;
   loading: boolean;
+  refreshUser: () => Promise<void>;
 }
 
-const AuthContext = createContext<AuthState>({ session: null, user: null, loading: true });
+const AuthContext = createContext<AuthState>({
+  session: null,
+  user: null,
+  loading: true,
+  refreshUser: async () => {},
+});
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
+  const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -21,14 +28,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setLoading(false);
       return;
     }
+    const supabaseClient = supabase;
     let isMounted = true;
-    supabase.auth.getSession().then(({ data }) => {
+    const syncAuthState = async () => {
+      const [{ data: sessionData }, { data: userData }] = await Promise.all([
+        supabaseClient.auth.getSession(),
+        supabaseClient.auth.getUser(),
+      ]);
+
       if (!isMounted) return;
-      setSession(data.session ?? null);
+
+      const nextSession = sessionData.session ?? null;
+      const nextUser = userData.user ?? nextSession?.user ?? null;
+      setSession(nextUser && nextSession ? { ...nextSession, user: nextUser } : nextSession);
+      setUser(nextUser);
       setLoading(false);
-    });
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+    };
+
+    void syncAuthState();
+
+    const { data: listener } = supabaseClient.auth.onAuthStateChange((_event, nextSession) => {
+      if (!isMounted) return;
       setSession(nextSession);
+      setUser(nextSession?.user ?? null);
     });
     return () => {
       isMounted = false;
@@ -37,8 +59,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const value = useMemo<AuthState>(() => {
-    return { session, user: session?.user ?? null, loading };
-  }, [session, loading]);
+    return {
+      session,
+      user,
+      loading,
+      refreshUser: async () => {
+        if (!supabase) {
+          setSession(null);
+          setUser(null);
+          return;
+        }
+        const supabaseClient = supabase;
+
+        const [{ data: sessionData }, { data: userData }] = await Promise.all([
+          supabaseClient.auth.getSession(),
+          supabaseClient.auth.getUser(),
+        ]);
+        const nextSession = sessionData.session ?? null;
+        const nextUser = userData.user ?? nextSession?.user ?? null;
+        setSession(nextUser && nextSession ? { ...nextSession, user: nextUser } : nextSession);
+        setUser(nextUser);
+      },
+    };
+  }, [session, user, loading]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

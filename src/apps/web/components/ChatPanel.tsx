@@ -15,6 +15,7 @@ import {
 import type { ChatResponse, Citation, ChatSessionSummary, FlagReason, MembershipRole, SessionMessage, Source } from "../lib/types";
 import { SourceSelector } from "./SourceSelector";
 import { useAuth } from "./auth/AuthProvider";
+import { ProfileAvatar } from "./profile/ProfileAvatar";
 
 const SCOPE_OPTIONS = [
   { value: "hub" as const, label: "Hub only" },
@@ -193,11 +194,6 @@ export const ChatPanel = forwardRef<ChatPanelHandle, Props>(function ChatPanel({
       return null;
     }
   };
-
-  const userInitial = useMemo(() => {
-    const name = user?.email ?? user?.user_metadata?.full_name ?? "U";
-    return name.trim()[0]?.toUpperCase() ?? "U";
-  }, [user]);
 
   const completeSources = useMemo(
     () => sources.filter((source) => source.status === "complete"),
@@ -739,9 +735,7 @@ export const ChatPanel = forwardRef<ChatPanelHandle, Props>(function ChatPanel({
                   <div className="chat__bubble chat__bubble--user">
                     {message.question}
                   </div>
-                  <div className="chat__avatar chat__avatar--user">
-                    <span className="chat__avatar-letter">{userInitial}</span>
-                  </div>
+                  <ProfileAvatar className="chat__avatar chat__avatar--user" profile={user ?? undefined} />
                 </div>
                 {message.timestamp && (
                   <span className="chat__timestamp chat__timestamp--user">{formatMessageTime(message.timestamp)}</span>

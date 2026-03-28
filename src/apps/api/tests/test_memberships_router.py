@@ -3,7 +3,7 @@
 from datetime import datetime
 
 from app.routers import memberships as memberships_router
-from app.schemas import HubMember, HubMemberUpdate, HubInviteRequest, MembershipRole
+from app.schemas import HubMember, MembershipRole, UserProfileSummary
 from app.services import store as store_module
 
 
@@ -40,11 +40,45 @@ def test_list_members_returns_members_for_owner(client, monkeypatch) -> None:
     ]
     monkeypatch.setattr(store_module.store, "get_member_role", lambda _client, hub_id, user_id: owner)
     monkeypatch.setattr(store_module.store, "list_members", lambda _client, hub_id, include_pending: members)
-    monkeypatch.setattr(memberships_router, "_attach_emails", lambda items: items)
+    monkeypatch.setattr(memberships_router, "_attach_profiles", lambda items: items)
 
     resp = client.get("/hubs/11111111-1111-1111-1111-111111111111/members")
     assert resp.status_code == 200
     assert len(resp.json()) == 2
+
+
+def test_attach_profiles_includes_metadata_fields(client, monkeypatch) -> None:
+    owner = HubMember(
+        hub_id="11111111-1111-1111-1111-111111111111",
+        user_id="00000000-0000-0000-0000-000000000001",
+        role=MembershipRole.owner,
+        accepted_at=datetime.utcnow(),
+    )
+    members = [owner]
+    monkeypatch.setattr(store_module.store, "get_member_role", lambda _client, hub_id, user_id: owner)
+    monkeypatch.setattr(store_module.store, "list_members", lambda _client, hub_id, include_pending: members)
+    monkeypatch.setattr(
+        store_module.store,
+        "_resolve_user_profiles_by_ids",
+        lambda user_ids: {
+            "00000000-0000-0000-0000-000000000001": UserProfileSummary(
+                user_id="00000000-0000-0000-0000-000000000001",
+                email="owner@example.com",
+                display_name="Owner Name",
+                avatar_mode="preset",
+                avatar_key="rocket",
+                avatar_color=None,
+            )
+        },
+    )
+
+    resp = client.get("/hubs/11111111-1111-1111-1111-111111111111/members")
+
+    assert resp.status_code == 200
+    payload = resp.json()[0]
+    assert payload["display_name"] == "Owner Name"
+    assert payload["avatar_mode"] == "preset"
+    assert payload["avatar_key"] == "rocket"
 
 
 def test_invite_member_blocks_self_invite(client) -> None:

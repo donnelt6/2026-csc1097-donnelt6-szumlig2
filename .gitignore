@@ -1,2 +1,7 @@
 # Local Netlify folder
 .netlify
+
+# Local hosting notes
+hosting.md
+
+deno.lock
