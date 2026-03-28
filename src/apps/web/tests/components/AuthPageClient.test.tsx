@@ -93,7 +93,7 @@ describe("AuthPageClient", () => {
           data: expect.objectContaining({
             full_name: "Ada Lovelace",
             avatar_mode: "preset",
-            avatar_key: "ava",
+            avatar_key: "glass-01",
             avatar_color: null,
           }),
         }),

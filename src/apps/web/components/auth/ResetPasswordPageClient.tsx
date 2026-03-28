@@ -211,7 +211,7 @@ async function waitForRecoverySession() {
   }
   const supabaseClient = supabase;
 
-  for (let attempt = 0; attempt < 5; attempt += 1) {
+  for (let attempt = 0; attempt < 12; attempt += 1) {
     const { data, error } = await supabaseClient.auth.getSession();
     if (error) {
       throw error;
@@ -219,7 +219,7 @@ async function waitForRecoverySession() {
     if (data.session) {
       return data.session;
     }
-    await new Promise((resolve) => window.setTimeout(resolve, 150));
+    await new Promise((resolve) => window.setTimeout(resolve, 250));
   }
 
   return null;

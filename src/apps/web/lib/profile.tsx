@@ -1,4 +1,4 @@
-export type AvatarMode = "preset" | "initials";
+export type AvatarMode = "preset";
 
 export interface ProfileMetadata {
   full_name: string;
@@ -20,7 +20,6 @@ export interface ProfileSummary {
 export interface ResolvedProfile extends ProfileMetadata {
   email: string | null;
   displayName: string;
-  initials: string;
 }
 
 export interface PresetAvatarOption {
@@ -30,68 +29,65 @@ export interface PresetAvatarOption {
   background: string;
 }
 
-export interface InitialsColorOption {
-  key: string;
-  label: string;
-  background: string;
-  color: string;
-}
-
 export const PROFILE_PRESET_AVATARS: PresetAvatarOption[] = [
   // DiceBear Glass avatars are bundled locally so the picker stays stable and offline-friendly.
-  { key: "ava", label: "Avatar 1", imagePath: "/profile-avatars/ava.svg", background: "#f7efe8" },
-  { key: "felix", label: "Avatar 2", imagePath: "/profile-avatars/felix.svg", background: "#eef4fb" },
-  { key: "luna", label: "Avatar 3", imagePath: "/profile-avatars/luna.svg", background: "#f6eefc" },
-  { key: "maya", label: "Avatar 4", imagePath: "/profile-avatars/maya.svg", background: "#fdf1ea" },
-  { key: "kai", label: "Avatar 5", imagePath: "/profile-avatars/kai.svg", background: "#edf8f1" },
-  { key: "nina", label: "Avatar 6", imagePath: "/profile-avatars/nina.svg", background: "#f9eef2" },
-  { key: "omar", label: "Avatar 7", imagePath: "/profile-avatars/omar.svg", background: "#f2f0fb" },
-  { key: "zoe", label: "Avatar 8", imagePath: "/profile-avatars/zoe.svg", background: "#eef7fb" },
+  { key: "glass-01", label: "Avatar 1", imagePath: "/profile-avatars/glass-01.svg", background: "#f7efe8" },
+  { key: "glass-02", label: "Avatar 2", imagePath: "/profile-avatars/glass-02.svg", background: "#eef4fb" },
+  { key: "glass-03", label: "Avatar 3", imagePath: "/profile-avatars/glass-03.svg", background: "#f6eefc" },
+  { key: "glass-04", label: "Avatar 4", imagePath: "/profile-avatars/glass-04.svg", background: "#fdf1ea" },
+  { key: "glass-05", label: "Avatar 5", imagePath: "/profile-avatars/glass-05.svg", background: "#edf8f1" },
+  { key: "glass-06", label: "Avatar 6", imagePath: "/profile-avatars/glass-06.svg", background: "#f9eef2" },
+  { key: "glass-07", label: "Avatar 7", imagePath: "/profile-avatars/glass-07.svg", background: "#f2f0fb" },
+  { key: "glass-08", label: "Avatar 8", imagePath: "/profile-avatars/glass-08.svg", background: "#eef7fb" },
 ];
 
 const LEGACY_PROFILE_AVATAR_KEY_MAP: Record<string, string> = {
-  cap: "ava",
-  beaker: "felix",
-  book: "luna",
-  bolt: "kai",
-  briefcase: "omar",
-  chat: "maya",
-  cloud: "zoe",
-  cog: "felix",
-  code: "kai",
-  globe: "omar",
-  heart: "nina",
-  idea: "luna",
-  lock: "ava",
-  map: "zoe",
-  plane: "maya",
-  rocket: "kai",
-  shield: "omar",
-  sparkles: "zoe",
-  star: "nina",
-  tools: "felix",
-  fox: "kai",
-  cat: "ava",
-  dog: "felix",
-  panda: "omar",
-  lion: "omar",
-  tiger: "maya",
-  owl: "luna",
-  rabbit: "zoe",
+  "glass-01": "glass-01",
+  "glass-02": "glass-02",
+  "glass-03": "glass-03",
+  "glass-04": "glass-04",
+  "glass-05": "glass-05",
+  "glass-06": "glass-06",
+  "glass-07": "glass-07",
+  "glass-08": "glass-08",
+  ava: "glass-01",
+  felix: "glass-02",
+  luna: "glass-03",
+  maya: "glass-04",
+  kai: "glass-05",
+  nina: "glass-06",
+  omar: "glass-07",
+  zoe: "glass-08",
+  cap: "glass-01",
+  beaker: "glass-02",
+  book: "glass-03",
+  bolt: "glass-05",
+  briefcase: "glass-07",
+  chat: "glass-04",
+  cloud: "glass-08",
+  cog: "glass-02",
+  code: "glass-05",
+  globe: "glass-07",
+  heart: "glass-06",
+  idea: "glass-03",
+  lock: "glass-01",
+  map: "glass-08",
+  plane: "glass-04",
+  rocket: "glass-05",
+  shield: "glass-07",
+  sparkles: "glass-08",
+  star: "glass-06",
+  tools: "glass-02",
+  fox: "glass-05",
+  cat: "glass-01",
+  dog: "glass-02",
+  panda: "glass-07",
+  lion: "glass-07",
+  tiger: "glass-04",
+  owl: "glass-03",
+  rabbit: "glass-08",
 };
 
-export const PROFILE_INITIALS_COLORS: InitialsColorOption[] = [
-  { key: "slate", label: "Slate", background: "#334155", color: "#f8fafc" },
-  { key: "blue", label: "Blue", background: "#2563eb", color: "#eff6ff" },
-  { key: "teal", label: "Teal", background: "#0f766e", color: "#f0fdfa" },
-  { key: "emerald", label: "Emerald", background: "#15803d", color: "#f0fdf4" },
-  { key: "amber", label: "Amber", background: "#b45309", color: "#fffbeb" },
-  { key: "rose", label: "Rose", background: "#be123c", color: "#fff1f2" },
-  { key: "violet", label: "Violet", background: "#7c3aed", color: "#f5f3ff" },
-  { key: "ink", label: "Ink", background: "#111827", color: "#f9fafb" },
-];
-
-export const DEFAULT_PROFILE_COLOR_KEY = "slate";
 export const DEFAULT_PROFILE_AVATAR_KEY = PROFILE_PRESET_AVATARS[0].key;
 
 export function buildProfileFormValue(profile?: ProfileSummary | null): ProfileMetadata {
@@ -110,32 +106,27 @@ export function resolveProfile(profile?: ProfileSummary | null): ResolvedProfile
   const email = normalizeString(profile?.email) ?? null;
   const displayName = normalizeString(profile?.display_name) || fullName || email || "Profile";
 
-  const avatarMode = coerceAvatarMode(profile?.avatar_mode ?? metadata.avatar_mode);
+  const avatarMode = normalizeAvatarMode(profile?.avatar_mode ?? metadata.avatar_mode);
   const avatarKey = normalizePresetAvatarKey(profile?.avatar_key ?? metadata.avatar_key);
-  const avatarColor = isValidInitialsColorKey(profile?.avatar_color ?? metadata.avatar_color)
-    ? normalizeString(profile?.avatar_color ?? metadata.avatar_color)
-    : DEFAULT_PROFILE_COLOR_KEY;
 
   if (avatarMode === "preset" && avatarKey) {
     return {
       email,
       displayName,
-      initials: deriveInitials(displayName),
       full_name: fullName,
       avatar_mode: "preset",
       avatar_key: avatarKey,
-      avatar_color: avatarColor,
+      avatar_color: null,
     };
   }
 
   return {
     email,
     displayName,
-    initials: deriveInitials(displayName),
     full_name: fullName,
     avatar_mode: "preset",
     avatar_key: DEFAULT_PROFILE_AVATAR_KEY,
-    avatar_color: avatarColor,
+    avatar_color: null,
   };
 }
 
@@ -151,41 +142,12 @@ export function toProfileMetadata(value: ProfileMetadata): ProfileMetadata {
   };
 }
 
-export function deriveInitials(value: string): string {
-  const words = value
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean);
-
-  if (words.length === 0) {
-    return "P";
-  }
-  if (words.length === 1) {
-    const compact = words[0].replace(/[^a-z0-9]/gi, "");
-    return (compact.slice(0, 2) || "P").toUpperCase();
-  }
-  return `${words[0][0] ?? ""}${words[1][0] ?? ""}`.toUpperCase() || "P";
-}
-
 export function getPresetAvatar(key?: string | null): PresetAvatarOption {
   return PROFILE_PRESET_AVATARS.find((option) => option.key === key) ?? PROFILE_PRESET_AVATARS[0];
 }
 
-export function getInitialsColor(key?: string | null): InitialsColorOption {
-  return PROFILE_INITIALS_COLORS.find((option) => option.key === key) ?? PROFILE_INITIALS_COLORS[0];
-}
-
-export function getRandomInitialsColorKey() {
-  const index = Math.floor(Math.random() * PROFILE_INITIALS_COLORS.length);
-  return PROFILE_INITIALS_COLORS[index]?.key ?? DEFAULT_PROFILE_COLOR_KEY;
-}
-
 export function isValidPresetAvatarKey(value?: string | null): value is string {
   return !!normalizePresetAvatarKey(value);
-}
-
-export function isValidInitialsColorKey(value?: string | null): value is string {
-  return PROFILE_INITIALS_COLORS.some((option) => option.key === value);
 }
 
 export function isValidProfileMetadata(value: ProfileMetadata): boolean {
@@ -199,9 +161,9 @@ function readProfileMetadata(value: unknown): Partial<ProfileMetadata> {
   const metadata = value as Record<string, unknown>;
   return {
     full_name: normalizeString(metadata.full_name) ?? "",
-    avatar_mode: coerceAvatarMode(metadata.avatar_mode),
+    avatar_mode: normalizeAvatarMode(metadata.avatar_mode),
     avatar_key: normalizePresetAvatarKey(metadata.avatar_key),
-    avatar_color: normalizeString(metadata.avatar_color) ?? null,
+    avatar_color: null,
   };
 }
 
@@ -222,6 +184,6 @@ function normalizeString(value: unknown): string | null {
   return trimmed ? trimmed : null;
 }
 
-function coerceAvatarMode(value: unknown): AvatarMode {
-  return value === "preset" ? "preset" : "initials";
+function normalizeAvatarMode(_value: unknown): AvatarMode {
+  return "preset";
 }

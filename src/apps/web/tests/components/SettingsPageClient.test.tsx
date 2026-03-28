@@ -3,10 +3,11 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { SettingsPageClient } from "../../components/settings/SettingsPageClient";
 
-const { updateUser, back, push, mockUser } = vi.hoisted(() => ({
+const { updateUser, back, push, refreshUser, mockUser } = vi.hoisted(() => ({
   updateUser: vi.fn(),
   back: vi.fn(),
   push: vi.fn(),
+  refreshUser: vi.fn(),
   mockUser: {
     id: "user-1",
     email: "ada@example.com",
@@ -29,6 +30,7 @@ vi.mock("next/navigation", () => ({
 vi.mock("../../components/auth/AuthProvider", () => ({
   useAuth: () => ({
     user: mockUser,
+    refreshUser,
   }),
 }));
 
@@ -45,6 +47,7 @@ describe("SettingsPageClient", () => {
     updateUser.mockReset();
     back.mockReset();
     push.mockReset();
+    refreshUser.mockReset();
     window.history.pushState({}, "", "/");
     window.history.pushState({}, "", "/settings");
   });
@@ -66,11 +69,12 @@ describe("SettingsPageClient", () => {
         data: {
           full_name: "Ada Byron",
           avatar_mode: "preset",
-          avatar_key: "felix",
+          avatar_key: "glass-02",
           avatar_color: null,
         },
       }),
     );
+    await waitFor(() => expect(refreshUser).toHaveBeenCalled());
     expect(back).toHaveBeenCalled();
   });
 

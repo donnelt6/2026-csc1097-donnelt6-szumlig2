@@ -72,6 +72,9 @@ describe("ResetPasswordPageClient", () => {
     getSession
       .mockResolvedValueOnce({ data: { session: null }, error: null })
       .mockResolvedValueOnce({ data: { session: null }, error: null })
+      .mockResolvedValueOnce({ data: { session: null }, error: null })
+      .mockResolvedValueOnce({ data: { session: null }, error: null })
+      .mockResolvedValueOnce({ data: { session: null }, error: null })
       .mockResolvedValueOnce({ data: { session: { user: { id: "user-1" } } }, error: null });
     window.history.replaceState({}, "", "/auth/reset-password#access_token=token123&refresh_token=refresh123&type=recovery");
 

@@ -15,7 +15,7 @@ import { supabase } from "../../lib/supabaseClient";
 
 export function SettingsPageClient() {
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, refreshUser } = useAuth();
   const [profileForm, setProfileForm] = useState(() => buildProfileFormValue(user ?? undefined));
   const [status, setStatus] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -48,6 +48,7 @@ export function SettingsPageClient() {
       return;
     }
 
+    await refreshUser();
     navigateBack(router);
   };
 

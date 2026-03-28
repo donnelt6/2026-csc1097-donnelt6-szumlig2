@@ -29,7 +29,7 @@ export interface UserProfileSummary {
   user_id: string;
   email?: string | null;
   display_name?: string | null;
-  avatar_mode?: "preset" | "initials" | null;
+  avatar_mode?: "preset" | null;
   avatar_key?: string | null;
   avatar_color?: string | null;
 }
@@ -187,7 +187,7 @@ export interface HubMember {
   accepted_at?: string | null;
   email?: string | null;
   display_name?: string | null;
-  avatar_mode?: "preset" | "initials" | null;
+  avatar_mode?: "preset" | null;
   avatar_key?: string | null;
   avatar_color?: string | null;
 }
