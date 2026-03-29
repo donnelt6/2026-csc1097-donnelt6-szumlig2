@@ -59,7 +59,7 @@ def test_attach_profiles_includes_metadata_fields(client, monkeypatch) -> None:
     monkeypatch.setattr(store_module.store, "list_members", lambda _client, hub_id, include_pending: members)
     monkeypatch.setattr(
         store_module.store,
-        "_resolve_user_profiles_by_ids",
+        "resolve_user_profiles_by_ids",
         lambda user_ids: {
             "00000000-0000-0000-0000-000000000001": UserProfileSummary(
                 user_id="00000000-0000-0000-0000-000000000001",

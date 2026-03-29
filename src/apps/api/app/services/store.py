@@ -1,5 +1,6 @@
 import json
 import math
+import random
 import re
 import time
 import uuid
@@ -181,7 +182,7 @@ class SupabaseStore:
                     for member in (members_response.data or [])
                     if member.get("user_id")
                 }
-                profile_lookup = self._resolve_user_profiles_by_ids(user_ids)
+                profile_lookup = self.resolve_user_profiles_by_ids(user_ids)
                 emails_by_hub: dict[str, List[str]] = {}
                 profiles_by_hub: dict[str, List[UserProfileSummary]] = {}
                 for m in members_response.data:
@@ -382,6 +383,99 @@ class SupabaseStore:
             .execute()
         )
         return [Source(**row) for row in response.data]
+
+    def suggest_chat_prompt(self, client: Client, hub_id: str, source_ids: Optional[List[str]] = None) -> str:
+        hub_response = (
+            client.table("hubs")
+            .select("id, name, description, sources_count")
+            .eq("id", str(hub_id))
+            .limit(1)
+            .execute()
+        )
+        if not hub_response.data:
+            raise KeyError("Hub not found")
+
+        hub_row = hub_response.data[0]
+        hub_name = str(hub_row.get("name") or "Hub")
+        hub_description = str(hub_row.get("description") or "")
+        all_sources = self.list_sources(client, str(hub_id))
+        complete_sources_in_order = [
+            source for source in all_sources
+            if source.status == SourceStatus.complete
+        ]
+        complete_source_ids = [source.id for source in complete_sources_in_order]
+        normalized_source_ids = self._normalize_source_ids_to_complete_order(source_ids, complete_source_ids)
+        allowed_source_ids = set(normalized_source_ids)
+        complete_sources = (
+            complete_sources_in_order
+            if source_ids is None
+            else [source for source in complete_sources_in_order if source.id in allowed_source_ids]
+        )
+
+        source_names = [source.original_name for source in complete_sources[:6]]
+        source_types = sorted({source.type.value for source in complete_sources})
+        has_multiple_sources = len(complete_sources) > 1
+        all_sources_selected = (
+            len(complete_source_ids) > 1
+            and len(normalized_source_ids) == len(complete_source_ids)
+        )
+        random_focus = None
+        random_source_anchor = None
+        if all_sources_selected:
+            random_focus = random.choice([
+                "action items, deadlines, and responsibilities",
+                "key risks, blockers, and unresolved issues",
+                "important themes and takeaways",
+                "contradictions, overlaps, or differences between sources",
+                "decisions already made and what still needs clarification",
+            ])
+            if complete_sources:
+                if random_focus == "contradictions, overlaps, or differences between sources" and len(complete_sources) > 1:
+                    anchor_sources = random.sample(complete_sources, 2)
+                    random_source_anchor = ", ".join(source.original_name for source in anchor_sources)
+                else:
+                    random_source_anchor = random.choice(complete_sources).original_name
+
+        system_prompt = (
+            "You create one useful suggested user question for Caddie, a hub-based knowledge chat. "
+            "Return exactly one plain-text question. No quotes, no bullets, no explanation. "
+            "Keep it under 14 words when possible. Tailor it to the hub context and source list. "
+            "The question must be answerable from the hub's uploaded sources. "
+            "Prefer concrete prompts about action items, deadlines, risks, decisions, concepts, comparisons, or summaries. "
+            "Do not mention recency, latest documents, dates ordering, or web search unless explicitly supported. "
+            "When a preferred source anchor is provided, bias the suggestion toward that source or pair of sources."
+        )
+        user_prompt = (
+            f"Hub name: {hub_name}\n"
+            f"Hub description: {hub_description or 'None'}\n"
+            f"Complete source count: {len(complete_sources)}\n"
+            f"Complete source types: {', '.join(source_types) if source_types else 'None'}\n"
+            f"Complete source names: {', '.join(source_names) if source_names else 'None'}\n"
+            f"Multiple sources available: {'yes' if has_multiple_sources else 'no'}\n"
+            f"All complete sources selected: {'yes' if all_sources_selected else 'no'}\n"
+            f"Preferred focus for this suggestion: {random_focus or 'tailor naturally to the selected sources'}\n"
+            f"Preferred source anchor: {random_source_anchor or 'none'}"
+        )
+
+        completion = self.llm_client.chat.completions.create(
+            model=self.chat_model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            temperature=0.8 if all_sources_selected else 0.4,
+            max_tokens=60,
+        )
+        suggestion = (completion.choices[0].message.content or "").strip()
+        suggestion = suggestion.splitlines()[0].strip().strip('"').strip("'")
+
+        if not suggestion:
+            if has_multiple_sources:
+                return "Compare the selected sources"
+            if complete_sources:
+                return "Summarise the selected sources"
+            return "What should this hub focus on?"
+        return suggestion
 
     def get_source(self, client: Client, source_id: str) -> Source:
         response = client.table("sources").select("*").eq("id", str(source_id)).limit(1).execute()
@@ -2602,13 +2696,13 @@ class SupabaseStore:
         if not user_ids:
             return {}
 
-        profile_lookup = self._resolve_user_profiles_by_ids(user_ids)
+        profile_lookup = self.resolve_user_profiles_by_ids(user_ids)
         return {
             user_id: profile.display_name or profile.email or user_id
             for user_id, profile in profile_lookup.items()
         }
 
-    def _resolve_user_profiles_by_ids(self, user_ids: set[str]) -> Dict[str, UserProfileSummary]:
+    def resolve_user_profiles_by_ids(self, user_ids: set[str]) -> Dict[str, UserProfileSummary]:
         if not user_ids:
             return {}
 

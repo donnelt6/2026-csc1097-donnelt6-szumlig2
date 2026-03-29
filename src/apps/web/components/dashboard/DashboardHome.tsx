@@ -11,6 +11,7 @@ import {
   SparklesIcon,
   BellIcon,
   ChatBubbleLeftIcon,
+  ArrowPathIcon,
 } from '@heroicons/react/24/outline';
 import { DocumentIcon, UserIcon } from '@heroicons/react/24/solid';
 import { listActivity, listHubs, listReminders, listChatSessions } from '../../lib/api';
@@ -20,12 +21,14 @@ import { useAuth } from '../auth/AuthProvider';
 import { describeEventParts, formatRelativeTime, getEventTone } from '../../lib/utils';
 import { MiniCalendar } from './MiniCalendar';
 import { getEventIcon, buildHubNameMap } from './dashboardUtils';
+import { selectDashboardPrompts } from './dashboardPromptRules';
 import { ProfileAvatar } from '../profile/ProfileAvatar';
 
 export function DashboardHome() {
   const { user } = useAuth();
   const router = useRouter();
   const [heroSearch, setHeroSearch] = useState('');
+  const [promptRefreshIndex, setPromptRefreshIndex] = useState(0);
 
   const now = new Date();
   const [calMonth, setCalMonth] = useState(now.getMonth());
@@ -136,17 +139,10 @@ export function DashboardHome() {
 
   const activityItems = activityEvents ?? [];
 
-  // Suggested prompts
-  const suggestedPrompts = [
-    {
-      text: 'Summarize the key takeaways from your most recent documents',
-      hubId: recentHubs[0]?.id,
-    },
-    {
-      text: 'What are the main action items across your hubs?',
-      hubId: recentHubs[1]?.id ?? recentHubs[0]?.id,
-    },
-  ].filter((p) => p.hubId);
+  const suggestedPrompts = useMemo(
+    () => selectDashboardPrompts(hubs, reminders, 2, promptRefreshIndex),
+    [hubs, reminders, promptRefreshIndex],
+  );
 
   return (
     <div className="dash-home">
@@ -389,8 +385,19 @@ export function DashboardHome() {
           {suggestedPrompts.length > 0 && (
             <div className="dash-prompts-section">
               <div className="dash-prompts-header">
-                <SparklesIcon className="dash-sparkle-icon" />
-                <h3 className="dash-prompts-title">Suggested Caddie Prompts</h3>
+                <div className="dash-prompts-heading">
+                  <SparklesIcon className="dash-sparkle-icon" />
+                  <h3 className="dash-prompts-title">Suggested Caddie Prompts</h3>
+                </div>
+                <button
+                  type="button"
+                  className="dash-prompts-refresh"
+                  onClick={() => setPromptRefreshIndex((current) => current + 1)}
+                  aria-label="Refresh suggested prompts"
+                  title="Refresh suggested prompts"
+                >
+                  <ArrowPathIcon className="dash-prompts-refresh-icon" />
+                </button>
               </div>
               <div className="dash-prompt-list">
                 {suggestedPrompts.map((prompt, i) => (
@@ -399,7 +406,7 @@ export function DashboardHome() {
                     className="dash-prompt-card"
                     onClick={() => {
                       if (prompt.hubId) {
-                        router.push(`/hubs/${prompt.hubId}?tab=chat&prompt=${encodeURIComponent(prompt.text)}`);
+                        router.push(`/hubs/${prompt.hubId}?tab=chat&session=new&promptAction=send&prompt=${encodeURIComponent(prompt.text)}`);
                       }
                     }}
                     type="button"

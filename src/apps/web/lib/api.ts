@@ -3,6 +3,7 @@ import type {
   ActivityEvent,
   AssignableMembershipRole,
   ChatSessionDetail,
+  ChatPromptSuggestion,
   ChatSessionSummary,
   ChatResponse,
   FlagCase,
@@ -245,6 +246,14 @@ export async function decideSourceSuggestion(
 export async function getChatHistory(hubId: string): Promise<HistoryMessage[]> {
   const res = await authedFetch(`${API_BASE}/chat/history?hub_id=${hubId}`, { cache: "no-store" });
   return handle<HistoryMessage[]>(res);
+}
+
+export async function getChatPromptSuggestion(hubId: string, sourceIds: string[]): Promise<ChatPromptSuggestion> {
+  const search = new URLSearchParams();
+  search.set("hub_id", hubId);
+  sourceIds.forEach((sourceId) => search.append("source_ids", sourceId));
+  const res = await authedFetch(`${API_BASE}/chat/prompt-suggestion?${search.toString()}`, { cache: "no-store" });
+  return handle<ChatPromptSuggestion>(res);
 }
 
 export async function listChatSessions(hubId: string): Promise<ChatSessionSummary[]> {

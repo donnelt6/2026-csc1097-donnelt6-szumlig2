@@ -146,7 +146,7 @@ export function ResetPasswordPageClient() {
     if (error) {
       setLoading(false);
       console.error("auth.recovery.update_failed", error);
-      setStatus(mapAuthErrorMessage(error, "We could not update your password right now. Try again."));
+      setStatus(mapResetPasswordErrorMessage(error));
       return;
     }
 
@@ -203,6 +203,22 @@ export function ResetPasswordPageClient() {
       </section>
     </main>
   );
+}
+
+function mapResetPasswordErrorMessage(error: unknown): string {
+  const message = typeof error === "object" && error && "message" in error ? String(error.message ?? "") : "";
+  const normalized = message.toLowerCase();
+
+  if (
+    normalized.includes("same as") ||
+    normalized.includes("same password") ||
+    normalized.includes("same as the old password") ||
+    normalized.includes("different from the old password")
+  ) {
+    return "Your new password must be different from your current password.";
+  }
+
+  return mapAuthErrorMessage(error, "We could not update your password right now. Try again.");
 }
 
 async function waitForRecoverySession() {

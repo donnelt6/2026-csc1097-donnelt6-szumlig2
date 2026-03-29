@@ -1,4 +1,5 @@
 import { screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DashboardHome } from "../../components/dashboard/DashboardHome";
@@ -119,5 +120,160 @@ describe("DashboardHome", () => {
     expect(screen.getByText("target@example.com (viewer)")).toBeInTheDocument();
     expect(screen.getByText("You created hub")).toBeInTheDocument();
     expect(screen.getAllByText("Launch Hub")[0]).toBeInTheDocument();
+  });
+
+  it("shows rule-based suggested prompts for the most relevant hubs", async () => {
+    vi.mocked(listHubs).mockResolvedValue([
+      {
+        id: "hub-1",
+        owner_id: "user-1",
+        name: "Launch Project",
+        description: "Sprint planning and delivery notes",
+        sources_count: 4,
+        created_at: "2025-01-01T00:00:00Z",
+      },
+      {
+        id: "hub-2",
+        owner_id: "user-1",
+        name: "CSC1097 Revision",
+        description: "Lecture notes and exam prep",
+        sources_count: 2,
+        created_at: "2025-01-02T00:00:00Z",
+      },
+      {
+        id: "hub-3",
+        owner_id: "user-1",
+        name: "Empty Hub",
+        description: "No sources yet",
+        sources_count: 0,
+        created_at: "2025-01-03T00:00:00Z",
+      },
+    ]);
+    vi.mocked(listReminders).mockResolvedValue([
+      {
+        id: "rem-1",
+        user_id: "user-1",
+        hub_id: "hub-1",
+        due_at: "2025-01-10T09:00:00Z",
+        timezone: "Europe/Dublin",
+        status: "scheduled",
+        created_at: "2025-01-05T00:00:00Z",
+      },
+    ]);
+    vi.mocked(listActivity).mockResolvedValue([]);
+    vi.mocked(listChatSessions).mockResolvedValue([]);
+
+    renderWithQueryClient(<DashboardHome />);
+
+    expect(await screen.findByText(/Extract the main action items, deadlines, and responsibilities/i)).toBeInTheDocument();
+    expect(screen.queryByText(/most recent documents/i)).not.toBeInTheDocument();
+    expect(screen.getAllByRole("button").filter((button) => button.className.includes("dash-prompt-card"))).toHaveLength(2);
+    expect(
+      screen.queryByText(/Turn the contents of this hub into a concise study guide/i)
+      || screen.queryByText(/Compare the sources in this hub and highlight any contradictions/i)
+      || screen.queryByText(/Identify the main risks, blockers, unanswered questions, or unresolved issues in this hub/i)
+    ).toBeTruthy();
+  });
+
+  it("refreshes the displayed suggested prompts", async () => {
+    vi.mocked(listHubs).mockResolvedValue([
+      {
+        id: "hub-1",
+        owner_id: "user-1",
+        name: "Launch Project",
+        description: "Sprint planning and delivery notes",
+        sources_count: 4,
+        created_at: "2025-01-01T00:00:00Z",
+      },
+      {
+        id: "hub-2",
+        owner_id: "user-1",
+        name: "CSC1097 Revision",
+        description: "Lecture notes and exam prep",
+        sources_count: 2,
+        created_at: "2025-01-02T00:00:00Z",
+      },
+    ]);
+    vi.mocked(listReminders).mockResolvedValue([
+      {
+        id: "rem-1",
+        user_id: "user-1",
+        hub_id: "hub-1",
+        due_at: "2025-01-10T09:00:00Z",
+        timezone: "Europe/Dublin",
+        status: "scheduled",
+        created_at: "2025-01-05T00:00:00Z",
+      },
+    ]);
+    vi.mocked(listActivity).mockResolvedValue([]);
+    vi.mocked(listChatSessions).mockResolvedValue([]);
+
+    renderWithQueryClient(<DashboardHome />);
+
+    expect(await screen.findByText(/Extract the main action items, deadlines, and responsibilities/i)).toBeInTheDocument();
+    expect(screen.getAllByText("Launch Project").length).toBeGreaterThan(0);
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Refresh suggested prompts" }));
+
+    expect(screen.getAllByText("Launch Project").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("CSC1097 Revision").length).toBeGreaterThan(0);
+  });
+
+  it("includes later eligible hubs in refreshed prompt suggestions", async () => {
+    vi.mocked(listHubs).mockResolvedValue([
+      {
+        id: "hub-1",
+        owner_id: "user-1",
+        name: "Launch Project",
+        description: "Sprint planning and delivery notes",
+        sources_count: 4,
+        created_at: "2025-01-01T00:00:00Z",
+      },
+      {
+        id: "hub-2",
+        owner_id: "user-1",
+        name: "Empty Hub A",
+        description: "No sources yet",
+        sources_count: 0,
+        created_at: "2025-01-02T00:00:00Z",
+      },
+      {
+        id: "hub-3",
+        owner_id: "user-1",
+        name: "Empty Hub B",
+        description: "No sources yet",
+        sources_count: 0,
+        created_at: "2025-01-03T00:00:00Z",
+      },
+      {
+        id: "hub-4",
+        owner_id: "user-1",
+        name: "CSC1097 Revision",
+        description: "Lecture notes and exam prep",
+        sources_count: 2,
+        created_at: "2025-01-04T00:00:00Z",
+      },
+    ]);
+    vi.mocked(listReminders).mockResolvedValue([
+      {
+        id: "rem-1",
+        user_id: "user-1",
+        hub_id: "hub-1",
+        due_at: "2025-01-10T09:00:00Z",
+        timezone: "Europe/Dublin",
+        status: "scheduled",
+        created_at: "2025-01-05T00:00:00Z",
+      },
+    ]);
+    vi.mocked(listActivity).mockResolvedValue([]);
+    vi.mocked(listChatSessions).mockResolvedValue([]);
+
+    renderWithQueryClient(<DashboardHome />);
+
+    expect(await screen.findByText(/Extract the main action items, deadlines, and responsibilities/i)).toBeInTheDocument();
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Refresh suggested prompts" }));
+
+    expect(screen.getAllByText("CSC1097 Revision").length).toBeGreaterThan(0);
   });
 });

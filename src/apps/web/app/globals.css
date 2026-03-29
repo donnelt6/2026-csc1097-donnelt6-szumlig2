@@ -3921,10 +3921,10 @@ textarea {
 /* Avatars */
 
 .chat__avatar {
-  width: 32px;
-  height: 32px;
-  min-width: 32px;
-  border-radius: 50%;
+  width: 42px;
+  height: 42px;
+  min-width: 42px;
+  border-radius: 14px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -3944,8 +3944,8 @@ textarea {
 }
 
 .chat__avatar--user {
-  background: linear-gradient(315deg, var(--accent), var(--gradient-end));
-  color: white;
+  background: transparent;
+  color: inherit;
   font-weight: var(--font-bold);
 }
 
@@ -3954,8 +3954,8 @@ textarea {
 }
 
 .chat__avatar .profile-badge__image {
-  width: 72%;
-  height: 72%;
+  width: 100%;
+  height: 100%;
 }
 
 /* Bubbles */
@@ -4343,6 +4343,48 @@ textarea {
   gap: 8px;
   justify-content: center;
   margin-top: 12px;
+}
+
+.chat__prompt-suggest-btn {
+  margin-top: 0;
+  width: 34px;
+  height: 34px;
+  min-width: 34px;
+  padding: 0;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--muted);
+  font-family: var(--font-sans);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.chat__prompt-suggest-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+.chat__prompt-suggest-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.chat__prompt-suggest-icon {
+  width: 16px;
+  height: 16px;
+}
+
+.chat__prompt-suggest-error {
+  margin: 0;
+  color: var(--danger);
+  font-size: 0.8rem;
+  text-align: left;
 }
 
 .chat__prompt-chip {
@@ -6981,8 +7023,15 @@ textarea {
 .dash-prompts-header {
   display: flex;
   align-items: center;
-  gap: 8px;
+  justify-content: space-between;
   margin-bottom: 14px;
+}
+
+.dash-prompts-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
 }
 
 .dash-sparkle-icon {
@@ -6998,6 +7047,35 @@ textarea {
   font-weight: 700;
   color: var(--text);
   margin: 0;
+}
+
+.dash-prompts-refresh {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--card);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast), transform var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.dash-prompts-refresh:hover,
+.dash-prompts-refresh:focus-visible {
+  border-color: var(--accent);
+  background: var(--accent-glow);
+  color: var(--accent);
+  transform: rotate(18deg);
+  outline: none;
+}
+
+.dash-prompts-refresh-icon {
+  width: 16px;
+  height: 16px;
 }
 
 .dash-prompt-list {

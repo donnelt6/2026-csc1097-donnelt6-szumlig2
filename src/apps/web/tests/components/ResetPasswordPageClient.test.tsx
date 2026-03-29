@@ -100,4 +100,21 @@ describe("ResetPasswordPageClient", () => {
     await waitFor(() => expect(signOut).toHaveBeenCalled());
     expect(replaceMock).toHaveBeenCalledWith("/auth?reset=success");
   });
+
+  it("shows a specific message when the new password matches the old one", async () => {
+    sessionStorage.setItem("caddie:recovery-intent", "1");
+    getSession.mockResolvedValue({ data: { session: { user: { id: "user-1" } } }, error: null });
+    updateUser.mockResolvedValue({ error: { message: "New password should be different from the old password." } });
+
+    render(<ResetPasswordPageClient />);
+
+    await screen.findByRole("button", { name: "Update password" });
+    fireEvent.change(screen.getByLabelText("New password"), { target: { value: "old-password-123" } });
+    fireEvent.change(screen.getByLabelText("Confirm password"), { target: { value: "old-password-123" } });
+    fireEvent.click(screen.getByRole("button", { name: "Update password" }));
+
+    await waitFor(() =>
+      expect(screen.getByText("Your new password must be different from your current password.")).toBeInTheDocument(),
+    );
+  });
 });

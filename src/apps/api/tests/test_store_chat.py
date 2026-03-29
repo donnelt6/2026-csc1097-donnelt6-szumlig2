@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.schemas import ChatRequest, Citation, HubScope
+from app.schemas import ChatRequest, Citation, HubScope, Source, SourceStatus, SourceType
 from app.services.store import (
     _fallback_chat_session_title,
     _normalize_chat_session_title,
@@ -187,6 +187,37 @@ class FakeLLMClientWithResponses:
         self.chat = FakeChat(FakeChatCompletions("Fallback"))
 
 
+class HubLookupTable:
+    def __init__(self, data: list[dict]) -> None:
+        self._data = data
+
+    def select(self, *_args, **_kwargs) -> "HubLookupTable":
+        return self
+
+    def eq(self, *_args, **_kwargs) -> "HubLookupTable":
+        return self
+
+    def limit(self, *_args, **_kwargs) -> "HubLookupTable":
+        return self
+
+    def execute(self):
+        return SimpleNamespace(data=self._data)
+
+
+class SuggestionClient:
+    def table(self, name: str) -> HubLookupTable:
+        if name != "hubs":
+            raise AssertionError(f"Unexpected table lookup: {name}")
+        return HubLookupTable([
+            {
+                "id": "hub-1",
+                "name": "Launch Project",
+                "description": "Sprint planning notes",
+                "sources_count": 3,
+            }
+        ])
+
+
 def _match(
     source_id: str = "src-1",
     snippet: str = "Snippet",
@@ -298,6 +329,55 @@ def _mixed_follow_up_history() -> list[dict]:
             "citations": [],
         },
     ]
+
+
+def test_suggest_chat_prompt_randomizes_focus_for_all_selected_sources(monkeypatch) -> None:
+    llm = RecordingLLMClient("What risks matter most across these sources?")
+    monkeypatch.setattr(store, "llm_client", llm)
+    monkeypatch.setattr(
+        store,
+        "list_sources",
+        lambda _client, _hub_id: [
+            Source(
+                id="src-1",
+                hub_id="hub-1",
+                type=SourceType.file,
+                original_name="Spec.pdf",
+                status=SourceStatus.complete,
+                created_at="2026-01-01T00:00:00Z",
+            ),
+            Source(
+                id="src-2",
+                hub_id="hub-1",
+                type=SourceType.file,
+                original_name="Roadmap.pdf",
+                status=SourceStatus.complete,
+                created_at="2026-01-02T00:00:00Z",
+            ),
+            Source(
+                id="src-3",
+                hub_id="hub-1",
+                type=SourceType.file,
+                original_name="Notes.md",
+                status=SourceStatus.complete,
+                created_at="2026-01-03T00:00:00Z",
+            ),
+        ],
+    )
+    def fake_choice(options):
+        if options and isinstance(options[0], str):
+            return options[1]
+        return options[2]
+
+    monkeypatch.setattr("app.services.store.random.choice", fake_choice)
+
+    suggestion = store.suggest_chat_prompt(SuggestionClient(), "hub-1", ["src-1", "src-2", "src-3"])
+
+    assert suggestion == "What risks matter most across these sources?"
+    assert llm.chat.completions.calls[0]["temperature"] == 0.8
+    assert llm.chat.completions.calls[0]["max_tokens"] == 60
+    assert "Preferred focus for this suggestion: key risks, blockers, and unresolved issues" in llm.chat.completions.calls[0]["messages"][1]["content"]
+    assert "Preferred source anchor: Notes.md" in llm.chat.completions.calls[0]["messages"][1]["content"]
 
 
 def test_chat_returns_fallback_when_no_matches(monkeypatch) -> None:

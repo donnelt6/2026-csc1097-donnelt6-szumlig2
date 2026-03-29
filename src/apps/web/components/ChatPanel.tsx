@@ -3,12 +3,13 @@
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ClipboardDocumentIcon, FlagIcon, PaperAirplaneIcon } from "@heroicons/react/24/outline";
+import { ClipboardDocumentIcon, FlagIcon, PaperAirplaneIcon, SparklesIcon } from "@heroicons/react/24/outline";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
   askQuestion,
   flagMessage,
+  getChatPromptSuggestion,
   getChatSessionMessages,
   listChatSessions,
 } from "../lib/api";
@@ -29,6 +30,21 @@ const FLAG_REASON_OPTIONS: Array<{ value: FlagReason; label: string }> = [
   { value: "outdated", label: "Outdated" },
   { value: "other", label: "Other" },
 ];
+
+const CHAT_SUGGESTED_PROMPTS = [
+  {
+    label: "Action items and deadlines",
+    prompt: "Extract the main action items, deadlines, and responsibilities from this hub. Present them as a clear checklist.",
+  },
+  {
+    label: "Summarise",
+    prompt: "Summarise the selected sources clearly, focusing on the most important points and takeaways.",
+  },
+  {
+    label: "Key Risks",
+    prompt: "Identify the main risks, blockers, unanswered questions, or unresolved issues in this hub.",
+  },
+] as const;
 
 type ChatScope = "hub" | "global";
 
@@ -150,6 +166,7 @@ export const ChatPanel = forwardRef<ChatPanelHandle, Props>(function ChatPanel({
   const searchParams = useSearchParams();
   const initialSessionParam = searchParams.get("session");
   const initialPromptParam = searchParams.get("prompt");
+  const initialPromptAction = searchParams.get("promptAction");
   const hasAutoSent = useRef(false);
   const sessionQueryKey = ["chat-sessions", hubId] as const;
 
@@ -162,6 +179,8 @@ export const ChatPanel = forwardRef<ChatPanelHandle, Props>(function ChatPanel({
   const [isBootstrapping, setIsBootstrapping] = useState(true);
   const [isLoadingSession, setIsLoadingSession] = useState(false);
   const [isSending, setIsSending] = useState(false);
+  const [isSuggestingPrompt, setIsSuggestingPrompt] = useState(false);
+  const [promptSuggestionError, setPromptSuggestionError] = useState<string | null>(null);
   const [flaggingMessageId, setFlaggingMessageId] = useState<string | null>(null);
   const [reportMenuMessageId, setReportMenuMessageId] = useState<string | null>(null);
   const [activeCitation, setActiveCitation] = useState<Citation | null>(null);
@@ -177,9 +196,11 @@ export const ChatPanel = forwardRef<ChatPanelHandle, Props>(function ChatPanel({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const modalCloseRef = useRef<HTMLButtonElement>(null);
+  const submitQuestionRef = useRef<((event?: React.FormEvent, overrideQuestion?: string) => Promise<void>) | null>(null);
   const previousCompleteSourceIdsRef = useRef<string[]>([]);
   const sessionSourceCacheRef = useRef<Map<string | null, string[]>>(new Map());
   const pendingSessionSourceIdsRef = useRef<string[] | null>(null);
+  const hasActivatedNewSessionDraftRef = useRef(false);
 
   const readSessionSourceCache = (sessionId: string | null): string[] | null => {
     const inMemory = sessionSourceCacheRef.current.get(sessionId);
@@ -211,13 +232,21 @@ export const ChatPanel = forwardRef<ChatPanelHandle, Props>(function ChatPanel({
   );
   const canAsk = scope === "global" || !hasSelectableSources || normalizedSelectedSourceIds.length > 0;
   const isComposerLocked = isBootstrapping || isLoadingSession;
+  const canSuggestPrompt = !isComposerLocked && (!hasSelectableSources || normalizedSelectedSourceIds.length > 0);
   const canFlagResponses = !!hubRole;
+  const shouldStartFreshFromPrompt = initialSessionParam === "new" && !!initialPromptParam;
+  const shouldAutoSendPrompt = shouldStartFreshFromPrompt && initialPromptAction === "send";
   const activeSessionTitle = useMemo(() => {
     if (activeSessionId === null) {
       return "New Chat";
     }
     return sessionList.find((session) => session.id === activeSessionId)?.title ?? "New Chat";
   }, [activeSessionId, sessionList]);
+  useEffect(() => {
+    hasAutoSent.current = false;
+    hasActivatedNewSessionDraftRef.current = false;
+  }, [hubId, initialPromptParam, initialPromptAction, initialSessionParam]);
+
   useEffect(() => {
     const previousIds = previousCompleteSourceIdsRef.current;
     if (
@@ -292,6 +321,12 @@ export const ChatPanel = forwardRef<ChatPanelHandle, Props>(function ChatPanel({
           return;
         }
 
+        if (initialSessionParam === "new") {
+          sessionSourceCacheRef.current.delete(null);
+          activateDraft({ messages: [], scope: "hub", selectedSourceIds: [...completeSourceIds] }, false);
+          return;
+        }
+
         const cachedSessionId = localStorage.getItem(`caddie:last-session:${hubId}`);
         const preferredSessionId = initialSessionParam ?? cachedSessionId;
 
@@ -334,17 +369,6 @@ export const ChatPanel = forwardRef<ChatPanelHandle, Props>(function ChatPanel({
     };
   }, [hubId, refetchSessionList]);
 
-  useEffect(() => {
-    if (hasAutoSent.current || isBootstrapping || sourcesLoading || !initialPromptParam) return;
-    hasAutoSent.current = true;
-    setQuestion(initialPromptParam);
-    const params = new URLSearchParams(searchParams.toString());
-    params.delete("prompt");
-    params.delete("tab");
-    const query = params.toString();
-    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
-  }, [isBootstrapping, sourcesLoading]);
-
   const getSourceName = (sourceId: string): string => {
     const source = sources.find((item) => item.id === sourceId);
     return source?.original_name ?? sourceId.slice(0, 8);
@@ -352,6 +376,9 @@ export const ChatPanel = forwardRef<ChatPanelHandle, Props>(function ChatPanel({
 
   function syncSessionQuery(sessionId: string | null) {
     const params = new URLSearchParams(searchParams.toString());
+    params.delete("prompt");
+    params.delete("promptAction");
+    params.delete("tab");
     if (sessionId) {
       params.set("session", sessionId);
     } else {
@@ -455,7 +482,12 @@ export const ChatPanel = forwardRef<ChatPanelHandle, Props>(function ChatPanel({
   const currentSessionParam = searchParams.get("session");
   useEffect(() => {
     if (isBootstrapping) return;
-    if (currentSessionParam === "new") {
+    if (
+      currentSessionParam === "new"
+      && activeSessionId === null
+      && !hasActivatedNewSessionDraftRef.current
+    ) {
+      hasActivatedNewSessionDraftRef.current = true;
       sessionSourceCacheRef.current.delete(null);
       activateDraft({ messages: [], scope, selectedSourceIds: [...completeSourceIds] }, false);
       return;
@@ -521,9 +553,27 @@ export const ChatPanel = forwardRef<ChatPanelHandle, Props>(function ChatPanel({
 
   function handleTextareaChange(event: React.ChangeEvent<HTMLTextAreaElement>) {
     setQuestion(event.target.value);
+    setPromptSuggestionError(null);
     const element = event.target;
     element.style.height = "auto";
     element.style.height = `${Math.min(element.scrollHeight, 120)}px`;
+  }
+
+  async function handleSuggestPrompt() {
+    if (isSuggestingPrompt || !canSuggestPrompt) {
+      return;
+    }
+    setIsSuggestingPrompt(true);
+    setPromptSuggestionError(null);
+    try {
+      const response = await getChatPromptSuggestion(hubId, normalizedSelectedSourceIds);
+      setQuestion(response.prompt);
+      textareaRef.current?.focus();
+    } catch (error) {
+      setPromptSuggestionError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setIsSuggestingPrompt(false);
+    }
   }
 
   async function submitQuestion(event?: React.FormEvent, overrideQuestion?: string) {
@@ -628,6 +678,43 @@ export const ChatPanel = forwardRef<ChatPanelHandle, Props>(function ChatPanel({
       setIsSending(false);
     }
   }
+  submitQuestionRef.current = submitQuestion;
+
+  useEffect(() => {
+    if (hasAutoSent.current || isBootstrapping || sourcesLoading || !initialPromptParam) return;
+    if (shouldAutoSendPrompt && (!canAsk || activeSessionId !== null || messages.length > 0)) return;
+
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("prompt");
+    params.delete("promptAction");
+    params.delete("tab");
+    if (params.get("session") === "new") {
+      params.delete("session");
+    }
+    const query = params.toString();
+
+    hasAutoSent.current = true;
+    if (shouldAutoSendPrompt) {
+      setQuestion(initialPromptParam);
+      router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+      void submitQuestionRef.current?.(undefined, initialPromptParam);
+      return;
+    }
+
+    setQuestion(initialPromptParam);
+    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+  }, [
+    activeSessionId,
+    canAsk,
+    initialPromptParam,
+    isBootstrapping,
+    messages.length,
+    pathname,
+    router,
+    searchParams,
+    shouldAutoSendPrompt,
+    sourcesLoading,
+  ]);
 
   function handleComposerKeyDown(event: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (event.key === "Enter" && !event.shiftKey) {
@@ -715,14 +802,14 @@ export const ChatPanel = forwardRef<ChatPanelHandle, Props>(function ChatPanel({
                 <p className="chat__empty-text">Ask a question about your hub</p>
                 <p className="muted">Caddie will search your selected sources for answers.</p>
                 <div className="chat__prompt-chips">
-                  {["Summarise the vault", "Key risks", "Give me an overview"].map((prompt) => (
+                  {CHAT_SUGGESTED_PROMPTS.map(({ label, prompt }) => (
                     <button
-                      key={prompt}
+                      key={label}
                       type="button"
                       className="chat__prompt-chip"
                       onClick={() => { setQuestion(prompt); textareaRef.current?.focus(); }}
                     >
-                      {prompt}
+                      {label}
                     </button>
                   ))}
                 </div>
@@ -875,6 +962,18 @@ export const ChatPanel = forwardRef<ChatPanelHandle, Props>(function ChatPanel({
               </p>
             )}
             <div className="chat__input-row" onClick={() => textareaRef.current?.focus()}>
+              {!isComposerLocked && (
+                <button
+                  type="button"
+                  className="chat__prompt-suggest-btn"
+                  onClick={() => void handleSuggestPrompt()}
+                  disabled={isSuggestingPrompt || !canSuggestPrompt}
+                  title={!canSuggestPrompt && hasSelectableSources ? "Select at least one source to get a tailored prompt." : undefined}
+                  aria-label={isSuggestingPrompt ? "Getting tailored prompt suggestion" : "Suggest a tailored prompt"}
+                >
+                  <SparklesIcon className="chat__prompt-suggest-icon" />
+                </button>
+              )}
               <textarea
                 ref={textareaRef}
                 className="chat__textarea"
@@ -895,6 +994,9 @@ export const ChatPanel = forwardRef<ChatPanelHandle, Props>(function ChatPanel({
                 <PaperAirplaneIcon className="chat__send-icon" />
               </button>
             </div>
+            {promptSuggestionError && (
+              <p className="chat__prompt-suggest-error">Error: {promptSuggestionError}</p>
+            )}
           </form>
           <p className="chat__disclaimer">
             Caddie can make mistakes. Check important info.
