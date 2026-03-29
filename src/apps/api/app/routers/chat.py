@@ -8,7 +8,7 @@ from postgrest.exceptions import APIError
 from supabase import Client
 
 from ..dependencies import CurrentUser, get_current_user, get_supabase_user_client, rate_limit_user_ip
-from ..schemas import ChatRequest, ChatResponse, ChatSessionDetail, ChatSessionRenameRequest, ChatSessionSummary, HistoryMessage
+from ..schemas import ChatPromptSuggestionResponse, ChatRequest, ChatResponse, ChatSessionDetail, ChatSessionRenameRequest, ChatSessionSummary, HistoryMessage
 from ..services.store import store
 from .access import require_accepted, require_hub_member
 from .errors import raise_postgrest_error
@@ -48,6 +48,37 @@ def ask(
     if is_new_session:
         store.log_activity(client, str(payload.hub_id), current_user.id, "started", "chat", response.session_id, {"title": response.session_title})
     return response
+
+
+@router.get(
+    "/prompt-suggestion",
+    response_model=ChatPromptSuggestionResponse,
+    dependencies=[Depends(rate_limit_user_ip("chat", "rate_limit_chat_per_minute"))],
+)
+def suggest_prompt(
+    hub_id: UUID = Query(...),
+    source_ids: List[UUID] | None = Query(default=None),
+    client: Client = Depends(get_supabase_user_client),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> ChatPromptSuggestionResponse:
+    try:
+        member = require_hub_member(client, str(hub_id), current_user.id)
+        require_accepted(member)
+        normalized_source_ids = [str(source_id) for source_id in source_ids] if source_ids is not None else None
+        return ChatPromptSuggestionResponse(prompt=store.suggest_chat_prompt(client, str(hub_id), normalized_source_ids))
+    except KeyError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Hub not found.") from exc
+    except OpenAIError as exc:
+        status_code = getattr(exc, "status_code", None)
+        logger.exception("OpenAI error during prompt suggestion")
+        if status_code == 429:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="OpenAI quota or rate limit exceeded.",
+            ) from exc
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="OpenAI request failed.") from exc
+    except APIError as exc:
+        raise_postgrest_error(exc)
 
 
 @router.get(

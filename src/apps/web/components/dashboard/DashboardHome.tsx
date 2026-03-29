@@ -20,6 +20,7 @@ import { useAuth } from '../auth/AuthProvider';
 import { describeEventParts, formatRelativeTime, getEventTone } from '../../lib/utils';
 import { MiniCalendar } from './MiniCalendar';
 import { getEventIcon, buildHubNameMap } from './dashboardUtils';
+import { selectDashboardPrompts } from './dashboardPromptRules';
 import { ProfileAvatar } from '../profile/ProfileAvatar';
 
 export function DashboardHome() {
@@ -136,17 +137,10 @@ export function DashboardHome() {
 
   const activityItems = activityEvents ?? [];
 
-  // Suggested prompts
-  const suggestedPrompts = [
-    {
-      text: 'Summarize the key takeaways from your most recent documents',
-      hubId: recentHubs[0]?.id,
-    },
-    {
-      text: 'What are the main action items across your hubs?',
-      hubId: recentHubs[1]?.id ?? recentHubs[0]?.id,
-    },
-  ].filter((p) => p.hubId);
+  const suggestedPrompts = useMemo(
+    () => selectDashboardPrompts(hubs, reminders),
+    [hubs, reminders],
+  );
 
   return (
     <div className="dash-home">
@@ -399,7 +393,7 @@ export function DashboardHome() {
                     className="dash-prompt-card"
                     onClick={() => {
                       if (prompt.hubId) {
-                        router.push(`/hubs/${prompt.hubId}?tab=chat&prompt=${encodeURIComponent(prompt.text)}`);
+                        router.push(`/hubs/${prompt.hubId}?tab=chat&session=new&promptAction=send&prompt=${encodeURIComponent(prompt.text)}`);
                       }
                     }}
                     type="button"

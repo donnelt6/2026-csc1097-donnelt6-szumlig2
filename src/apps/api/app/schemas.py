@@ -328,6 +328,10 @@ class ChatRequest(StrictModel):
     session_id: Optional[UUID] = None
 
 
+class ChatPromptSuggestionResponse(BaseModel):
+    prompt: str
+
+
 class ChatResponse(BaseModel):
     answer: str
     citations: List[Citation] = Field(default_factory=list)

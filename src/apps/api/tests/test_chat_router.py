@@ -81,6 +81,20 @@ def test_chat_success(client, monkeypatch) -> None:
     assert data["answer"] == "Answer"
 
 
+def test_chat_prompt_suggestion_success(client, monkeypatch) -> None:
+    monkeypatch.setattr(store_module.store, "get_member_role", lambda _client, hub_id, user_id: _member(accepted=True))
+    monkeypatch.setattr(
+        store_module.store,
+        "suggest_chat_prompt",
+        lambda _client, hub_id, source_ids=None: "What deadlines matter most here?",
+    )
+
+    resp = client.get("/chat/prompt-suggestion", params={"hub_id": "11111111-1111-1111-1111-111111111111"})
+
+    assert resp.status_code == 200
+    assert resp.json() == {"prompt": "What deadlines matter most here?"}
+
+
 def test_chat_accepts_source_ids(client, monkeypatch) -> None:
     rl = rate_limit_module.RateLimitResult(allowed=True, remaining=1, reset_in_seconds=60)
     monkeypatch.setitem(app.dependency_overrides, get_rate_limiter, lambda: FixedRateLimiter(rl))
