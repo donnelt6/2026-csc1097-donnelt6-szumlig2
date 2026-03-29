@@ -77,7 +77,7 @@ def create_reminder(
         reminder = store.create_reminder(client, current_user.id, payload)
     except APIError as exc:
         raise_postgrest_error(exc)
-    store.log_activity(client, reminder.hub_id, current_user.id, "created", "reminder", reminder.id, {"message": reminder.message})
+    store.log_activity(client, reminder.hub_id, current_user.id, "created", "reminder", reminder.id, {"title": reminder.title, "message": reminder.message})
     return reminder
 
 
@@ -119,6 +119,8 @@ def update_reminder(
         updates["due_at"] = due_at.isoformat()
     if payload.timezone is not None:
         updates["timezone"] = payload.timezone
+    if payload.title is not None:
+        updates["title"] = payload.title
     if payload.message is not None:
         updates["message"] = payload.message
 
@@ -132,9 +134,9 @@ def update_reminder(
     except APIError as exc:
         raise_postgrest_error(exc)
     if payload.action in (ReminderUpdateAction.complete, ReminderUpdateAction.cancel):
-        store.log_activity(client, reminder.hub_id, current_user.id, payload.action.value, "reminder", reminder.id, {"message": reminder.message})
+        store.log_activity(client, reminder.hub_id, current_user.id, payload.action.value, "reminder", reminder.id, {"title": reminder.title, "message": reminder.message})
     elif payload.action is None:
-        store.log_activity(client, reminder.hub_id, current_user.id, "updated", "reminder", reminder.id, {"message": reminder.message})
+        store.log_activity(client, reminder.hub_id, current_user.id, "updated", "reminder", reminder.id, {"title": reminder.title, "message": reminder.message})
     return reminder
 
 
@@ -156,7 +158,7 @@ def delete_reminder(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Reminder not found") from exc
     except APIError as exc:
         raise_postgrest_error(exc)
-    store.log_activity(client, reminder.hub_id, current_user.id, "deleted", "reminder", reminder.id, {"message": reminder.message})
+    store.log_activity(client, reminder.hub_id, current_user.id, "deleted", "reminder", reminder.id, {"title": reminder.title, "message": reminder.message})
 
 
 # List pending/filtered reminder candidates for a hub/source.
@@ -233,7 +235,7 @@ def decide_candidate(
             message=message,
         )
         reminder = store.create_reminder(client, current_user.id, create_payload)
-        store.log_activity(client, reminder.hub_id, current_user.id, "created", "reminder", reminder.id, {"message": reminder.message})
+        store.log_activity(client, reminder.hub_id, current_user.id, "created", "reminder", reminder.id, {"title": reminder.title, "message": reminder.message})
 
     # Persist review status and user feedback (accept/decline edits).
     try:

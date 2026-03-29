@@ -627,6 +627,7 @@ export async function createReminder(data: {
   source_id?: string;
   due_at: string;
   timezone: string;
+  title?: string;
   message?: string;
 }): Promise<Reminder> {
   const res = await authedFetch(`${API_BASE}/reminders`, {
@@ -642,6 +643,7 @@ export async function updateReminder(
   data: {
     due_at?: string;
     timezone?: string;
+    title?: string;
     message?: string;
     action?: ReminderUpdateAction;
     snooze_minutes?: number;

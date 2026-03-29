@@ -652,6 +652,7 @@ class Reminder(BaseModel):
     source_id: Optional[str] = None
     due_at: datetime
     timezone: str
+    title: Optional[str] = None
     message: Optional[str] = None
     status: ReminderStatus
     created_at: datetime = Field(default_factory=datetime.utcnow)
@@ -664,6 +665,7 @@ class ReminderCreate(StrictModel):
     source_id: Optional[UUID] = None
     due_at: datetime
     timezone: str = Field(..., min_length=1, max_length=64)
+    title: Optional[str] = Field(default=None, max_length=100)
     message: Optional[str] = Field(default=None, max_length=500)
 
 
@@ -676,6 +678,7 @@ class ReminderUpdateAction(str, Enum):
 class ReminderUpdate(StrictModel):
     due_at: Optional[datetime] = None
     timezone: Optional[str] = Field(default=None, min_length=1, max_length=64)
+    title: Optional[str] = Field(default=None, max_length=100)
     message: Optional[str] = Field(default=None, max_length=500)
     action: Optional[ReminderUpdateAction] = None
     snooze_minutes: Optional[int] = Field(default=None, ge=1, le=60 * 24 * 30)

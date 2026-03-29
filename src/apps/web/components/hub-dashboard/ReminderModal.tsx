@@ -158,7 +158,7 @@ function DayRemindersList({ reminders, onEdit }: { reminders: Reminder[]; onEdit
       {sorted.map((r) => (
         <div key={r.id} className="hdash__modal-reminder" onClick={() => onEdit(r)}>
           <div className="hdash__modal-reminder-info">
-            <span className="hdash__modal-reminder-msg">{r.message || 'Reminder'}</span>
+            <span className="hdash__modal-reminder-msg">{r.title || r.message || 'Reminder'}</span>
             <span className="hdash__modal-reminder-time">{formatLocal(r.due_at)}</span>
           </div>
           <div className="hdash__modal-reminder-meta">
@@ -180,6 +180,7 @@ function DayCreateForm({ hubId, date, onSaved }: { hubId: string; date: Date; on
   const defaults = useMemo(() => defaultTime(date), [date]);
   const [hour, setHour] = useState(defaults.hour);
   const [minute, setMinute] = useState(defaults.minute);
+  const [title, setTitle] = useState('');
   const [message, setMessage] = useState('');
   const [error, setError] = useState<string | null>(null);
 
@@ -187,6 +188,7 @@ function DayCreateForm({ hubId, date, onSaved }: { hubId: string; date: Date; on
     mutationFn: createReminder,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['reminders', hubId] });
+      setTitle('');
       setMessage('');
       setHour(9);
       setMinute(0);
@@ -204,6 +206,7 @@ function DayCreateForm({ hubId, date, onSaved }: { hubId: string; date: Date; on
       hub_id: hubId,
       due_at: iso,
       timezone,
+      title: title.trim() || undefined,
       message: message.trim() || undefined,
     });
   };
@@ -215,12 +218,23 @@ function DayCreateForm({ hubId, date, onSaved }: { hubId: string; date: Date; on
         <TimePicker hour={hour} minute={minute} onHourChange={setHour} onMinuteChange={setMinute} selectedDate={toDateStr(date)} />
       </div>
       <label className="hdash__form-label">
-        <span className="hdash__form-label-text">Message</span>
+        <span className="hdash__form-label-text">Title</span>
+        <input
+          type="text"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          placeholder="e.g. Assignment deadline"
+          className="hdash__form-input"
+          maxLength={100}
+        />
+      </label>
+      <label className="hdash__form-label">
+        <span className="hdash__form-label-text">Note <span className="hdash__form-optional">(optional)</span></span>
         <textarea
           value={message}
           onChange={(e) => setMessage(e.target.value)}
-          placeholder="What should you be reminded about?"
-          rows={3}
+          placeholder="Any extra details..."
+          rows={2}
           className="hdash__form-input hdash__form-textarea"
         />
       </label>
@@ -246,6 +260,7 @@ function CreateModal({ hubId, onClose, onSaved }: CreateModalProps) {
   const [date, setDate] = useState(() => toDateStr(new Date()));
   const [hour, setHour] = useState(defaults.hour);
   const [minute, setMinute] = useState(defaults.minute);
+  const [title, setTitle] = useState('');
   const [message, setMessage] = useState('');
   const [error, setError] = useState<string | null>(null);
 
@@ -267,6 +282,7 @@ function CreateModal({ hubId, onClose, onSaved }: CreateModalProps) {
       hub_id: hubId,
       due_at: iso,
       timezone,
+      title: title.trim() || undefined,
       message: message.trim() || undefined,
     });
   };
@@ -281,7 +297,7 @@ function CreateModal({ hubId, onClose, onSaved }: CreateModalProps) {
         <div className="modal__header">
           <div>
             <h3 className="modal__title">Create Reminder</h3>
-            <p className="modal__subtitle">Set a date, time, and message.</p>
+            <p className="modal__subtitle">Set a date, time, and title for your reminder.</p>
           </div>
         </div>
 
@@ -297,12 +313,23 @@ function CreateModal({ hubId, onClose, onSaved }: CreateModalProps) {
             </div>
           </div>
           <label className="hdash__form-label">
-            <span className="hdash__form-label-text">Message</span>
+            <span className="hdash__form-label-text">Title</span>
+            <input
+              type="text"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="e.g. Assignment deadline"
+              className="hdash__form-input"
+              maxLength={100}
+            />
+          </label>
+          <label className="hdash__form-label">
+            <span className="hdash__form-label-text">Note <span className="hdash__form-optional">(optional)</span></span>
             <textarea
               value={message}
               onChange={(e) => setMessage(e.target.value)}
-              placeholder="What should you be reminded about?"
-              rows={3}
+              placeholder="Any extra details..."
+              rows={2}
               className="hdash__form-input hdash__form-textarea"
             />
           </label>
@@ -330,6 +357,7 @@ function EditModal({ hubId, reminder, onClose, onSaved }: EditModalProps) {
   const [date, setDate] = useState(() => toDateStr(new Date(reminder.due_at)));
   const [hour, setHour] = useState(initial.hour);
   const [minute, setMinute] = useState(initial.minute);
+  const [title, setTitle] = useState(reminder.title ?? '');
   const [message, setMessage] = useState(reminder.message ?? '');
   const [error, setError] = useState<string | null>(null);
 
@@ -355,7 +383,7 @@ function EditModal({ hubId, reminder, onClose, onSaved }: EditModalProps) {
     if (!date) { setError('Please select a date.'); return; }
     setError(null);
     const iso = buildIso(date, hour, minute);
-    updateMut.mutate({ due_at: iso, timezone, message: message.trim() || undefined });
+    updateMut.mutate({ due_at: iso, timezone, title: title.trim() || undefined, message: message.trim() || undefined });
   };
 
   const busy = updateMut.isPending || deleteMut.isPending;
@@ -386,12 +414,23 @@ function EditModal({ hubId, reminder, onClose, onSaved }: EditModalProps) {
             </div>
           </div>
           <label className="hdash__form-label">
-            <span className="hdash__form-label-text">Message</span>
+            <span className="hdash__form-label-text">Title</span>
+            <input
+              type="text"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="e.g. Assignment deadline"
+              className="hdash__form-input"
+              maxLength={100}
+            />
+          </label>
+          <label className="hdash__form-label">
+            <span className="hdash__form-label-text">Note <span className="hdash__form-optional">(optional)</span></span>
             <textarea
               value={message}
               onChange={(e) => setMessage(e.target.value)}
-              placeholder="What should you be reminded about?"
-              rows={3}
+              placeholder="Any extra details..."
+              rows={2}
               className="hdash__form-input hdash__form-textarea"
             />
           </label>

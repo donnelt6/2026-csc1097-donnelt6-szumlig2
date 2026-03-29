@@ -20,8 +20,6 @@ interface FullCalendarProps {
   candidates: ReminderCandidate[];
   selectedDate: Date | null;
   onDateClick: (date: Date) => void;
-  onReminderClick: (reminder: Reminder) => void;
-  onCandidateClick: (candidate: ReminderCandidate) => void;
 }
 
 type CalendarEvent =
@@ -36,8 +34,6 @@ export function FullCalendar({
   candidates,
   selectedDate,
   onDateClick,
-  onReminderClick,
-  onCandidateClick,
 }: FullCalendarProps) {
   const today = new Date();
   const isCurrentMonth = today.getMonth() === month && today.getFullYear() === year;
@@ -143,9 +139,9 @@ export function FullCalendar({
                       <div
                         key={`r-${evt.data.id}`}
                         className={`hdash__cal-event hdash__cal-event--${evt.data.status}`}
-                        title={evt.data.message || 'Reminder'}
+                        title={evt.data.title || evt.data.message || 'Reminder'}
                       >
-                        {evt.data.message || 'Reminder'}
+                        {evt.data.title || evt.data.message || 'Reminder'}
                       </div>
                     );
                   }

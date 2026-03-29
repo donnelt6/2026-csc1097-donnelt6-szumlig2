@@ -2667,6 +2667,7 @@ class SupabaseStore:
                     "source_id": str(payload.source_id) if payload.source_id else None,
                     "due_at": payload.due_at.isoformat(),
                     "timezone": payload.timezone,
+                    "title": payload.title,
                     "message": payload.message,
                     "status": ReminderStatus.scheduled.value,
                 }

@@ -28,7 +28,7 @@ export function RemindersPage({ hubId }: { hubId: string }) {
 
   /* Query reminders scoped to the visible month (with a buffer either side) */
   const dueFrom = new Date(year, month - 1, 1).toISOString();
-  const dueTo = new Date(year, month + 2, 0).toISOString();
+  const dueTo = new Date(year, month + 2, 0, 23, 59, 59).toISOString();
 
   const { data: reminders = [] } = useQuery({
     queryKey: ['reminders', hubId, dueFrom, dueTo],
@@ -64,10 +64,6 @@ export function RemindersPage({ hubId }: { hubId: string }) {
     setModal({ mode: 'edit', reminder });
   };
 
-  const handleCandidateClick = () => {
-    /* Scroll sidebar into view on mobile — candidates are managed in the sidebar */
-  };
-
   const closeModal = () => setModal({ mode: 'closed' });
 
   return (
@@ -80,8 +76,6 @@ export function RemindersPage({ hubId }: { hubId: string }) {
         candidates={candidates}
         selectedDate={selectedDate}
         onDateClick={handleDateClick}
-        onReminderClick={handleReminderClick}
-        onCandidateClick={handleCandidateClick}
       />
       <RemindersSidebar
         hubId={hubId}

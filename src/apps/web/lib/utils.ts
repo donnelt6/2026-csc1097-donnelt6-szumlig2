@@ -22,13 +22,15 @@ export function describeEventParts(event: ActivityEvent, currentUserId?: string)
       else if (event.action === 'removed') { action = `${actorLabel} removed`; subject = 'a member'; }
       else { action = `${actorLabel} joined hub`; }
       break;
-    case 'reminder':
-      if (event.action === 'complete') { action = `${actorLabel} completed reminder`; subject = msg; }
-      else if (event.action === 'cancel') { action = `${actorLabel} cancelled reminder`; subject = msg; }
-      else if (event.action === 'updated') { action = `${actorLabel} updated reminder`; subject = msg; }
-      else if (event.action === 'deleted') { action = `${actorLabel} deleted reminder`; subject = msg; }
-      else { action = `${actorLabel} created reminder`; subject = msg || name; }
+    case 'reminder': {
+      const rLabel = name || msg;
+      if (event.action === 'complete') { action = `${actorLabel} completed reminder`; subject = rLabel; }
+      else if (event.action === 'cancel') { action = `${actorLabel} cancelled reminder`; subject = rLabel; }
+      else if (event.action === 'updated') { action = `${actorLabel} updated reminder`; subject = rLabel; }
+      else if (event.action === 'deleted') { action = `${actorLabel} deleted reminder`; subject = rLabel; }
+      else { action = `${actorLabel} created reminder`; subject = rLabel; }
       break;
+    }
     case 'faq': action = `${actorLabel} generated ${((event.metadata?.count as number) || '')} FAQs`.replace(/\s+/g, ' ').trim(); break;
     case 'guide': action = `${actorLabel} generated guide`; subject = name; break;
     case 'chat': action = `${actorLabel} started chat`; subject = name; break;

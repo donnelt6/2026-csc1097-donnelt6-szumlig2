@@ -162,7 +162,7 @@ function ManualSection({
             >
               <div className={`hdash__manual-dot hdash__manual-dot--${r.status}`} />
               <div className="hdash__manual-info">
-                <div className="hdash__manual-msg">{r.message || 'Reminder'}</div>
+                <div className="hdash__manual-msg">{r.title || r.message || 'Reminder'}</div>
                 <div className="hdash__manual-due">{formatLocal(r.due_at)}</div>
               </div>
               <span className={`hdash__status hdash__status--${r.status}`}>

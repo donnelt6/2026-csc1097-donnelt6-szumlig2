@@ -283,6 +283,7 @@ export interface Reminder {
   source_id?: string | null;
   due_at: string;
   timezone: string;
+  title?: string | null;
   message?: string | null;
   status: ReminderStatus;
   created_at: string;
