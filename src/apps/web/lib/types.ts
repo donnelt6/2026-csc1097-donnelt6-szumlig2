@@ -79,6 +79,10 @@ export interface ChatResponse {
   flag_status: MessageFlagStatus;
 }
 
+export interface ChatPromptSuggestion {
+  prompt: string;
+}
+
 export interface Citation {
   source_id: string;
   snippet: string;

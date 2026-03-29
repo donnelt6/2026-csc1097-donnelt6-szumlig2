@@ -5,6 +5,7 @@ import { ChatPanel } from "../../components/ChatPanel";
 import {
   askQuestion,
   flagMessage,
+  getChatPromptSuggestion,
   getChatSessionMessages,
   listChatSessions,
 } from "../../lib/api";
@@ -30,6 +31,7 @@ vi.mock("../../lib/api", () => ({
   askQuestion: vi.fn(),
   deleteChatSession: vi.fn(),
   flagMessage: vi.fn(),
+  getChatPromptSuggestion: vi.fn(),
   getChatSessionMessages: vi.fn(),
   listChatSessions: vi.fn(),
 }));
@@ -73,6 +75,28 @@ describe("ChatPanel", () => {
 
     await waitFor(() => expect(screen.getByText("New Chat")).toBeInTheDocument());
     expect(screen.getByText("Ask a question about your hub")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Action items and deadlines" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Summarise" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Key Risks" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Suggest a prompt" })).toBeInTheDocument();
+  });
+
+  it("prefills the composer with a tailored AI suggestion", async () => {
+    vi.mocked(listChatSessions).mockResolvedValue([]);
+    vi.mocked(getChatPromptSuggestion).mockResolvedValue({
+      prompt: "What deadlines matter most here?",
+    });
+
+    renderWithQueryClient(
+      <ChatPanel hubId="hub-1" sources={sources} />
+    );
+
+    const user = userEvent.setup();
+    await waitFor(() => expect(screen.getByText("New Chat")).toBeInTheDocument());
+    await user.click(screen.getByRole("button", { name: "Suggest a prompt" }));
+
+    await waitFor(() => expect(getChatPromptSuggestion).toHaveBeenCalledWith("hub-1", ["src-1", "src-2"]));
+    expect(screen.getByLabelText("Ask a question")).toHaveValue("What deadlines matter most here?");
   });
 
   it("creates a saved session from the draft on first send", async () => {
@@ -212,6 +236,7 @@ describe("ChatPanel", () => {
 
     await waitFor(() => expect(screen.getByText("How do I submit assignments?")).toBeInTheDocument());
     expect(screen.getByText("Assignments")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Suggest a tailored prompt" })).toBeInTheDocument();
   });
 
   it("blocks composer input and submission while the chat is bootstrapping", async () => {
@@ -326,6 +351,46 @@ describe("ChatPanel", () => {
     rerender(<ChatPanel hubId="hub-1" sources={sources} />);
 
     await waitFor(() => expect(screen.getByRole("button", { name: "Sources (1/2)" })).toBeInTheDocument());
+  });
+
+  it("starts a new chat and auto-sends a launched dashboard prompt", async () => {
+    currentSearchParams = "session=new&promptAction=send&prompt=Extract%20the%20main%20action%20items";
+    vi.mocked(listChatSessions).mockResolvedValue([
+      {
+        id: "session-existing",
+        hub_id: "hub-1",
+        title: "Existing Chat",
+        scope: "hub",
+        source_ids: ["src-1", "src-2"],
+        created_at: "2026-01-02T12:00:00Z",
+        last_message_at: "2026-01-02T12:00:00Z",
+      },
+    ]);
+    vi.mocked(askQuestion).mockResolvedValue({
+      answer: "Checklist ready.",
+      citations: [],
+      message_id: "message-9",
+      session_id: "session-9",
+      session_title: "Action Items",
+      flag_status: "none",
+    });
+
+    renderWithQueryClient(
+      <ChatPanel hubId="hub-1" sources={sources} />
+    );
+
+    await waitFor(() => expect(askQuestion).toHaveBeenCalledWith({
+      hub_id: "hub-1",
+      question: "Extract the main action items",
+      scope: "hub",
+      source_ids: ["src-1", "src-2"],
+      session_id: null,
+    }));
+    expect(getChatSessionMessages).not.toHaveBeenCalled();
+    expect(replaceMock).toHaveBeenCalledWith("/hubs/hub-1", { scroll: false });
+    expect(replaceMock).toHaveBeenLastCalledWith("/hubs/hub-1?session=session-9", { scroll: false });
+    expect(await screen.findByText("Checklist ready.")).toBeInTheDocument();
+    expect(screen.getByText("Action Items")).toBeInTheDocument();
   });
 
   it("flags an assistant response for moderation", async () => {
