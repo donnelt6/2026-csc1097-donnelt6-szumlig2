@@ -11,6 +11,7 @@ import {
   SparklesIcon,
   BellIcon,
   ChatBubbleLeftIcon,
+  ArrowPathIcon,
 } from '@heroicons/react/24/outline';
 import { DocumentIcon, UserIcon } from '@heroicons/react/24/solid';
 import { listActivity, listHubs, listReminders, listChatSessions } from '../../lib/api';
@@ -27,6 +28,7 @@ export function DashboardHome() {
   const { user } = useAuth();
   const router = useRouter();
   const [heroSearch, setHeroSearch] = useState('');
+  const [promptRefreshIndex, setPromptRefreshIndex] = useState(0);
 
   const now = new Date();
   const [calMonth, setCalMonth] = useState(now.getMonth());
@@ -138,8 +140,8 @@ export function DashboardHome() {
   const activityItems = activityEvents ?? [];
 
   const suggestedPrompts = useMemo(
-    () => selectDashboardPrompts(hubs, reminders),
-    [hubs, reminders],
+    () => selectDashboardPrompts(hubs, reminders, 2, promptRefreshIndex),
+    [hubs, reminders, promptRefreshIndex],
   );
 
   return (
@@ -383,8 +385,19 @@ export function DashboardHome() {
           {suggestedPrompts.length > 0 && (
             <div className="dash-prompts-section">
               <div className="dash-prompts-header">
-                <SparklesIcon className="dash-sparkle-icon" />
-                <h3 className="dash-prompts-title">Suggested Caddie Prompts</h3>
+                <div className="dash-prompts-heading">
+                  <SparklesIcon className="dash-sparkle-icon" />
+                  <h3 className="dash-prompts-title">Suggested Caddie Prompts</h3>
+                </div>
+                <button
+                  type="button"
+                  className="dash-prompts-refresh"
+                  onClick={() => setPromptRefreshIndex((current) => current + 1)}
+                  aria-label="Refresh suggested prompts"
+                  title="Refresh suggested prompts"
+                >
+                  <ArrowPathIcon className="dash-prompts-refresh-icon" />
+                </button>
               </div>
               <div className="dash-prompt-list">
                 {suggestedPrompts.map((prompt, i) => (

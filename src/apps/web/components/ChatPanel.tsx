@@ -196,9 +196,11 @@ export const ChatPanel = forwardRef<ChatPanelHandle, Props>(function ChatPanel({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const modalCloseRef = useRef<HTMLButtonElement>(null);
+  const submitQuestionRef = useRef<((event?: React.FormEvent, overrideQuestion?: string) => Promise<void>) | null>(null);
   const previousCompleteSourceIdsRef = useRef<string[]>([]);
   const sessionSourceCacheRef = useRef<Map<string | null, string[]>>(new Map());
   const pendingSessionSourceIdsRef = useRef<string[] | null>(null);
+  const hasActivatedNewSessionDraftRef = useRef(false);
 
   const readSessionSourceCache = (sessionId: string | null): string[] | null => {
     const inMemory = sessionSourceCacheRef.current.get(sessionId);
@@ -242,6 +244,7 @@ export const ChatPanel = forwardRef<ChatPanelHandle, Props>(function ChatPanel({
   }, [activeSessionId, sessionList]);
   useEffect(() => {
     hasAutoSent.current = false;
+    hasActivatedNewSessionDraftRef.current = false;
   }, [hubId, initialPromptParam, initialPromptAction, initialSessionParam]);
 
   useEffect(() => {
@@ -366,34 +369,6 @@ export const ChatPanel = forwardRef<ChatPanelHandle, Props>(function ChatPanel({
     };
   }, [hubId, refetchSessionList]);
 
-  function clearPromptLaunchParams() {
-    const params = new URLSearchParams(searchParams.toString());
-    params.delete("prompt");
-    params.delete("promptAction");
-    params.delete("tab");
-    if (params.get("session") === "new") {
-      params.delete("session");
-    }
-    const query = params.toString();
-    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
-  }
-
-  useEffect(() => {
-    if (hasAutoSent.current || isBootstrapping || sourcesLoading || !initialPromptParam) return;
-    if (shouldAutoSendPrompt && (!canAsk || activeSessionId !== null || messages.length > 0)) return;
-
-    hasAutoSent.current = true;
-    if (shouldAutoSendPrompt) {
-      setQuestion(initialPromptParam);
-      clearPromptLaunchParams();
-      void submitQuestion(undefined, initialPromptParam);
-      return;
-    }
-
-    setQuestion(initialPromptParam);
-    clearPromptLaunchParams();
-  }, [activeSessionId, canAsk, isBootstrapping, messages.length, shouldAutoSendPrompt, sourcesLoading, initialPromptParam]);
-
   const getSourceName = (sourceId: string): string => {
     const source = sources.find((item) => item.id === sourceId);
     return source?.original_name ?? sourceId.slice(0, 8);
@@ -507,7 +482,12 @@ export const ChatPanel = forwardRef<ChatPanelHandle, Props>(function ChatPanel({
   const currentSessionParam = searchParams.get("session");
   useEffect(() => {
     if (isBootstrapping) return;
-    if (currentSessionParam === "new" && activeSessionId === null) {
+    if (
+      currentSessionParam === "new"
+      && activeSessionId === null
+      && !hasActivatedNewSessionDraftRef.current
+    ) {
+      hasActivatedNewSessionDraftRef.current = true;
       sessionSourceCacheRef.current.delete(null);
       activateDraft({ messages: [], scope, selectedSourceIds: [...completeSourceIds] }, false);
       return;
@@ -698,6 +678,43 @@ export const ChatPanel = forwardRef<ChatPanelHandle, Props>(function ChatPanel({
       setIsSending(false);
     }
   }
+  submitQuestionRef.current = submitQuestion;
+
+  useEffect(() => {
+    if (hasAutoSent.current || isBootstrapping || sourcesLoading || !initialPromptParam) return;
+    if (shouldAutoSendPrompt && (!canAsk || activeSessionId !== null || messages.length > 0)) return;
+
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("prompt");
+    params.delete("promptAction");
+    params.delete("tab");
+    if (params.get("session") === "new") {
+      params.delete("session");
+    }
+    const query = params.toString();
+
+    hasAutoSent.current = true;
+    if (shouldAutoSendPrompt) {
+      setQuestion(initialPromptParam);
+      router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+      void submitQuestionRef.current?.(undefined, initialPromptParam);
+      return;
+    }
+
+    setQuestion(initialPromptParam);
+    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+  }, [
+    activeSessionId,
+    canAsk,
+    initialPromptParam,
+    isBootstrapping,
+    messages.length,
+    pathname,
+    router,
+    searchParams,
+    shouldAutoSendPrompt,
+    sourcesLoading,
+  ]);
 
   function handleComposerKeyDown(event: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (event.key === "Enter" && !event.shiftKey) {

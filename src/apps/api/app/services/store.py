@@ -182,7 +182,7 @@ class SupabaseStore:
                     for member in (members_response.data or [])
                     if member.get("user_id")
                 }
-                profile_lookup = self._resolve_user_profiles_by_ids(user_ids)
+                profile_lookup = self.resolve_user_profiles_by_ids(user_ids)
                 emails_by_hub: dict[str, List[str]] = {}
                 profiles_by_hub: dict[str, List[UserProfileSummary]] = {}
                 for m in members_response.data:
@@ -398,13 +398,19 @@ class SupabaseStore:
         hub_row = hub_response.data[0]
         hub_name = str(hub_row.get("name") or "Hub")
         hub_description = str(hub_row.get("description") or "")
-        complete_source_ids = self._complete_source_ids_for_hub(client, str(hub_id))
-        normalized_source_ids, _ = self._normalize_chat_source_ids(client, str(hub_id), source_ids)
-        allowed_source_ids = set(normalized_source_ids)
-        complete_sources = [
-            source for source in self.list_sources(client, str(hub_id))
-            if source.status == SourceStatus.complete and (source_ids is None or source.id in allowed_source_ids)
+        all_sources = self.list_sources(client, str(hub_id))
+        complete_sources_in_order = [
+            source for source in all_sources
+            if source.status == SourceStatus.complete
         ]
+        complete_source_ids = [source.id for source in complete_sources_in_order]
+        normalized_source_ids = self._normalize_source_ids_to_complete_order(source_ids, complete_source_ids)
+        allowed_source_ids = set(normalized_source_ids)
+        complete_sources = (
+            complete_sources_in_order
+            if source_ids is None
+            else [source for source in complete_sources_in_order if source.id in allowed_source_ids]
+        )
 
         source_names = [source.original_name for source in complete_sources[:6]]
         source_types = sorted({source.type.value for source in complete_sources})
@@ -458,6 +464,7 @@ class SupabaseStore:
                 {"role": "user", "content": user_prompt},
             ],
             temperature=0.8 if all_sources_selected else 0.4,
+            max_tokens=60,
         )
         suggestion = (completion.choices[0].message.content or "").strip()
         suggestion = suggestion.splitlines()[0].strip().strip('"').strip("'")
@@ -2689,13 +2696,13 @@ class SupabaseStore:
         if not user_ids:
             return {}
 
-        profile_lookup = self._resolve_user_profiles_by_ids(user_ids)
+        profile_lookup = self.resolve_user_profiles_by_ids(user_ids)
         return {
             user_id: profile.display_name or profile.email or user_id
             for user_id, profile in profile_lookup.items()
         }
 
-    def _resolve_user_profiles_by_ids(self, user_ids: set[str]) -> Dict[str, UserProfileSummary]:
+    def resolve_user_profiles_by_ids(self, user_ids: set[str]) -> Dict[str, UserProfileSummary]:
         if not user_ids:
             return {}
 

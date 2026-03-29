@@ -24,7 +24,7 @@ def _require_owner(member: HubMember) -> None:
 
 
 def _attach_profiles(members: List[HubMember]) -> List[HubMember]:
-    profile_by_id = store._resolve_user_profiles_by_ids({member.user_id for member in members})
+    profile_by_id = store.resolve_user_profiles_by_ids({member.user_id for member in members})
     for member in members:
         profile = profile_by_id.get(member.user_id)
         if not profile:

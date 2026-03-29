@@ -7023,8 +7023,15 @@ textarea {
 .dash-prompts-header {
   display: flex;
   align-items: center;
-  gap: 8px;
+  justify-content: space-between;
   margin-bottom: 14px;
+}
+
+.dash-prompts-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
 }
 
 .dash-sparkle-icon {
@@ -7040,6 +7047,35 @@ textarea {
   font-weight: 700;
   color: var(--text);
   margin: 0;
+}
+
+.dash-prompts-refresh {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--card);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast), transform var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.dash-prompts-refresh:hover,
+.dash-prompts-refresh:focus-visible {
+  border-color: var(--accent);
+  background: var(--accent-glow);
+  color: var(--accent);
+  transform: rotate(18deg);
+  outline: none;
+}
+
+.dash-prompts-refresh-icon {
+  width: 16px;
+  height: 16px;
 }
 
 .dash-prompt-list {

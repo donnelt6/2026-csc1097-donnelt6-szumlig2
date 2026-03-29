@@ -334,7 +334,6 @@ def _mixed_follow_up_history() -> list[dict]:
 def test_suggest_chat_prompt_randomizes_focus_for_all_selected_sources(monkeypatch) -> None:
     llm = RecordingLLMClient("What risks matter most across these sources?")
     monkeypatch.setattr(store, "llm_client", llm)
-    monkeypatch.setattr(store, "_complete_source_ids_for_hub", lambda _client, _hub_id: ["src-1", "src-2", "src-3"])
     monkeypatch.setattr(
         store,
         "list_sources",
@@ -376,6 +375,7 @@ def test_suggest_chat_prompt_randomizes_focus_for_all_selected_sources(monkeypat
 
     assert suggestion == "What risks matter most across these sources?"
     assert llm.chat.completions.calls[0]["temperature"] == 0.8
+    assert llm.chat.completions.calls[0]["max_tokens"] == 60
     assert "Preferred focus for this suggestion: key risks, blockers, and unresolved issues" in llm.chat.completions.calls[0]["messages"][1]["content"]
     assert "Preferred source anchor: Notes.md" in llm.chat.completions.calls[0]["messages"][1]["content"]
 
