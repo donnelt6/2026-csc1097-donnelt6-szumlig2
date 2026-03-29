@@ -12,7 +12,14 @@ import {
 import type { Source } from "../../lib/types";
 import { renderWithQueryClient } from "../test-utils";
 
-const replaceMock = vi.fn();
+const replaceMock = vi.fn((nextUrl?: string) => {
+  if (!nextUrl) {
+    currentSearchParams = "";
+    return;
+  }
+  const queryIndex = nextUrl.indexOf("?");
+  currentSearchParams = queryIndex === -1 ? "" : nextUrl.slice(queryIndex + 1);
+});
 let currentSearchParams = "";
 
 vi.mock("next/navigation", () => ({
@@ -78,7 +85,11 @@ describe("ChatPanel", () => {
     expect(screen.getByRole("button", { name: "Action items and deadlines" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Summarise" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Key Risks" })).toBeInTheDocument();
+<<<<<<< Updated upstream
     expect(screen.getByRole("button", { name: "Suggest a prompt" })).toBeInTheDocument();
+=======
+    expect(screen.getByRole("button", { name: "Suggest a tailored prompt" })).toBeInTheDocument();
+>>>>>>> Stashed changes
   });
 
   it("prefills the composer with a tailored AI suggestion", async () => {
@@ -93,7 +104,11 @@ describe("ChatPanel", () => {
 
     const user = userEvent.setup();
     await waitFor(() => expect(screen.getByText("New Chat")).toBeInTheDocument());
+<<<<<<< Updated upstream
     await user.click(screen.getByRole("button", { name: "Suggest a prompt" }));
+=======
+    await user.click(screen.getByRole("button", { name: "Suggest a tailored prompt" }));
+>>>>>>> Stashed changes
 
     await waitFor(() => expect(getChatPromptSuggestion).toHaveBeenCalledWith("hub-1", ["src-1", "src-2"]));
     expect(screen.getByLabelText("Ask a question")).toHaveValue("What deadlines matter most here?");
