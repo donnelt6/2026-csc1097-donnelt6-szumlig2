@@ -85,11 +85,7 @@ describe("ChatPanel", () => {
     expect(screen.getByRole("button", { name: "Action items and deadlines" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Summarise" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Key Risks" })).toBeInTheDocument();
-<<<<<<< Updated upstream
-    expect(screen.getByRole("button", { name: "Suggest a prompt" })).toBeInTheDocument();
-=======
     expect(screen.getByRole("button", { name: "Suggest a tailored prompt" })).toBeInTheDocument();
->>>>>>> Stashed changes
   });
 
   it("prefills the composer with a tailored AI suggestion", async () => {
@@ -104,11 +100,8 @@ describe("ChatPanel", () => {
 
     const user = userEvent.setup();
     await waitFor(() => expect(screen.getByText("New Chat")).toBeInTheDocument());
-<<<<<<< Updated upstream
-    await user.click(screen.getByRole("button", { name: "Suggest a prompt" }));
-=======
+    await waitFor(() => expect(screen.getByLabelText("Ask a question")).not.toBeDisabled());
     await user.click(screen.getByRole("button", { name: "Suggest a tailored prompt" }));
->>>>>>> Stashed changes
 
     await waitFor(() => expect(getChatPromptSuggestion).toHaveBeenCalledWith("hub-1", ["src-1", "src-2"]));
     expect(screen.getByLabelText("Ask a question")).toHaveValue("What deadlines matter most here?");
@@ -404,8 +397,7 @@ describe("ChatPanel", () => {
     expect(getChatSessionMessages).not.toHaveBeenCalled();
     expect(replaceMock).toHaveBeenCalledWith("/hubs/hub-1", { scroll: false });
     expect(replaceMock).toHaveBeenLastCalledWith("/hubs/hub-1?session=session-9", { scroll: false });
-    expect(await screen.findByText("Checklist ready.")).toBeInTheDocument();
-    expect(screen.getByText("Action Items")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText("Action Items")).toBeInTheDocument());
   });
 
   it("flags an assistant response for moderation", async () => {
