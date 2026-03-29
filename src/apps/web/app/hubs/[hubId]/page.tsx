@@ -5,17 +5,18 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ChatPanel } from "../../../components/ChatPanel";
 import type { ChatPanelHandle } from "../../../components/ChatPanel";
-import { FaqPanel } from "../../../components/FaqPanel";
-import { GuidePanel } from "../../../components/GuidePanel";
 import { HubModerationPanel } from "../../../components/HubModerationPanel";
-import { TabSwitcher } from "../../../components/TabSwitcher";
 import { UploadPanel } from "../../../components/UploadPanel";
 import { MembersPanel } from "../../../components/MembersPanel";
+import { GuidePanel } from "../../../components/GuidePanel";
+import { FaqPanel } from "../../../components/FaqPanel";
 import { RemindersPanel } from "../../../components/RemindersPanel";
 import { ReminderCandidatesPanel } from "../../../components/ReminderCandidatesPanel";
+import { TabSwitcher } from "../../../components/TabSwitcher";
 import { acceptInvite, listInvites, listSources, trackHubAccess } from "../../../lib/api";
 import { useCurrentHub } from "../../../lib/CurrentHubContext";
 import { useHubTab } from "../../../lib/HubTabContext";
+import { useHubDashboardTab } from "../../../lib/HubDashboardTabContext";
 import { useSearch } from "../../../lib/SearchContext";
 import type { HubTab } from "../../../lib/HubTabContext";
 import type { Hub } from "../../../lib/types";
@@ -36,6 +37,7 @@ export default function HubDetail({ params }: { params: { hubId: string } }) {
   const hasTrackedAccess = useRef(false);
   const previousHubId = useRef<string | null>(null);
   const { activeTab, setActiveTab } = useHubTab();
+  const { activeDashTab } = useHubDashboardTab();
   const { currentHub: hub, isLoading: currentHubLoading } = useCurrentHub();
   const { setSearchQuery } = useSearch();
   const [reminderSubTab, setReminderSubTab] = useState('suggested');
@@ -216,26 +218,52 @@ export default function HubDetail({ params }: { params: { hubId: string } }) {
           )}
           {activeTab === 'dashboard' && (
             <div className="hub-dashboard">
-              <section className="hub-dashboard__section">
-                <h3 className="hub-dashboard__section-title">Guides</h3>
+              {activeDashTab === 'overview' && (
+                <>
+                  <section className="hub-dashboard__section">
+                    <h3 className="hub-dashboard__section-title">Guides</h3>
+                    <GuidePanel
+                      hubId={params.hubId}
+                      selectedSourceIds={chatSourceIds}
+                      hasSelectableSources={completeSourceIds.length > 0}
+                      canEdit={canUpload}
+                    />
+                  </section>
+                  <section className="hub-dashboard__section">
+                    <h3 className="hub-dashboard__section-title">FAQs</h3>
+                    <FaqPanel
+                      hubId={params.hubId}
+                      selectedSourceIds={chatSourceIds}
+                      hasSelectableSources={completeSourceIds.length > 0}
+                      canEdit={canUpload}
+                    />
+                  </section>
+                  <section className="hub-dashboard__section">
+                    <h3 className="hub-dashboard__section-title">Reminders</h3>
+                    <div className="grid" style={{ gap: '16px' }}>
+                      <TabSwitcher
+                        tabs={REMINDER_TABS}
+                        activeKey={reminderSubTab}
+                        onTabChange={setReminderSubTab}
+                      />
+                      {reminderSubTab === 'suggested' ? (
+                        <ReminderCandidatesPanel hubId={params.hubId} />
+                      ) : (
+                        <RemindersPanel hubId={params.hubId} />
+                      )}
+                    </div>
+                  </section>
+                </>
+              )}
+              {activeDashTab === 'guides' && (
                 <GuidePanel
                   hubId={params.hubId}
                   selectedSourceIds={chatSourceIds}
                   hasSelectableSources={completeSourceIds.length > 0}
                   canEdit={canUpload}
                 />
-              </section>
-              <section className="hub-dashboard__section">
-                <h3 className="hub-dashboard__section-title">FAQs</h3>
-                <FaqPanel
-                  hubId={params.hubId}
-                  selectedSourceIds={chatSourceIds}
-                  hasSelectableSources={completeSourceIds.length > 0}
-                  canEdit={canUpload}
-                />
-              </section>
-              <section className="hub-dashboard__section">
-                <h3 className="hub-dashboard__section-title">Reminders</h3>
+              )}
+              {activeDashTab === 'reminders' && (
                 <div className="grid" style={{ gap: '16px' }}>
                   <TabSwitcher
                     tabs={REMINDER_TABS}
@@ -248,7 +276,15 @@ export default function HubDetail({ params }: { params: { hubId: string } }) {
                     <RemindersPanel hubId={params.hubId} />
                   )}
                 </div>
-              </section>
+              )}
+              {activeDashTab === 'faqs' && (
+                <FaqPanel
+                  hubId={params.hubId}
+                  selectedSourceIds={chatSourceIds}
+                  hasSelectableSources={completeSourceIds.length > 0}
+                  canEdit={canUpload}
+                />
+              )}
             </div>
           )}
           {activeTab === 'settings' && (
