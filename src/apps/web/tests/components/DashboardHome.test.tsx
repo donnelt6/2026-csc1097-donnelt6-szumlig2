@@ -165,12 +165,6 @@ describe("DashboardHome", () => {
     renderWithQueryClient(<DashboardHome />);
 
     expect(await screen.findByText(/Extract the main action items, deadlines, and responsibilities/i)).toBeInTheDocument();
-<<<<<<< Updated upstream
-    expect(screen.getByText(/Turn the contents of this hub into a concise study guide/i)).toBeInTheDocument();
-    expect(screen.queryByText(/Compare the sources in this hub and highlight any contradictions/i)).not.toBeInTheDocument();
-    expect(screen.getAllByRole("button").filter((button) => button.className.includes("dash-prompt-card"))).toHaveLength(2);
-    expect(screen.queryByText(/most recent documents/i)).not.toBeInTheDocument();
-=======
     expect(screen.queryByText(/most recent documents/i)).not.toBeInTheDocument();
     expect(screen.getAllByRole("button").filter((button) => button.className.includes("dash-prompt-card"))).toHaveLength(2);
     expect(
@@ -178,6 +172,5 @@ describe("DashboardHome", () => {
       || screen.queryByText(/Compare the sources in this hub and highlight any contradictions/i)
       || screen.queryByText(/Identify the main risks, blockers, unanswered questions, or unresolved issues in this hub/i)
     ).toBeTruthy();
->>>>>>> Stashed changes
   });
 });
