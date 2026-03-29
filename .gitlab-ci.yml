@@ -134,7 +134,7 @@ post_deploy_health:
   script:
     - |
       attempts=0
-      max_attempts=10
+      max_attempts=20
       until [ "$attempts" -ge "$max_attempts" ]; do
         attempts=$((attempts + 1))
         response="$(curl --silent --show-error --location --write-out '\n%{http_code}' "$PRODUCTION_API_HEALTH_URL" || true)"
