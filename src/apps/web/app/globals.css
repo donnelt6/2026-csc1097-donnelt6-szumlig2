@@ -1566,14 +1566,16 @@ a {
   scrollbar-gutter: stable;
 }
 
-.page-content--no-hero .content-inner:has(.sources) {
+.page-content--no-hero .content-inner:has(.sources),
+.page-content--no-hero .content-inner:has(.members) {
   display: flex;
   flex-direction: column;
   overflow: hidden;
   padding: 0;
 }
 
-.page-content--no-hero .content-inner:has(.sources) .hub-tab-content {
+.page-content--no-hero .content-inner:has(.sources) .hub-tab-content,
+.page-content--no-hero .content-inner:has(.members) .hub-tab-content {
   flex: 1;
   min-height: 0;
   display: flex;
@@ -2458,6 +2460,7 @@ textarea {
 }
 
 .modal {
+  position: relative;
   width: 420px;
   max-width: calc(100vw - 32px);
   padding: 28px;
@@ -3678,7 +3681,8 @@ textarea {
 
 .button--danger {
   color: var(--danger);
-  border-color: var(--danger);
+  border: 1px solid var(--danger);
+  background: transparent;
 }
 
 .button--danger:hover:not(:disabled) {
@@ -6312,9 +6316,7 @@ textarea {
   }
 }
 
-/* ===========================
-   Dashboard
-   =========================== */
+/* Dashboard */
 
 .dash-page {
   padding: 24px 40px 40px;
