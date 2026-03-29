@@ -133,17 +133,32 @@ post_deploy_health:
     - test -n "$PRODUCTION_API_HEALTH_URL" || (echo "PRODUCTION_API_HEALTH_URL is required" && exit 1)
   script:
     - |
-      echo "Waiting 5 minutes before starting the production API health check."
-      sleep 300
+      echo "Waiting 2 minutes 30 seconds before starting the production API health check."
+      sleep 150
       attempts=0
       max_attempts=20
+      stability_checks=12
       until [ "$attempts" -ge "$max_attempts" ]; do
         attempts=$((attempts + 1))
         response="$(curl --silent --show-error --location --write-out '\n%{http_code}' "$PRODUCTION_API_HEALTH_URL" || true)"
         status="$(printf '%s\n' "$response" | tail -n 1)"
         body="$(printf '%s\n' "$response" | sed '$d')"
         if [ "$status" = "200" ] && printf '%s' "$body" | grep -F '"status":"ok"' >/dev/null; then
-          echo "Production API health check passed."
+          echo "Initial production API health check passed. Verifying stability for 3 minutes."
+          stable_attempt=0
+          while [ "$stable_attempt" -lt "$stability_checks" ]; do
+            stable_attempt=$((stable_attempt + 1))
+            sleep 15
+            stable_response="$(curl --silent --show-error --location --write-out '\n%{http_code}' "$PRODUCTION_API_HEALTH_URL" || true)"
+            stable_status="$(printf '%s\n' "$stable_response" | tail -n 1)"
+            stable_body="$(printf '%s\n' "$stable_response" | sed '$d')"
+            if [ "$stable_status" != "200" ] || ! printf '%s' "$stable_body" | grep -F '"status":"ok"' >/dev/null; then
+              echo "Production API became unhealthy during stability verification."
+              echo "Stability check $stable_attempt/$stability_checks failed with status ${stable_status:-unavailable}."
+              exit 1
+            fi
+          done
+          echo "Production API health check passed and remained healthy for 3 minutes."
           exit 0
         fi
         echo "Health check attempt $attempts/$max_attempts failed with status ${status:-unavailable}."
