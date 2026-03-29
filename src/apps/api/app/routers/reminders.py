@@ -133,6 +133,8 @@ def update_reminder(
         raise_postgrest_error(exc)
     if payload.action in (ReminderUpdateAction.complete, ReminderUpdateAction.cancel):
         store.log_activity(client, reminder.hub_id, current_user.id, payload.action.value, "reminder", reminder.id, {"message": reminder.message})
+    elif payload.action is None:
+        store.log_activity(client, reminder.hub_id, current_user.id, "updated", "reminder", reminder.id, {"message": reminder.message})
     return reminder
 
 
@@ -147,13 +149,14 @@ def delete_reminder(
     client: Client = Depends(get_supabase_user_client),
     current_user: CurrentUser = Depends(get_current_user),
 ) -> None:
-    _ = current_user
     try:
+        reminder = store.get_reminder(client, str(reminder_id))
         store.delete_reminder(client, str(reminder_id))
     except KeyError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Reminder not found") from exc
     except APIError as exc:
         raise_postgrest_error(exc)
+    store.log_activity(client, reminder.hub_id, current_user.id, "deleted", "reminder", reminder.id, {"message": reminder.message})
 
 
 # List pending/filtered reminder candidates for a hub/source.

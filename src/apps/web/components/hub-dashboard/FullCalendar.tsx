@@ -143,10 +143,6 @@ export function FullCalendar({
                       <div
                         key={`r-${evt.data.id}`}
                         className={`hdash__cal-event hdash__cal-event--${evt.data.status}`}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onReminderClick(evt.data);
-                        }}
                         title={evt.data.message || 'Reminder'}
                       >
                         {evt.data.message || 'Reminder'}
@@ -157,10 +153,6 @@ export function FullCalendar({
                     <div
                       key={`c-${evt.data.id}`}
                       className="hdash__cal-event hdash__cal-event--candidate"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onCandidateClick(evt.data);
-                      }}
                       title={evt.data.title_suggestion || evt.data.snippet}
                     >
                       {evt.data.title_suggestion || evt.data.snippet}

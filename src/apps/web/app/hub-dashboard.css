@@ -131,11 +131,13 @@
 
 .hdash__cal-cell {
   min-height: 100px;
+  min-width: 0;
   padding: 6px;
   background: var(--card);
   display: flex;
   flex-direction: column;
   cursor: pointer;
+  overflow: hidden;
   transition: background var(--transition-fast, 0.15s ease);
 }
 
@@ -193,6 +195,9 @@
   font-size: 0.6875rem;
   font-weight: 500;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   cursor: pointer;
@@ -506,6 +511,478 @@
   border-radius: 4px;
   background: var(--accent-glow);
   color: var(--accent);
+}
+
+/* ---------- Modal ---------- */
+.hdash__modal {
+  width: 520px;
+  max-width: calc(100vw - 32px);
+  display: flex;
+  flex-direction: column;
+  overflow: visible;
+}
+
+.hdash__modal-tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid var(--border);
+  margin: 0 -28px;
+  padding: 0 28px;
+}
+
+.hdash__modal-tab {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: 10px 16px;
+  font-size: 0.875rem;
+  font-weight: var(--font-medium);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.hdash__modal-tab:hover {
+  color: var(--text);
+}
+
+.hdash__modal-tab--active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+.hdash__modal-body {
+  padding: 20px 0 0;
+}
+
+.hdash__modal-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.hdash__modal-empty {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  text-align: center;
+  padding: 32px 0;
+}
+
+.hdash__modal-error {
+  font-size: 0.8125rem;
+  color: var(--danger);
+  margin: 0;
+}
+
+/* Day modal — reminder list items */
+.hdash__modal-reminder {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg-secondary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  margin-bottom: 8px;
+}
+
+.hdash__modal-reminder:last-child {
+  margin-bottom: 0;
+}
+
+.hdash__modal-reminder:hover {
+  border-color: var(--accent);
+  background: var(--accent-glow);
+}
+
+.hdash__modal-reminder-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.hdash__modal-reminder-msg {
+  font-size: 0.875rem;
+  font-weight: var(--font-medium);
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.hdash__modal-reminder-time {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+.hdash__modal-reminder-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.hdash__modal-reminder-edit {
+  width: 16px;
+  height: 16px;
+  color: var(--text-secondary);
+  transition: color var(--transition-fast);
+}
+
+.hdash__modal-reminder:hover .hdash__modal-reminder-edit {
+  color: var(--accent);
+}
+
+/* Form fields */
+.hdash__form-label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.hdash__form-label-text {
+  font-size: 0.8125rem;
+  font-weight: var(--font-medium);
+  color: var(--text-secondary);
+}
+
+.hdash__form-input {
+  background: var(--input-bg, var(--bg-secondary));
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 0.875rem;
+  font-family: var(--font-sans);
+  outline: none;
+  transition: border-color var(--transition-fast);
+}
+
+.hdash__form-input:focus {
+  border-color: var(--accent);
+}
+
+.hdash__form-input::placeholder {
+  color: var(--muted);
+}
+
+.hdash__form-textarea {
+  resize: vertical;
+  min-height: 72px;
+}
+
+/* Form row (date + time side by side) */
+.hdash__form-row {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.hdash__form-label--grow {
+  flex: 1;
+  min-width: 0;
+}
+
+/* ---------- Custom Date Picker ---------- */
+.hdash__datepicker {
+  position: relative;
+}
+
+.hdash__datepicker-trigger {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  width: 100%;
+  padding: 6px 10px;
+  background: var(--input-bg, var(--bg-secondary));
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  transition: border-color var(--transition-fast);
+}
+
+.hdash__datepicker-trigger:focus-within {
+  border-color: var(--accent);
+}
+
+.hdash__datepicker-cal-btn {
+  background: none;
+  border: none;
+  padding: 4px;
+  margin-right: 6px;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: background var(--transition-fast);
+  display: flex;
+  align-items: center;
+}
+
+.hdash__datepicker-cal-btn:hover {
+  background: var(--bg-secondary);
+}
+
+.hdash__datepicker-icon {
+  width: 16px;
+  height: 16px;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.hdash__datepicker-seg {
+  background: none;
+  border: none;
+  padding: 4px 2px;
+  border-radius: 4px;
+  font-size: 0.875rem;
+  font-family: var(--font-mono, monospace);
+  font-weight: var(--font-medium);
+  color: var(--text);
+  text-align: center;
+  cursor: pointer;
+  user-select: none;
+  outline: none;
+  transition: background var(--transition-fast);
+}
+
+.hdash__datepicker-seg:hover {
+  background: var(--accent-glow);
+}
+
+.hdash__datepicker-sep {
+  font-size: 0.875rem;
+  color: var(--muted);
+  user-select: none;
+}
+
+.hdash__datepicker-dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 10;
+  width: 260px;
+  padding: 14px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow-xl);
+  animation: slideDown 0.15s ease;
+}
+
+.hdash__datepicker-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.hdash__datepicker-month {
+  font-family: var(--font-headline);
+  font-size: 0.8125rem;
+  font-weight: var(--font-semibold);
+  color: var(--text);
+}
+
+.hdash__datepicker-nav {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 6px;
+  transition: all var(--transition-fast);
+}
+
+.hdash__datepicker-nav:hover {
+  background: var(--bg-secondary);
+  color: var(--text);
+}
+
+.hdash__datepicker-nav svg {
+  width: 14px;
+  height: 14px;
+}
+
+.hdash__datepicker-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+  text-align: center;
+}
+
+.hdash__datepicker-weekday {
+  font-size: 0.625rem;
+  font-weight: var(--font-semibold);
+  color: var(--muted);
+  padding: 4px 0;
+  text-transform: uppercase;
+}
+
+.hdash__datepicker-day {
+  position: relative;
+  width: 32px;
+  height: 32px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.8125rem;
+  color: var(--text);
+  background: none;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.hdash__datepicker-day:hover:not(.hdash__datepicker-day--empty) {
+  background: var(--bg-secondary);
+}
+
+.hdash__datepicker-day--empty {
+  cursor: default;
+}
+
+.hdash__datepicker-day--today {
+  background: var(--accent);
+  color: white;
+  font-weight: var(--font-semibold);
+}
+
+.hdash__datepicker-day--today:hover {
+  background: var(--accent);
+  opacity: 0.85;
+}
+
+.hdash__datepicker-day--selected {
+  background: var(--accent-glow);
+  color: var(--accent);
+  font-weight: var(--font-semibold);
+  border: 1.5px solid var(--accent);
+}
+
+.hdash__datepicker-day--selected.hdash__datepicker-day--today {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+
+.hdash__datepicker-day--past {
+  color: var(--muted);
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* ---------- Shared segment dropdown (used by DatePicker + TimePicker) ---------- */
+.hdash__seg-wrap {
+  position: relative;
+}
+
+.hdash__seg-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 50%;
+  margin-left: -32px;
+  z-index: 10;
+  width: 64px;
+  max-height: 200px;
+  overflow-y: auto;
+  scrollbar-width: none;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: var(--shadow-xl);
+  padding: 4px;
+}
+
+.hdash__seg-dropdown::-webkit-scrollbar {
+  display: none;
+}
+
+.hdash__seg-option {
+  display: block;
+  width: 100%;
+  padding: 6px 12px;
+  background: none;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.8125rem;
+  font-family: var(--font-sans);
+  color: var(--text);
+  text-align: center;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background var(--transition-fast);
+}
+
+.hdash__seg-option:hover {
+  background: var(--bg-secondary);
+}
+
+.hdash__seg-option--active {
+  background: var(--accent-glow);
+  color: var(--accent);
+  font-weight: var(--font-semibold);
+}
+
+/* ---------- Custom Time Picker ---------- */
+.hdash__tp {
+  position: relative;
+}
+
+.hdash__tp-trigger {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 10px;
+  background: var(--input-bg, var(--bg-secondary));
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  transition: border-color var(--transition-fast);
+}
+
+.hdash__tp-trigger:focus-within {
+  border-color: var(--accent);
+}
+
+.hdash__tp-icon {
+  width: 16px;
+  height: 16px;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+  margin-right: 6px;
+}
+
+.hdash__tp-seg {
+  background: none;
+  border: none;
+  padding: 4px 2px;
+  border-radius: 4px;
+  font-size: 0.9375rem;
+  font-family: var(--font-mono, monospace);
+  font-weight: var(--font-medium);
+  color: var(--text);
+  text-align: center;
+  cursor: pointer;
+  user-select: none;
+  outline: none;
+  transition: background var(--transition-fast);
+}
+
+.hdash__tp-seg:hover {
+  background: var(--accent-glow);
+}
+
+.hdash__tp-colon {
+  font-size: 1rem;
+  font-weight: var(--font-semibold);
+  color: var(--text-secondary);
+  line-height: 1;
+  user-select: none;
 }
 
 /* ---------- Placeholder ---------- */

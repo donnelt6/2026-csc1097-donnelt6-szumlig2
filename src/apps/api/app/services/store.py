@@ -2681,6 +2681,12 @@ class SupabaseStore:
             raise KeyError("Reminder not found")
         return Reminder(**response.data[0])
 
+    def get_reminder(self, client: Client, reminder_id: str) -> Reminder:
+        response = client.table("reminders").select("*").eq("id", reminder_id).execute()
+        if not response.data:
+            raise KeyError("Reminder not found")
+        return Reminder(**response.data[0])
+
     def delete_reminder(self, client: Client, reminder_id: str) -> None:
         response = client.table("reminders").delete().eq("id", reminder_id).execute()
         if not response.data:

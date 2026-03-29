@@ -25,6 +25,8 @@ export function describeEventParts(event: ActivityEvent, currentUserId?: string)
     case 'reminder':
       if (event.action === 'complete') { action = `${actorLabel} completed reminder`; subject = msg; }
       else if (event.action === 'cancel') { action = `${actorLabel} cancelled reminder`; subject = msg; }
+      else if (event.action === 'updated') { action = `${actorLabel} updated reminder`; subject = msg; }
+      else if (event.action === 'deleted') { action = `${actorLabel} deleted reminder`; subject = msg; }
       else { action = `${actorLabel} created reminder`; subject = msg || name; }
       break;
     case 'faq': action = `${actorLabel} generated ${((event.metadata?.count as number) || '')} FAQs`.replace(/\s+/g, ' ').trim(); break;

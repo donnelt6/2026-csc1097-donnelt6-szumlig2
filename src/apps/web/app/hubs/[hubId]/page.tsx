@@ -12,6 +12,7 @@ import { GuidePanel } from "../../../components/GuidePanel";
 import { FaqPanel } from "../../../components/FaqPanel";
 import { RemindersPanel } from "../../../components/RemindersPanel";
 import { ReminderCandidatesPanel } from "../../../components/ReminderCandidatesPanel";
+import { RemindersPage } from "../../../components/hub-dashboard/RemindersPage";
 import { TabSwitcher } from "../../../components/TabSwitcher";
 import { acceptInvite, listInvites, listSources, trackHubAccess } from "../../../lib/api";
 import { useCurrentHub } from "../../../lib/CurrentHubContext";
@@ -43,6 +44,7 @@ export default function HubDetail({ params }: { params: { hubId: string } }) {
   const [reminderSubTab, setReminderSubTab] = useState('suggested');
 
   // Switch to the tab specified in ?tab= URL param (e.g. from dashboard prompt links)
+  // Only override if the URL explicitly contains a tab param; otherwise leave the current tab alone
   useEffect(() => {
     const tabParam = searchParams.get('tab') as HubTab | null;
     const isNewHub = previousHubId.current !== params.hubId;
@@ -264,18 +266,7 @@ export default function HubDetail({ params }: { params: { hubId: string } }) {
                 />
               )}
               {activeDashTab === 'reminders' && (
-                <div className="grid" style={{ gap: '16px' }}>
-                  <TabSwitcher
-                    tabs={REMINDER_TABS}
-                    activeKey={reminderSubTab}
-                    onTabChange={setReminderSubTab}
-                  />
-                  {reminderSubTab === 'suggested' ? (
-                    <ReminderCandidatesPanel hubId={params.hubId} />
-                  ) : (
-                    <RemindersPanel hubId={params.hubId} />
-                  )}
-                </div>
+                <RemindersPage hubId={params.hubId} />
               )}
               {activeDashTab === 'faqs' && (
                 <FaqPanel
