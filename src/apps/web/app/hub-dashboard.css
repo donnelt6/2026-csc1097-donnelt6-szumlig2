@@ -1,0 +1,583 @@
+/* ===== Hub Dashboard — Reminders Page ===== */
+
+/* ---------- Layout ---------- */
+.hdash__reminders {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding: 24px 32px;
+  min-height: 0;
+  flex: 1;
+}
+
+.hdash__layout {
+  display: grid;
+  grid-template-columns: 1fr 360px;
+  gap: 24px;
+  min-height: 0;
+  flex: 1;
+}
+
+.hdash__calendar-col {
+  min-width: 0;
+}
+
+.hdash__sidebar-col {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  min-width: 0;
+}
+
+/* ---------- Full Calendar ---------- */
+.hdash__cal {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 24px;
+}
+
+.hdash__cal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+.hdash__cal-title {
+  font-family: var(--font-headline, 'Manrope', sans-serif);
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.hdash__cal-nav {
+  display: flex;
+  gap: 4px;
+}
+
+.hdash__cal-nav-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-fast, 0.15s ease);
+}
+
+.hdash__cal-nav-btn:hover {
+  border-color: var(--border-hover);
+  color: var(--text);
+  background: var(--bg-secondary);
+}
+
+.hdash__cal-nav-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.hdash__cal-toggle {
+  display: flex;
+  gap: 4px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 3px;
+}
+
+.hdash__cal-toggle-btn {
+  padding: 4px 12px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition-fast, 0.15s ease);
+}
+
+.hdash__cal-toggle-btn--active {
+  background: var(--card);
+  color: var(--text);
+  box-shadow: var(--shadow-sm);
+}
+
+.hdash__cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 1px;
+  background: var(--border);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.hdash__cal-weekday {
+  padding: 10px 8px;
+  text-align: center;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+  background: var(--bg-secondary);
+}
+
+.hdash__cal-cell {
+  min-height: 100px;
+  padding: 6px;
+  background: var(--card);
+  display: flex;
+  flex-direction: column;
+  cursor: pointer;
+  transition: background var(--transition-fast, 0.15s ease);
+}
+
+.hdash__cal-cell:hover {
+  background: var(--bg-secondary);
+}
+
+.hdash__cal-cell--empty {
+  background: var(--bg-secondary);
+  cursor: default;
+  opacity: 0.5;
+}
+
+.hdash__cal-cell--empty:hover {
+  background: var(--bg-secondary);
+}
+
+.hdash__cal-cell--today .hdash__cal-date {
+  background: var(--accent);
+  color: #fff;
+  border-radius: 50%;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.hdash__cal-cell--selected {
+  background: var(--accent-glow);
+}
+
+.hdash__cal-date {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--text);
+  margin-bottom: 4px;
+  line-height: 28px;
+  width: 28px;
+  text-align: center;
+}
+
+.hdash__cal-events {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.hdash__cal-event {
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.6875rem;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+  transition: opacity var(--transition-fast, 0.15s ease);
+  border-left: 3px solid transparent;
+}
+
+.hdash__cal-event:hover {
+  opacity: 0.8;
+}
+
+.hdash__cal-event--scheduled {
+  background: var(--accent-glow);
+  color: var(--accent);
+  border-left-color: var(--accent);
+}
+
+.hdash__cal-event--sent {
+  background: rgba(234, 179, 8, 0.15);
+  color: #ca8a04;
+  border-left-color: #ca8a04;
+}
+
+.hdash__cal-event--completed {
+  background: rgba(52, 211, 153, 0.15);
+  color: var(--status-complete);
+  border-left-color: var(--status-complete);
+  text-decoration: line-through;
+  opacity: 0.7;
+}
+
+.hdash__cal-event--cancelled {
+  background: rgba(248, 113, 113, 0.1);
+  color: var(--muted);
+  border-left-color: var(--muted);
+  text-decoration: line-through;
+  opacity: 0.5;
+}
+
+.hdash__cal-event--candidate {
+  background: rgba(168, 85, 247, 0.12);
+  color: #a855f7;
+  border-left-color: #a855f7;
+  border-style: dashed;
+}
+
+.hdash__cal-overflow {
+  font-size: 0.6875rem;
+  color: var(--text-secondary);
+  padding: 1px 6px;
+  cursor: pointer;
+}
+
+.hdash__cal-overflow:hover {
+  color: var(--accent);
+}
+
+/* ---------- Sidebar ---------- */
+.hdash__sidebar-section {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 20px;
+}
+
+.hdash__sidebar-title {
+  font-family: var(--font-headline, 'Manrope', sans-serif);
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: var(--text);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 14px;
+}
+
+.hdash__sidebar-empty {
+  font-size: 0.8125rem;
+  color: var(--muted);
+  text-align: center;
+  padding: 16px 0;
+}
+
+/* AI Insights cards */
+.hdash__insights-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px;
+  margin-bottom: 10px;
+  transition: border-color var(--transition-fast, 0.15s ease);
+}
+
+.hdash__insights-card:last-child {
+  margin-bottom: 0;
+}
+
+.hdash__insights-card:hover {
+  border-color: var(--border-hover);
+}
+
+.hdash__insights-card-title {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+
+.hdash__insights-card-meta {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.hdash__insights-card-snippet {
+  font-size: 0.8125rem;
+  color: var(--muted);
+  margin-bottom: 10px;
+  line-height: 1.4;
+}
+
+.hdash__insights-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.hdash__insights-btn {
+  padding: 6px 16px;
+  border-radius: 8px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-fast, 0.15s ease);
+  border: 1px solid transparent;
+}
+
+.hdash__insights-btn--accept {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+
+.hdash__insights-btn--accept:hover {
+  opacity: 0.9;
+}
+
+.hdash__insights-btn--reject {
+  background: transparent;
+  color: var(--text-secondary);
+  border-color: var(--border);
+}
+
+.hdash__insights-btn--reject:hover {
+  border-color: var(--border-hover);
+  color: var(--text);
+}
+
+/* Insights edit fields (inline expand) */
+.hdash__insights-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.hdash__insights-edit input,
+.hdash__insights-edit textarea {
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--text);
+  font-size: 0.8125rem;
+  font-family: inherit;
+}
+
+.hdash__insights-edit input:focus,
+.hdash__insights-edit textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+/* Manual reminders list */
+.hdash__manual-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.hdash__manual-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  transition: all var(--transition-fast, 0.15s ease);
+}
+
+.hdash__manual-item:hover {
+  border-color: var(--border-hover);
+  box-shadow: var(--shadow-sm);
+}
+
+.hdash__manual-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-top: 5px;
+  flex-shrink: 0;
+}
+
+.hdash__manual-dot--scheduled {
+  background: var(--accent);
+}
+
+.hdash__manual-dot--sent {
+  background: #ca8a04;
+}
+
+.hdash__manual-dot--completed {
+  background: var(--status-complete);
+}
+
+.hdash__manual-dot--cancelled {
+  background: var(--muted);
+}
+
+.hdash__manual-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.hdash__manual-msg {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.hdash__manual-due {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  margin-top: 2px;
+}
+
+/* Create reminder button */
+.hdash__create-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 12px;
+  border-radius: 10px;
+  border: 2px dashed var(--border);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-fast, 0.15s ease);
+}
+
+.hdash__create-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-glow);
+}
+
+.hdash__create-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* ---------- Status pills ---------- */
+.hdash__status {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.hdash__status--scheduled { color: var(--accent); }
+.hdash__status--sent { color: #ca8a04; }
+.hdash__status--completed { color: var(--status-complete); }
+.hdash__status--cancelled { color: var(--muted); }
+
+/* ---------- Confidence badge ---------- */
+.hdash__confidence {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--accent-glow);
+  color: var(--accent);
+}
+
+/* ---------- Placeholder ---------- */
+.hdash__placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 64px 24px;
+  text-align: center;
+}
+
+.hdash__placeholder h2 {
+  font-family: var(--font-headline, 'Manrope', sans-serif);
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 8px;
+}
+
+/* ---------- Responsive ---------- */
+@media (max-width: 1400px) {
+  .hdash__layout {
+    grid-template-columns: 1fr 320px;
+  }
+}
+
+@media (max-width: 900px) {
+  .hdash__layout {
+    grid-template-columns: 1fr;
+  }
+
+  .hdash__reminders {
+    padding: 16px;
+  }
+
+  .hdash__cal-cell {
+    min-height: 80px;
+  }
+}
+
+@media (max-width: 600px) {
+  .hdash__reminders {
+    padding: 12px;
+  }
+
+  .hdash__cal {
+    padding: 14px;
+  }
+
+  .hdash__cal-title {
+    font-size: 1.125rem;
+  }
+
+  .hdash__cal-cell {
+    min-height: 60px;
+    padding: 4px;
+  }
+
+  .hdash__cal-date {
+    font-size: 0.75rem;
+    width: 24px;
+    height: 24px;
+    line-height: 24px;
+  }
+
+  .hdash__cal-event {
+    font-size: 0.625rem;
+    padding: 1px 4px;
+  }
+
+  .hdash__sidebar-section {
+    padding: 14px;
+  }
+}
