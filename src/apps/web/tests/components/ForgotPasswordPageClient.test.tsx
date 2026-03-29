@@ -31,7 +31,7 @@ describe("ForgotPasswordPageClient", () => {
       expect(resetPasswordForEmail).toHaveBeenCalledWith(
         "user@example.com",
         expect.objectContaining({
-          redirectTo: expect.stringContaining("/auth/callback"),
+          redirectTo: expect.stringContaining("/auth/reset-password"),
         }),
       );
     });

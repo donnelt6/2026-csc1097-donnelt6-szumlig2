@@ -17,7 +17,7 @@ describe("authRecovery helpers", () => {
     vi.stubGlobal("window", undefined);
 
     expect(buildRecoveryRedirectUrl("https://caddie.example.com")).toBe(
-      "https://caddie.example.com/auth/callback",
+      "https://caddie.example.com/auth/reset-password",
     );
   });
 
@@ -26,7 +26,7 @@ describe("authRecovery helpers", () => {
       location: { origin: "http://localhost:3000" },
     });
 
-    expect(buildRecoveryRedirectUrl("")).toBe("http://localhost:3000/auth/callback");
+    expect(buildRecoveryRedirectUrl("")).toBe("http://localhost:3000/auth/reset-password");
   });
 
   it("rejects placeholder redirect URLs outside local development", () => {

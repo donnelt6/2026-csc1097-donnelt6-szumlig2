@@ -18,15 +18,15 @@ export interface AuthRedirectConfig {
 export type SignupResultStatus = "verification-pending" | "ambiguous";
 
 export function buildAuthCallbackUrl(siteUrl?: string): string | null {
-  return resolveAuthRedirectConfig(siteUrl).url;
+  return resolveAuthRedirectConfig("/auth/callback", siteUrl).url;
 }
 
 export function buildRecoveryRedirectUrl(siteUrl?: string): string | null {
-  return buildAuthCallbackUrl(siteUrl);
+  return resolveAuthRedirectConfig("/auth/reset-password", siteUrl).url;
 }
 
 export function getAuthRedirectConfigError(siteUrl?: string): string | null {
-  return resolveAuthRedirectConfig(siteUrl).error;
+  return resolveAuthRedirectConfig("/auth/callback", siteUrl).error;
 }
 
 export function readAuthLinkState(locationLike?: { search?: string; hash?: string }): AuthLinkState {
@@ -146,11 +146,11 @@ function withTrailingSlash(value: string): string {
   return value.endsWith("/") ? value : `${value}/`;
 }
 
-function resolveAuthRedirectConfig(siteUrl?: string): AuthRedirectConfig {
+function resolveAuthRedirectConfig(pathname: string, siteUrl?: string): AuthRedirectConfig {
   const currentOrigin = getWindowOrigin();
   if (currentOrigin && isLocalOrigin(currentOrigin)) {
     return {
-      url: new URL("/auth/callback", currentOrigin).toString(),
+      url: new URL(pathname, currentOrigin).toString(),
       error: null,
     };
   }
@@ -173,7 +173,7 @@ function resolveAuthRedirectConfig(siteUrl?: string): AuthRedirectConfig {
     }
 
     return {
-      url: new URL("/auth/callback", baseUrl).toString(),
+      url: new URL(pathname, baseUrl).toString(),
       error: null,
     };
   } catch {
