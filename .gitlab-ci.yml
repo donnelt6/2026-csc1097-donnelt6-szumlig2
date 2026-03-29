@@ -2,6 +2,8 @@ stages:
   - lint
   - test
   - build
+  - deploy
+  - post_deploy
 
 workflow:
   rules:
@@ -87,3 +89,63 @@ worker_tests:
     - pip install -r requirements.txt
     - python -m spacy download en_core_web_sm
     - pytest -q
+
+promote_production:
+  image: alpine/git:2.47.2
+  stage: deploy
+  resource_group: production
+  needs:
+    - web_lint
+    - web_typecheck
+    - web_test
+    - web_build
+    - api_build
+    - api_tests
+    - worker_build
+    - worker_tests
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      when: manual
+    - when: never
+  before_script:
+    - test -n "$GITHUB_MIRROR_REPO" || (echo "GITHUB_MIRROR_REPO is required" && exit 1)
+    - test -n "$GITHUB_MIRROR_USERNAME" || (echo "GITHUB_MIRROR_USERNAME is required" && exit 1)
+    - test -n "$GITHUB_MIRROR_TOKEN" || (echo "GITHUB_MIRROR_TOKEN is required" && exit 1)
+  script:
+    - git remote remove github-mirror || true
+    - git remote add github-mirror "https://${GITHUB_MIRROR_USERNAME}:${GITHUB_MIRROR_TOKEN}@${GITHUB_MIRROR_REPO}"
+    - git push github-mirror HEAD:main
+  environment:
+    name: production
+
+post_deploy_health:
+  image: curlimages/curl:8.11.1
+  stage: post_deploy
+  resource_group: production
+  needs:
+    - promote_production
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+    - when: never
+  before_script:
+    - test -n "$PRODUCTION_API_HEALTH_URL" || (echo "PRODUCTION_API_HEALTH_URL is required" && exit 1)
+  script:
+    - |
+      attempts=0
+      max_attempts=10
+      until [ "$attempts" -ge "$max_attempts" ]; do
+        attempts=$((attempts + 1))
+        response="$(curl --silent --show-error --location --write-out '\n%{http_code}' "$PRODUCTION_API_HEALTH_URL" || true)"
+        status="$(printf '%s\n' "$response" | tail -n 1)"
+        body="$(printf '%s\n' "$response" | sed '$d')"
+        if [ "$status" = "200" ] && printf '%s' "$body" | grep -F '"status":"ok"' >/dev/null; then
+          echo "Production API health check passed."
+          exit 0
+        fi
+        echo "Health check attempt $attempts/$max_attempts failed with status ${status:-unavailable}."
+        sleep 15
+      done
+      echo "Production API health check failed."
+      exit 1
+  environment:
+    name: production

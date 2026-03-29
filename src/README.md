@@ -112,7 +112,15 @@ Chat read/write hardening also applies the standard read/write limiter to:
 ## Pre-Deployment Checks
 - Set `ALLOWED_ORIGINS` explicitly for every non-local API environment. The API now fails fast on startup if `ENVIRONMENT != local` and no valid allowlist is configured.
 - Local API development can omit `ALLOWED_ORIGINS`; it falls back to explicit localhost origins only, never `*`.
+- For GitLab-driven production promotion, configure `GITHUB_MIRROR_REPO`, `GITHUB_MIRROR_USERNAME`, `GITHUB_MIRROR_TOKEN`, and `PRODUCTION_API_HEALTH_URL` in GitLab CI/CD variables before triggering `promote_production`.
 - Verify `/health` returns `{"status":"ok"}` from the deployed API.
 - Verify the worker process and beat process are both running after deploy.
 - Review recent API and worker logs for stable failure prefixes such as `api.startup.config_invalid`, `rate_limit.redis_unavailable`, `worker.ingest.failed`, `worker.web_ingest.failed`, and `worker.youtube_ingest.failed`.
 - Treat default-branch CI failures, repeated worker task failures, failed health checks, and startup config validation failures as deploy blockers.
+
+## GitLab Promotion Flow
+1. Merge the approved change into `main` on GitLab.
+2. Wait for the `lint`, `test`, and `build` stages to pass.
+3. Trigger the manual `promote_production` job only when the hosted environment should be brought online.
+4. Let Netlify and Railway deploy from the mirrored GitHub `main` commit.
+5. Confirm the `post_deploy_health` job passes against the production Railway API.
