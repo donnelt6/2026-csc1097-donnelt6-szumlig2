@@ -507,7 +507,7 @@ export const ChatPanel = forwardRef<ChatPanelHandle, Props>(function ChatPanel({
   const currentSessionParam = searchParams.get("session");
   useEffect(() => {
     if (isBootstrapping) return;
-    if (currentSessionParam === "new") {
+    if (currentSessionParam === "new" && activeSessionId === null) {
       sessionSourceCacheRef.current.delete(null);
       activateDraft({ messages: [], scope, selectedSourceIds: [...completeSourceIds] }, false);
       return;
