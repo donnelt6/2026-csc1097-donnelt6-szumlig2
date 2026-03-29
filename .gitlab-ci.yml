@@ -133,6 +133,8 @@ post_deploy_health:
     - test -n "$PRODUCTION_API_HEALTH_URL" || (echo "PRODUCTION_API_HEALTH_URL is required" && exit 1)
   script:
     - |
+      echo "Waiting 5 minutes before starting the production API health check."
+      sleep 300
       attempts=0
       max_attempts=20
       until [ "$attempts" -ge "$max_attempts" ]; do
