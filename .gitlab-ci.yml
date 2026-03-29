@@ -120,7 +120,7 @@ promote_production:
     name: production
 
 post_deploy_health:
-  image: curlimages/curl:8.11.1
+  image: alpine:3.20
   stage: post_deploy
   resource_group: production
   needs:
@@ -129,6 +129,7 @@ post_deploy_health:
     - if: '$CI_COMMIT_BRANCH == "main"'
     - when: never
   before_script:
+    - apk add --no-cache curl
     - test -n "$PRODUCTION_API_HEALTH_URL" || (echo "PRODUCTION_API_HEALTH_URL is required" && exit 1)
   script:
     - |
