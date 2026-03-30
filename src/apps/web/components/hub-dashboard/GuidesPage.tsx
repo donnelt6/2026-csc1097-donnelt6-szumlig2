@@ -18,7 +18,6 @@ import {
   useSortable,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
 import {
   PlusIcon,
   EllipsisVerticalIcon,
@@ -84,33 +83,15 @@ function SortableStepRow({
     disabled: !canEdit,
   });
   const style = {
-    transform: CSS.Transform.toString(transform),
+    transform: transform ? `translate3d(0, ${transform.y}px, 0)` : undefined,
     transition,
     opacity: isDragging ? 0.6 : 1,
-  };
+    zIndex: isDragging ? 10 : undefined,
+  } as React.CSSProperties;
 
   return (
     <div ref={setNodeRef} style={style} className={`gmodal__step${step.is_complete ? ' gmodal__step--done' : ''}`}>
       <div className="gmodal__step-row">
-        <div className="gmodal__step-left">
-          <span className="gmodal__step-num">{index + 1}</span>
-          {canEdit && (
-            <button
-              className="gmodal__step-drag"
-              type="button"
-              aria-label="Reorder step"
-              ref={setActivatorNodeRef}
-              {...attributes}
-              {...listeners}
-            >
-              <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor">
-                <circle cx="4" cy="2" r="1.2" /><circle cx="8" cy="2" r="1.2" />
-                <circle cx="4" cy="6" r="1.2" /><circle cx="8" cy="6" r="1.2" />
-                <circle cx="4" cy="10" r="1.2" /><circle cx="8" cy="10" r="1.2" />
-              </svg>
-            </button>
-          )}
-        </div>
         <label className="gmodal__step-check">
           <input
             type="checkbox"
@@ -126,10 +107,11 @@ function SortableStepRow({
             )}
           </span>
         </label>
+        <span className="gmodal__step-num">{index + 1}</span>
         <div className="gmodal__step-content">
           {!isEditing ? (
             <>
-              {step.title && <strong className="gmodal__step-title">{step.title}</strong>}
+              <strong className="gmodal__step-title">{step.title || `Step ${index + 1}`}</strong>
               <p className="gmodal__step-instruction">{step.instruction}</p>
               {step.citations.length > 0 && (
                 <div className="gmodal__step-sources">
@@ -175,6 +157,20 @@ function SortableStepRow({
                 <button className="gmodal__step-edit-btn" type="button" onClick={onCancelEdit}>Cancel</button>
               </>
             )}
+            <button
+              className="gmodal__step-drag"
+              type="button"
+              aria-label="Reorder step"
+              ref={setActivatorNodeRef}
+              {...attributes}
+              {...listeners}
+            >
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor">
+                <circle cx="4" cy="2" r="1.2" /><circle cx="8" cy="2" r="1.2" />
+                <circle cx="4" cy="6" r="1.2" /><circle cx="8" cy="6" r="1.2" />
+                <circle cx="4" cy="10" r="1.2" /><circle cx="8" cy="10" r="1.2" />
+              </svg>
+            </button>
           </div>
         )}
       </div>
@@ -353,8 +349,8 @@ export function GuidesPage({ hubId, sources, canEdit }: Props) {
   const reorderMutation = useMutation({
     mutationFn: ({ guideId, orderedIds }: { guideId: string; orderedIds: string[] }) =>
       reorderGuideSteps(guideId, orderedIds),
-    onMutate: async ({ guideId, orderedIds }) => {
-      await queryClient.cancelQueries({ queryKey: ["guides", hubId] });
+    onMutate: ({ guideId, orderedIds }) => {
+      queryClient.cancelQueries({ queryKey: ["guides", hubId] });
       const previous = queryClient.getQueryData<GuideEntry[]>(["guides", hubId]);
       if (previous) {
         const next = previous.map((guide) => {
@@ -370,7 +366,6 @@ export function GuidesPage({ hubId, sources, canEdit }: Props) {
       }
       return { previous };
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["guides", hubId] }),
     onError: (err, _vars, ctx) => {
       if (ctx?.previous) queryClient.setQueryData(["guides", hubId], ctx.previous);
       setStatusMessage((err as Error).message);
@@ -430,6 +425,8 @@ export function GuidesPage({ hubId, sources, canEdit }: Props) {
     const newIndex = guide.steps.findIndex((s) => s.id === over.id);
     if (oldIndex === -1 || newIndex === -1) return;
     const ordered = arrayMove(guide.steps, oldIndex, newIndex);
+    const reorderedSteps = ordered.map((s, i) => ({ ...s, step_index: i + 1 }));
+    setSelectedGuide({ ...guide, steps: reorderedSteps });
     reorderMutation.mutate({ guideId: guide.id, orderedIds: ordered.map((s) => s.id) });
   };
 

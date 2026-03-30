@@ -216,8 +216,6 @@ export default function HubDetail({ params }: { params: { hubId: string } }) {
               {activeDashTab === 'overview' && (
                 <DashboardOverview
                   hubId={params.hubId}
-                  chatSourceIds={chatSourceIds}
-                  completeSourceIds={completeSourceIds}
                   canEdit={canUpload}
                   onSwitchTab={setActiveDashTab}
                 />
