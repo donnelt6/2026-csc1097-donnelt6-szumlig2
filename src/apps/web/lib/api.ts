@@ -4,6 +4,7 @@ import type {
   AssignableMembershipRole,
   ChatSessionDetail,
   ChatPromptSuggestion,
+  ChatSearchResult,
   ChatSessionSummary,
   ChatResponse,
   FlagCase,
@@ -267,6 +268,14 @@ export async function getChatSessionMessages(sessionId: string, hubId: string): 
     { cache: "no-store" }
   );
   return handle<ChatSessionDetail>(res);
+}
+
+export async function searchChatMessages(hubId: string, query: string): Promise<ChatSearchResult[]> {
+  const search = new URLSearchParams();
+  search.set("hub_id", hubId);
+  search.set("q", query);
+  const res = await authedFetch(`${API_BASE}/chat/search?${search.toString()}`, { cache: "no-store" });
+  return handle<ChatSearchResult[]>(res);
 }
 
 export async function renameChatSession(sessionId: string, title: string): Promise<void> {

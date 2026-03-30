@@ -46,10 +46,45 @@ const CHAT_SUGGESTED_PROMPTS = [
   },
 ] as const;
 
+function ChatLoadingSkeleton() {
+  return (
+    <div className="chat__loading" aria-hidden="true" data-testid="chat-loading-skeleton">
+      <div className="chat__loading-pair chat__loading-pair--user">
+        <div className="chat__loading-bubble chat__loading-bubble--user">
+          <span className="chat__loading-line chat__loading-line--long dash-skeleton" />
+          <span className="chat__loading-line chat__loading-line--short dash-skeleton" />
+        </div>
+        <span className="chat__loading-avatar chat__loading-avatar--user dash-skeleton" />
+      </div>
+
+      <div className="chat__loading-pair chat__loading-pair--ai">
+        <span className="chat__loading-avatar chat__loading-avatar--ai dash-skeleton" />
+        <div className="chat__loading-bubble chat__loading-bubble--ai">
+          <span className="chat__loading-line chat__loading-line--medium dash-skeleton" />
+          <span className="chat__loading-line chat__loading-line--long dash-skeleton" />
+          <span className="chat__loading-line chat__loading-line--short dash-skeleton" />
+          <div className="chat__loading-citations">
+            <span className="chat__loading-chip dash-skeleton" />
+            <span className="chat__loading-chip chat__loading-chip--short dash-skeleton" />
+          </div>
+        </div>
+      </div>
+
+      <div className="chat__loading-pair chat__loading-pair--user">
+        <div className="chat__loading-bubble chat__loading-bubble--user">
+          <span className="chat__loading-line chat__loading-line--medium dash-skeleton" />
+        </div>
+        <span className="chat__loading-avatar chat__loading-avatar--user dash-skeleton" />
+      </div>
+    </div>
+  );
+}
+
 type ChatScope = "hub" | "global";
 
 interface MessagePair {
   id: string;
+  userMessageId: string | null;
   question: string;
   response: ChatResponse | null;
   error: string | null;
@@ -165,6 +200,7 @@ export const ChatPanel = forwardRef<ChatPanelHandle, Props>(function ChatPanel({
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const initialSessionParam = searchParams.get("session");
+  const initialMessageParam = searchParams.get("message");
   const initialPromptParam = searchParams.get("prompt");
   const initialPromptAction = searchParams.get("promptAction");
   const hasAutoSent = useRef(false);
@@ -185,6 +221,7 @@ export const ChatPanel = forwardRef<ChatPanelHandle, Props>(function ChatPanel({
   const [reportMenuMessageId, setReportMenuMessageId] = useState<string | null>(null);
   const [activeCitation, setActiveCitation] = useState<Citation | null>(null);
   const [panelError, setPanelError] = useState<string | null>(null);
+  const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
 
   const { data: sessionList = [], refetch: refetchSessionList } = useQuery({
     queryKey: sessionQueryKey,
@@ -196,6 +233,7 @@ export const ChatPanel = forwardRef<ChatPanelHandle, Props>(function ChatPanel({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const modalCloseRef = useRef<HTMLButtonElement>(null);
+  const messageElementRefs = useRef(new Map<string, HTMLDivElement>());
   const submitQuestionRef = useRef<((event?: React.FormEvent, overrideQuestion?: string) => Promise<void>) | null>(null);
   const previousCompleteSourceIdsRef = useRef<string[]>([]);
   const sessionSourceCacheRef = useRef<Map<string | null, string[]>>(new Map());
@@ -270,6 +308,10 @@ export const ChatPanel = forwardRef<ChatPanelHandle, Props>(function ChatPanel({
   }, [completeSourceIds]);
 
   useEffect(() => {
+    setHighlightedMessageId(null);
+  }, [activeSessionId]);
+
+  useEffect(() => {
     sessionSourceCacheRef.current.set(activeSessionId, selectedSourceIds);
     if (activeSessionId !== null) {
       try {
@@ -310,6 +352,26 @@ export const ChatPanel = forwardRef<ChatPanelHandle, Props>(function ChatPanel({
   }, [messages]);
 
   useEffect(() => {
+    const targetMessageId = searchParams.get("message") ?? initialMessageParam;
+    if (!targetMessageId || messages.length === 0) {
+      return;
+    }
+    const hasTarget = messages.some((message) =>
+      message.userMessageId === targetMessageId || message.response?.message_id === targetMessageId
+    );
+    if (!hasTarget) {
+      return;
+    }
+    setHighlightedMessageId(targetMessageId);
+    const element = messageElementRefs.current.get(targetMessageId);
+    element?.scrollIntoView({ behavior: "smooth", block: "center" });
+    const timeout = window.setTimeout(() => {
+      setHighlightedMessageId((current) => (current === targetMessageId ? null : current));
+    }, 3200);
+    return () => window.clearTimeout(timeout);
+  }, [initialMessageParam, messages, searchParams]);
+
+  useEffect(() => {
     let cancelled = false;
 
     async function initializeChat() {
@@ -338,7 +400,7 @@ export const ChatPanel = forwardRef<ChatPanelHandle, Props>(function ChatPanel({
             }
             hydrateSession(detail.session, detail.messages);
             updateSessionCache((current) => upsertSessionSummary(current, detail.session));
-            syncSessionQuery(detail.session.id);
+            syncSessionQuery(detail.session.id, { preserveMessage: true });
             return;
           } catch {
             syncSessionQuery(null);
@@ -374,10 +436,26 @@ export const ChatPanel = forwardRef<ChatPanelHandle, Props>(function ChatPanel({
     return source?.original_name ?? sourceId.slice(0, 8);
   };
 
-  function syncSessionQuery(sessionId: string | null) {
+  function assignMessageRef(messageId: string | null, element: HTMLDivElement | null) {
+    if (!messageId) {
+      return;
+    }
+    if (element) {
+      messageElementRefs.current.set(messageId, element);
+    } else {
+      messageElementRefs.current.delete(messageId);
+    }
+  }
+
+  function syncSessionQuery(sessionId: string | null, options?: { preserveMessage?: boolean }) {
     const params = new URLSearchParams(searchParams.toString());
     params.delete("prompt");
     params.delete("promptAction");
+    if (options?.preserveMessage && initialMessageParam) {
+      params.set("message", initialMessageParam);
+    } else {
+      params.delete("message");
+    }
     if (sessionId) {
       params.set("session", sessionId);
     } else {
@@ -597,6 +675,7 @@ export const ChatPanel = forwardRef<ChatPanelHandle, Props>(function ChatPanel({
     const pendingId = `pending-${Date.now()}`;
     const pendingPair: MessagePair = {
       id: pendingId,
+      userMessageId: null,
       question: trimmed,
       response: null,
       error: null,
@@ -789,34 +868,36 @@ export const ChatPanel = forwardRef<ChatPanelHandle, Props>(function ChatPanel({
           </div>
 
           <div className="chat__messages">
-            {isComposerLocked && (
-              <div className="chat__empty">
-                <p className="chat__empty-text">Loading chat...</p>
-              </div>
-            )}
+            <div className="chat__lane chat__lane--messages">
+              {isComposerLocked && (
+                <ChatLoadingSkeleton />
+              )}
 
-            {!isComposerLocked && messages.length === 0 && (
-              <div className="chat__empty">
-                <p className="chat__empty-text">Ask a question about your hub</p>
-                <p className="muted">Caddie will search your selected sources for answers.</p>
-                <div className="chat__prompt-chips">
-                  {CHAT_SUGGESTED_PROMPTS.map(({ label, prompt }) => (
-                    <button
-                      key={label}
-                      type="button"
-                      className="chat__prompt-chip"
-                      onClick={() => { setQuestion(prompt); textareaRef.current?.focus(); }}
-                    >
-                      {label}
-                    </button>
-                  ))}
+              {!isComposerLocked && messages.length === 0 && (
+                <div className="chat__empty">
+                  <p className="chat__empty-text">Ask a question about your hub</p>
+                  <p className="muted">Caddie will search your selected sources for answers.</p>
+                  <div className="chat__prompt-chips">
+                    {CHAT_SUGGESTED_PROMPTS.map(({ label, prompt }) => (
+                      <button
+                        key={label}
+                        type="button"
+                        className="chat__prompt-chip"
+                        onClick={() => { setQuestion(prompt); textareaRef.current?.focus(); }}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
 
-            {!isComposerLocked && messages.map((message) => (
-              <div key={message.id} className="chat__pair">
-                <div className="chat__message chat__message--user">
+              {!isComposerLocked && messages.map((message) => (
+                <div key={message.id} className="chat__pair">
+                <div
+                  ref={(element) => assignMessageRef(message.userMessageId, element)}
+                  className={`chat__message chat__message--user${highlightedMessageId !== null && message.userMessageId === highlightedMessageId ? " chat__message--highlighted" : ""}`}
+                >
                   <div className="chat__bubble chat__bubble--user">
                     {message.question}
                   </div>
@@ -825,7 +906,10 @@ export const ChatPanel = forwardRef<ChatPanelHandle, Props>(function ChatPanel({
                 {message.timestamp && (
                   <span className="chat__timestamp chat__timestamp--user">{formatMessageTime(message.timestamp)}</span>
                 )}
-                <div className="chat__message chat__message--ai">
+                <div
+                  ref={(element) => assignMessageRef(message.response?.message_id ?? null, element)}
+                  className={`chat__message chat__message--ai${highlightedMessageId !== null && message.response?.message_id === highlightedMessageId ? " chat__message--highlighted" : ""}`}
+                >
                   <div className="chat__avatar chat__avatar--ai">
                     <span className="chat__avatar-letter">C</span>
                   </div>
@@ -945,60 +1029,63 @@ export const ChatPanel = forwardRef<ChatPanelHandle, Props>(function ChatPanel({
                     {formatMessageTime(message.timestamp)}
                   </span>
                 )}
-              </div>
-            ))}
-            {panelError && (
-              <p className="chat__banner-error">Error: {panelError}</p>
-            )}
-            <div ref={messagesEndRef} />
+                </div>
+              ))}
+              {panelError && (
+                <p className="chat__banner-error">Error: {panelError}</p>
+              )}
+              <div ref={messagesEndRef} />
+            </div>
           </div>
 
           <form onSubmit={(event) => void submitQuestion(event)} className="chat__input-bar">
-            {!canAsk && (
-              <p className="muted" style={{ margin: 0, fontSize: "0.8rem" }}>
-                Select at least one source above to send in this chat.
-              </p>
-            )}
-            <div className="chat__input-row" onClick={() => textareaRef.current?.focus()}>
-              {!isComposerLocked && (
-                <button
-                  type="button"
-                  className="chat__prompt-suggest-btn"
-                  onClick={() => void handleSuggestPrompt()}
-                  disabled={isSuggestingPrompt || !canSuggestPrompt}
-                  title={!canSuggestPrompt && hasSelectableSources ? "Select at least one source to get a tailored prompt." : undefined}
-                  aria-label={isSuggestingPrompt ? "Getting tailored prompt suggestion" : "Suggest a tailored prompt"}
-                >
-                  <SparklesIcon className="chat__prompt-suggest-icon" />
-                </button>
+            <div className="chat__lane chat__lane--composer">
+              {!canAsk && (
+                <p className="muted" style={{ margin: 0, fontSize: "0.8rem" }}>
+                  Select at least one source above to send in this chat.
+                </p>
               )}
-              <textarea
-                ref={textareaRef}
-                className="chat__textarea"
-                value={question}
-                onChange={handleTextareaChange}
-                onKeyDown={handleComposerKeyDown}
-                disabled={isComposerLocked}
-                placeholder="Ask a question..."
-                aria-label="Ask a question"
-                rows={1}
-              />
-              <button
-                className="chat__send"
-                type="submit"
-                disabled={isSending || isComposerLocked || !canAsk || !question.trim()}
-                aria-label="Send message"
-              >
-                <PaperAirplaneIcon className="chat__send-icon" />
-              </button>
+              <div className="chat__input-row" onClick={() => textareaRef.current?.focus()}>
+                {!isComposerLocked && (
+                  <button
+                    type="button"
+                    className="chat__prompt-suggest-btn"
+                    onClick={() => void handleSuggestPrompt()}
+                    disabled={isSuggestingPrompt || !canSuggestPrompt}
+                    title={!canSuggestPrompt && hasSelectableSources ? "Select at least one source to get a tailored prompt." : undefined}
+                    aria-label={isSuggestingPrompt ? "Getting tailored prompt suggestion" : "Suggest a tailored prompt"}
+                  >
+                    <SparklesIcon className="chat__prompt-suggest-icon" />
+                  </button>
+                )}
+                <textarea
+                  ref={textareaRef}
+                  className="chat__textarea"
+                  value={question}
+                  onChange={handleTextareaChange}
+                  onKeyDown={handleComposerKeyDown}
+                  disabled={isComposerLocked}
+                  placeholder="Ask a question..."
+                  aria-label="Ask a question"
+                  rows={1}
+                />
+                <button
+                  className="chat__send"
+                  type="submit"
+                  disabled={isSending || isComposerLocked || !canAsk || !question.trim()}
+                  aria-label="Send message"
+                >
+                  <PaperAirplaneIcon className="chat__send-icon" />
+                </button>
+              </div>
+              {promptSuggestionError && (
+                <p className="chat__prompt-suggest-error">Error: {promptSuggestionError}</p>
+              )}
+              <p className="chat__disclaimer">
+                Caddie can make mistakes. Check important info.
+              </p>
             </div>
-            {promptSuggestionError && (
-              <p className="chat__prompt-suggest-error">Error: {promptSuggestionError}</p>
-            )}
           </form>
-          <p className="chat__disclaimer">
-            Caddie can make mistakes. Check important info.
-          </p>
         </section>
       </div>
 
@@ -1045,6 +1132,7 @@ function convertSessionMessagesToPairs(messages: SessionMessage[]): MessagePair[
     if (message.role === "user") {
       pairs.push({
         id: message.id,
+        userMessageId: message.id,
         question: message.content,
         response: null,
         error: null,

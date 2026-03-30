@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, useCallback, useLayoutEffect, useMemo } from 'react';
+import { useState, useCallback, useLayoutEffect, useMemo, useEffect, useRef } from 'react';
 import { useParams, usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
-import { Bars3Icon, MagnifyingGlassIcon } from '@heroicons/react/24/outline';
+import { Bars3Icon, ChatBubbleLeftRightIcon, DocumentTextIcon, MagnifyingGlassIcon } from '@heroicons/react/24/outline';
 import { Sidebar } from './navigation/Sidebar';
 import { ThemeToggle } from './navigation/ThemeToggle';
 import { ProfileMenu } from './navigation/ProfileMenu';
@@ -11,7 +11,7 @@ import { NotificationsMenu } from './navigation/NotificationsMenu';
 import { useAuth } from './auth/AuthProvider';
 import { useSearch } from '../lib/SearchContext';
 import { useHubTab } from '../lib/HubTabContext';
-import { listHubs } from '../lib/api';
+import { listHubs, searchChatMessages } from '../lib/api';
 import { CurrentHubProvider } from '../lib/CurrentHubContext';
 import { resolveHubAppearance } from '../lib/hubAppearance';
 
@@ -25,6 +25,9 @@ export function AppShell({ children }: AppShellProps) {
   const [sidebarState, setSidebarState] = useState<SidebarState | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [transitionsReady, setTransitionsReady] = useState(false);
+  const [chatSearchQuery, setChatSearchQuery] = useState('');
+  const [debouncedChatSearchQuery, setDebouncedChatSearchQuery] = useState('');
+  const [chatSearchFocused, setChatSearchFocused] = useState(false);
   const params = useParams<{ hubId?: string }>();
   const pathname = usePathname();
   const router = useRouter();
@@ -53,6 +56,7 @@ export function AppShell({ children }: AppShellProps) {
     ? resolveHubAppearance(currentHub.icon_key, currentHub.color_key)
     : null;
   const CurrentHubIcon = currentHubAppearance?.icon.icon;
+  const chatSearchRef = useRef<HTMLDivElement>(null);
 
   const dashboardTab = searchParams.get('tab') ?? 'home';
   const dashboardTabs = [
@@ -60,6 +64,50 @@ export function AppShell({ children }: AppShellProps) {
     { key: 'calendar', label: 'Calendar' },
     { key: 'activity', label: 'Activity' },
   ] as const;
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      setDebouncedChatSearchQuery(chatSearchQuery.trim());
+    }, 220);
+    return () => window.clearTimeout(timeout);
+  }, [chatSearchQuery]);
+
+  useEffect(() => {
+    setChatSearchFocused(false);
+    setChatSearchQuery('');
+    setDebouncedChatSearchQuery('');
+  }, [hubId, activeTab]);
+
+  useEffect(() => {
+    const handleClick = (event: MouseEvent) => {
+      if (chatSearchRef.current && !chatSearchRef.current.contains(event.target as Node)) {
+        setChatSearchFocused(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
+
+  const { data: chatSearchResults = [], isFetching: chatSearchLoading } = useQuery({
+    queryKey: ['hub-chat-search', hubId, debouncedChatSearchQuery],
+    queryFn: () => searchChatMessages(hubId!, debouncedChatSearchQuery),
+    enabled: isOnHub && activeTab === 'chat' && !!hubId && debouncedChatSearchQuery.length >= 2,
+    staleTime: 15_000,
+  });
+  const showChatSearchDropdown = isOnHub && activeTab === 'chat' && chatSearchFocused && chatSearchQuery.trim().length >= 2;
+
+  const handleChatSearchResultClick = useCallback((sessionId: string, messageId: string | null) => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set('tab', 'chat');
+    params.set('session', sessionId);
+    if (messageId) {
+      params.set('message', messageId);
+    } else {
+      params.delete('message');
+    }
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+    setChatSearchFocused(false);
+  }, [pathname, router, searchParams]);
 
   useLayoutEffect(() => {
     setTransitionsReady(false);
@@ -171,14 +219,67 @@ export function AppShell({ children }: AppShellProps) {
                   </div>
                 )}
                 <div className="nav-search nav-search--hub-chat">
-                  <MagnifyingGlassIcon className="nav-search-icon" />
-                  <input
-                    type="text"
-                    placeholder={activeTab === 'sources' ? "Search sources..." : activeTab === 'members' ? "Search members..." : "Search conversations..."}
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="nav-search-input"
-                  />
+                  {activeTab === 'chat' ? (
+                    <div className="nav-chat-search" ref={chatSearchRef}>
+                      <MagnifyingGlassIcon className="nav-search-icon" />
+                      <input
+                        type="text"
+                        placeholder="Search conversations..."
+                        value={chatSearchQuery}
+                        onChange={(e) => setChatSearchQuery(e.target.value)}
+                        onFocus={() => setChatSearchFocused(true)}
+                        className="nav-search-input"
+                      />
+                      {showChatSearchDropdown && (
+                        <div className="nav-chat-search-dropdown">
+                          {chatSearchLoading ? (
+                            <div className="nav-chat-search-empty">Searching chats...</div>
+                          ) : chatSearchResults.length > 0 ? (
+                            chatSearchResults.map((result) => (
+                              <button
+                                key={`${result.session_id}-${result.message_id ?? 'title'}`}
+                                type="button"
+                                className="nav-chat-search-item"
+                                onClick={() => handleChatSearchResultClick(result.session_id, result.message_id)}
+                              >
+                                {result.matched_role === 'title' ? (
+                                  <DocumentTextIcon className="nav-chat-search-item-icon nav-chat-search-item-icon--title" />
+                                ) : (
+                                  <ChatBubbleLeftRightIcon className="nav-chat-search-item-icon nav-chat-search-item-icon--message" />
+                                )}
+                                <div className="nav-chat-search-item-info">
+                                  <div className="nav-chat-search-item-header">
+                                    <span className="nav-chat-search-item-name">{result.session_title}</span>
+                                    <span className={`nav-chat-search-item-kind nav-chat-search-item-kind--${result.matched_role === 'title' ? 'title' : result.matched_role === 'user' ? 'query' : 'response'}`}>
+                                      {result.matched_role === 'title' ? 'Title' : result.matched_role === 'user' ? 'Query' : 'Response'}
+                                    </span>
+                                  </div>
+                                  <span className="nav-chat-search-item-meta">
+                                    {result.matched_role === 'title'
+                                      ? `Title: ${result.snippet}`
+                                      : `${result.matched_role === 'user' ? 'You' : 'Caddie'}: ${result.snippet}`}
+                                  </span>
+                                </div>
+                              </button>
+                            ))
+                          ) : (
+                            <div className="nav-chat-search-empty">No matching messages found.</div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <>
+                      <MagnifyingGlassIcon className="nav-search-icon" />
+                      <input
+                        type="text"
+                        placeholder={activeTab === 'sources' ? "Search sources..." : activeTab === 'members' ? "Search members..." : "Search conversations..."}
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="nav-search-input"
+                      />
+                    </>
+                  )}
                 </div>
               </>
             ) : isSettingsPage ? null : (

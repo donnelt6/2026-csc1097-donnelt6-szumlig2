@@ -376,6 +376,17 @@ class ChatSessionDetail(BaseModel):
     messages: List[SessionMessage] = Field(default_factory=list)
 
 
+class ChatSearchResult(BaseModel):
+    session_id: str
+    session_title: str
+    hub_id: str
+    message_id: Optional[str] = None
+    matched_role: str
+    snippet: str
+    matched_text: Optional[str] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
 class MessageFlagStatus(str, Enum):
     none = "none"
     open = "open"
