@@ -11,6 +11,7 @@ import { MembersPanel } from "../../../components/MembersPanel";
 import { GuidePanel } from "../../../components/GuidePanel";
 import { FaqPanel } from "../../../components/FaqPanel";
 import { DashboardOverview } from "../../../components/hub-dashboard/DashboardOverview";
+import { GuidesPage } from "../../../components/hub-dashboard/GuidesPage";
 import { RemindersPage } from "../../../components/hub-dashboard/RemindersPage";
 
 import { acceptInvite, listInvites, listSources, trackHubAccess } from "../../../lib/api";
@@ -222,7 +223,7 @@ export default function HubDetail({ params }: { params: { hubId: string } }) {
                 />
               )}
               {activeDashTab === 'guides' && (
-                <GuidePanel
+                <GuidesPage
                   hubId={params.hubId}
                   selectedSourceIds={chatSourceIds}
                   hasSelectableSources={completeSourceIds.length > 0}

@@ -1218,3 +1218,575 @@
     padding: 14px;
   }
 }
+
+.hdash__guides {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding: 24px 32px;
+  min-height: 0;
+  flex: 1;
+}
+
+.hdash__guides-toast {
+  position: fixed;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 100;
+  padding: 10px 20px;
+  border-radius: 10px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-xl);
+  font-size: 0.875rem;
+  color: var(--text);
+  animation: slideDown 0.2s ease;
+}
+
+.guide-card {
+  cursor: pointer;
+}
+
+.guide-card--create {
+  cursor: default;
+  border: 2px dashed rgba(198, 198, 205, 0.3);
+  background: rgba(198, 198, 205, 0.08);
+}
+
+.guide-card--create:hover {
+  border-color: var(--hub-create-border-hover);
+}
+
+.guide-card__create-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+}
+
+.guide-card__create-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+}
+
+.guide-card__create-label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.guide-card__create-label-text {
+  font-size: 0.75rem;
+  font-weight: var(--font-semibold);
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.guide-card__create-hint {
+  font-size: 0.8125rem;
+  color: var(--muted);
+  text-align: center;
+  margin: 0;
+}
+
+.guide-card__draft-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  padding: 10px 16px;
+  border-radius: 10px;
+  border: none;
+  background: var(--accent);
+  color: #fff;
+  font-size: 0.875rem;
+  font-weight: var(--font-semibold);
+  cursor: pointer;
+  transition: opacity var(--transition-fast, 0.15s ease);
+}
+
+.guide-card__draft-btn:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+.guide-card__draft-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.guide-card__icon {
+  width: 48px;
+  height: 48px;
+  min-width: 48px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+}
+
+.guide-card__icon svg {
+  width: 24px;
+  height: 24px;
+}
+
+.guide-card__footer {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.guide-card__meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.guide-card__steps-badge {
+  font-size: 0.6875rem;
+  font-weight: var(--font-bold);
+  color: var(--accent);
+  background: var(--accent-glow);
+  padding: 2px 8px;
+  border-radius: 4px;
+  letter-spacing: 0.03em;
+}
+
+.guide-card__date {
+  font-size: 0.6875rem;
+  color: var(--muted);
+}
+
+.guide-card__progress {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.guide-card__progress-bar {
+  flex: 1;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--bg-secondary);
+  overflow: hidden;
+}
+
+.guide-card__progress-fill {
+  height: 100%;
+  border-radius: 3px;
+  background: var(--accent);
+  transition: width 0.3s ease;
+}
+
+.guide-card__progress-label {
+  font-size: 0.75rem;
+  font-weight: var(--font-semibold);
+  color: var(--text-secondary);
+  min-width: 32px;
+  text-align: right;
+}
+
+.guide-card--loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 180px;
+}
+
+.gmodal {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 28px;
+  width: 680px;
+  max-width: calc(100vw - 32px);
+  max-height: calc(100vh - 64px);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  animation: slideDown 0.2s ease;
+}
+
+.gmodal--sm {
+  width: 520px;
+}
+
+.gmodal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.gmodal__badge {
+  font-size: 0.6875rem;
+  font-weight: var(--font-bold);
+  color: var(--accent);
+  background: var(--accent-glow);
+  padding: 3px 10px;
+  border-radius: 6px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.gmodal__header-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.gmodal__icon-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-fast, 0.15s ease);
+}
+
+.gmodal__icon-btn:hover {
+  border-color: var(--border-hover);
+  color: var(--text);
+  background: var(--bg-secondary);
+}
+
+.gmodal__icon-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.gmodal__icon-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.gmodal__icon-btn--danger:hover {
+  border-color: var(--danger);
+  color: var(--danger);
+  background: rgba(220, 38, 38, 0.08);
+}
+
+.gmodal__title {
+  font-family: var(--font-headline, 'Manrope', sans-serif);
+  font-size: 1.5rem;
+  font-weight: var(--font-bold);
+  color: var(--text);
+  margin: 0;
+  line-height: 1.3;
+}
+
+.gmodal__title-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.gmodal__title-input {
+  font-size: 1.25rem;
+  font-weight: var(--font-bold);
+  font-family: var(--font-headline, 'Manrope', sans-serif);
+}
+
+.gmodal__title-edit-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.gmodal__progress {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.gmodal__progress-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.gmodal__progress-label {
+  font-size: 0.6875rem;
+  font-weight: var(--font-bold);
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.gmodal__progress-pct {
+  font-size: 1.25rem;
+  font-weight: var(--font-bold);
+  color: var(--accent);
+}
+
+.gmodal__progress-bar {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--bg-secondary);
+  overflow: hidden;
+}
+
+.gmodal__progress-fill {
+  height: 100%;
+  border-radius: 4px;
+  background: var(--accent);
+  transition: width 0.3s ease;
+}
+
+.gmodal__progress-updated {
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.gmodal__steps-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.gmodal__steps-label {
+  font-size: 0.6875rem;
+  font-weight: var(--font-bold);
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.gmodal__steps-count {
+  font-size: 0.8125rem;
+  font-weight: var(--font-medium);
+  color: var(--text-secondary);
+}
+
+.gmodal__steps-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.gmodal__step {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 14px;
+  background: var(--card);
+  transition: all var(--transition-fast, 0.15s ease);
+}
+
+.gmodal__step:hover {
+  border-color: var(--border-hover);
+}
+
+.gmodal__step--done {
+  background: var(--bg-secondary);
+  opacity: 0.75;
+}
+
+.gmodal__step--done .gmodal__step-title,
+.gmodal__step--done .gmodal__step-instruction {
+  text-decoration: line-through;
+  color: var(--muted);
+}
+
+.gmodal__step-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.gmodal__step-drag {
+  background: none;
+  border: none;
+  padding: 4px;
+  cursor: grab;
+  color: var(--muted);
+  border-radius: 4px;
+  transition: color var(--transition-fast, 0.15s ease);
+  margin-top: 2px;
+}
+
+.gmodal__step-drag:hover {
+  color: var(--text-secondary);
+}
+
+.gmodal__step-drag:active {
+  cursor: grabbing;
+}
+
+.gmodal__step-check {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  margin-top: 2px;
+}
+
+.gmodal__step-check input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.gmodal__step-check-box {
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  border: 2px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--card);
+  color: white;
+  transition: all var(--transition-fast, 0.15s ease);
+}
+
+.gmodal__step-check input:checked + .gmodal__step-check-box {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.gmodal__step-num {
+  font-size: 0.8125rem;
+  font-weight: var(--font-bold);
+  color: var(--text-secondary);
+  background: var(--bg-secondary);
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.gmodal__step-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.gmodal__step-title {
+  font-size: 0.875rem;
+  font-weight: var(--font-semibold);
+  color: var(--text);
+  display: block;
+  margin-bottom: 2px;
+}
+
+.gmodal__step-instruction {
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.gmodal__step-citations {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+}
+
+.gmodal__citation-btn {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 4px 8px;
+  font-size: 0.75rem;
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-fast, 0.15s ease);
+}
+
+.gmodal__citation-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.gmodal__citation-text {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  line-height: 1.6;
+  white-space: pre-wrap;
+  margin: 0;
+}
+
+.gmodal__step-edit-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.gmodal__step-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.gmodal__step-edit-btn {
+  padding: 4px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  font-weight: var(--font-medium);
+  cursor: pointer;
+  transition: all var(--transition-fast, 0.15s ease);
+}
+
+.gmodal__step-edit-btn:hover {
+  border-color: var(--border-hover);
+  color: var(--text);
+}
+
+.gmodal__step-edit-btn--save {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+
+.gmodal__step-edit-btn--save:hover {
+  opacity: 0.9;
+  color: #fff;
+}
+
+.gmodal__add-step {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px;
+  border: 2px dashed var(--border);
+  border-radius: 10px;
+  margin-top: 4px;
+}
+
+@media (max-width: 900px) {
+  .hdash__guides {
+    padding: 16px;
+  }
+}
+
+@media (max-width: 600px) {
+  .hdash__guides {
+    padding: 12px;
+  }
+
+  .gmodal {
+    padding: 20px;
+    width: 100%;
+  }
+}
