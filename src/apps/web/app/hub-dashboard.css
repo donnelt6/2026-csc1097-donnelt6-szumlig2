@@ -1222,10 +1222,25 @@
 .hdash__guides {
   display: flex;
   flex-direction: column;
-  gap: 24px;
-  padding: 24px 32px;
+  padding: 64px 48px 68px;
   min-height: 0;
   flex: 1;
+}
+
+.hdash__guides .hubs-grid {
+  align-content: start;
+}
+
+.hdash__guides .hubs-pagination {
+  position: fixed;
+  bottom: 0;
+  left: var(--sidebar-width, 220px);
+  right: 0;
+  margin: 0;
+  padding: 12px 48px;
+  background: transparent;
+  border-top: 1px solid var(--border);
+  z-index: 5;
 }
 
 .hdash__guides-toast {
@@ -1246,6 +1261,7 @@
 
 .guide-card {
   cursor: pointer;
+  height: 290px;
 }
 
 .guide-card--create {
@@ -1394,11 +1410,45 @@
   text-align: right;
 }
 
-.guide-card--loading {
+.guide-card--loading,
+.guide-card--generating {
   display: flex;
   align-items: center;
   justify-content: center;
   min-height: 180px;
+  cursor: default;
+}
+
+.guide-card--generating {
+  border: 2px dashed var(--accent);
+  background: var(--accent-glow);
+  animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+.guide-card__generating-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.guide-card__generating-text {
+  font-size: 0.875rem;
+  font-weight: var(--font-medium);
+  color: var(--accent);
+  margin: 0;
+}
+
+.gmodal__spinner--accent {
+  border-color: rgba(59, 130, 246, 0.2);
+  border-top-color: var(--accent);
+  width: 20px;
+  height: 20px;
 }
 
 .gmodal {
@@ -1406,7 +1456,7 @@
   border: 1px solid var(--border);
   border-radius: 16px;
   padding: 28px;
-  width: 680px;
+  width: 780px;
   max-width: calc(100vw - 32px);
   max-height: calc(100vh - 64px);
   overflow-y: auto;
@@ -1575,14 +1625,14 @@
 .gmodal__steps-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
 }
 
 .gmodal__step {
   border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 12px 14px;
-  background: var(--card);
+  border-radius: 12px;
+  padding: 14px 16px;
+  background: var(--bg);
   transition: all var(--transition-fast, 0.15s ease);
 }
 
@@ -1607,15 +1657,22 @@
   gap: 10px;
 }
 
+.gmodal__step-left {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
 .gmodal__step-drag {
   background: none;
   border: none;
-  padding: 4px;
+  padding: 2px;
   cursor: grab;
   color: var(--muted);
   border-radius: 4px;
   transition: color var(--transition-fast, 0.15s ease);
-  margin-top: 2px;
 }
 
 .gmodal__step-drag:hover {
@@ -1640,9 +1697,10 @@
 }
 
 .gmodal__step-check-box {
-  width: 20px;
-  height: 20px;
+  width: 24px;
+  height: 24px;
   border-radius: 6px;
+  flex-shrink: 0;
   border: 2px solid var(--border);
   display: flex;
   align-items: center;
@@ -1658,18 +1716,17 @@
 }
 
 .gmodal__step-num {
-  font-size: 0.8125rem;
+  font-size: 0.75rem;
   font-weight: var(--font-bold);
-  color: var(--text-secondary);
-  background: var(--bg-secondary);
-  width: 24px;
-  height: 24px;
+  color: var(--accent);
+  background: var(--accent-glow);
+  width: 22px;
+  height: 22px;
   border-radius: 6px;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  margin-top: 1px;
 }
 
 .gmodal__step-content {
@@ -1678,42 +1735,57 @@
 }
 
 .gmodal__step-title {
-  font-size: 0.875rem;
+  font-size: 1rem;
   font-weight: var(--font-semibold);
+  font-family: var(--font-headline, 'Manrope', sans-serif);
   color: var(--text);
   display: block;
-  margin-bottom: 2px;
+  margin-bottom: 4px;
 }
 
 .gmodal__step-instruction {
-  font-size: 0.8125rem;
+  font-size: 0.9375rem;
   color: var(--text-secondary);
-  line-height: 1.5;
+  line-height: 1.6;
   margin: 0;
   white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: break-word;
 }
 
-.gmodal__step-citations {
+.gmodal__step-sources {
   display: flex;
+  align-items: center;
   gap: 6px;
   flex-wrap: wrap;
-  margin-top: 6px;
+  margin-top: 10px;
 }
 
-.gmodal__citation-btn {
+.gmodal__step-sources-label {
+  font-size: 0.6875rem;
+  font-weight: var(--font-semibold);
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.gmodal__step-source-pill {
   border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 4px 8px;
-  font-size: 0.75rem;
+  border-radius: 20px;
+  padding: 2px 10px;
+  font-size: 0.6875rem;
+  font-weight: var(--font-medium);
+  font-family: var(--font-mono, monospace);
   background: var(--bg-secondary);
   color: var(--text-secondary);
   cursor: pointer;
   transition: all var(--transition-fast, 0.15s ease);
 }
 
-.gmodal__citation-btn:hover {
+.gmodal__step-source-pill:hover {
   border-color: var(--accent);
   color: var(--accent);
+  background: var(--accent-glow);
 }
 
 .gmodal__citation-text {
@@ -1762,6 +1834,97 @@
 .gmodal__step-edit-btn--save:hover {
   opacity: 0.9;
   color: #fff;
+}
+
+.gmodal__create-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.gmodal__create-hint {
+  font-size: 0.8125rem;
+  color: var(--muted);
+  margin: 0;
+}
+
+.gmodal__source-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+  flex: 1;
+}
+
+.gmodal__source-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.gmodal__source-section-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.gmodal__source-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow-y: auto;
+  max-height: 240px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 6px;
+}
+
+.gmodal__source-list-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: none;
+  background: none;
+  color: var(--text);
+  font-size: 0.875rem;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  transition: all var(--transition-fast, 0.15s ease);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.gmodal__source-list-item:hover {
+  background: var(--bg-secondary);
+}
+
+.gmodal__source-list-item--selected {
+  background: var(--accent-glow);
+  color: var(--accent);
+  border-left: 3px solid var(--accent);
+}
+
+.gmodal__source-list-item--selected:hover {
+  background: var(--accent-glow);
+}
+
+.gmodal__spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 
 .gmodal__add-step {

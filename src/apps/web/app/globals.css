@@ -1726,8 +1726,15 @@ a {
   padding: 0;
 }
 
+.page-content--no-hero .content-inner:has(.hub-dashboard) {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+}
+
 .page-content--no-hero .content-inner:has(.sources) .hub-tab-content,
-.page-content--no-hero .content-inner:has(.members) .hub-tab-content {
+.page-content--no-hero .content-inner:has(.members) .hub-tab-content,
+.page-content--no-hero .content-inner:has(.hub-dashboard) .hub-tab-content {
   flex: 1;
   min-height: 0;
   display: flex;
@@ -2005,7 +2012,7 @@ a {
   display: flex;
   flex-direction: column;
   min-width: 0;
-  height: 328px;
+  height: 300px;
   text-decoration: none;
   color: inherit;
   box-shadow: 0 16px 32px rgba(15, 23, 42, 0.05);
@@ -2225,6 +2232,8 @@ a {
   line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+  word-break: break-word;
+  overflow-wrap: break-word;
 }
 
 /* Hub Card Footer */
@@ -4838,7 +4847,8 @@ textarea {
 .hub-dashboard {
   display: flex;
   flex-direction: column;
-  gap: 32px;
+  flex: 1;
+  min-height: 0;
 }
 
 .hub-dashboard__section-title {

@@ -23,7 +23,6 @@ import {
   PlusIcon,
   EllipsisVerticalIcon,
   TrashIcon,
-  ArrowPathIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
   XMarkIcon,
@@ -39,13 +38,12 @@ import {
   updateGuideStep,
   updateGuideStepProgress,
 } from "../../lib/api";
-import type { Citation, GuideEntry, GuideStep } from "../../lib/types";
+import type { Citation, GuideEntry, GuideStep, Source } from "../../lib/types";
 import { formatRelativeTime } from "../../lib/utils";
 
 interface Props {
   hubId: string;
-  selectedSourceIds: string[];
-  hasSelectableSources: boolean;
+  sources: Source[];
   canEdit: boolean;
 }
 
@@ -94,22 +92,25 @@ function SortableStepRow({
   return (
     <div ref={setNodeRef} style={style} className={`gmodal__step${step.is_complete ? ' gmodal__step--done' : ''}`}>
       <div className="gmodal__step-row">
-        {canEdit && (
-          <button
-            className="gmodal__step-drag"
-            type="button"
-            aria-label="Reorder step"
-            ref={setActivatorNodeRef}
-            {...attributes}
-            {...listeners}
-          >
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor">
-              <circle cx="4" cy="2" r="1.2" /><circle cx="8" cy="2" r="1.2" />
-              <circle cx="4" cy="6" r="1.2" /><circle cx="8" cy="6" r="1.2" />
-              <circle cx="4" cy="10" r="1.2" /><circle cx="8" cy="10" r="1.2" />
-            </svg>
-          </button>
-        )}
+        <div className="gmodal__step-left">
+          <span className="gmodal__step-num">{index + 1}</span>
+          {canEdit && (
+            <button
+              className="gmodal__step-drag"
+              type="button"
+              aria-label="Reorder step"
+              ref={setActivatorNodeRef}
+              {...attributes}
+              {...listeners}
+            >
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor">
+                <circle cx="4" cy="2" r="1.2" /><circle cx="8" cy="2" r="1.2" />
+                <circle cx="4" cy="6" r="1.2" /><circle cx="8" cy="6" r="1.2" />
+                <circle cx="4" cy="10" r="1.2" /><circle cx="8" cy="10" r="1.2" />
+              </svg>
+            </button>
+          )}
+        </div>
         <label className="gmodal__step-check">
           <input
             type="checkbox"
@@ -125,22 +126,22 @@ function SortableStepRow({
             )}
           </span>
         </label>
-        <span className="gmodal__step-num">{index + 1}</span>
         <div className="gmodal__step-content">
           {!isEditing ? (
             <>
               {step.title && <strong className="gmodal__step-title">{step.title}</strong>}
               <p className="gmodal__step-instruction">{step.instruction}</p>
               {step.citations.length > 0 && (
-                <div className="gmodal__step-citations">
+                <div className="gmodal__step-sources">
+                  <span className="gmodal__step-sources-label">Sources:</span>
                   {step.citations.map((citation, ci) => (
                     <button
                       key={`${citation.source_id}-${citation.chunk_index ?? ci}`}
-                      className="gmodal__citation-btn"
+                      className="gmodal__step-source-pill"
                       type="button"
                       onClick={() => onCitationClick(citation)}
                     >
-                      {citation.source_id.slice(0, 6)} - {citation.snippet.length > 80 ? `${citation.snippet.slice(0, 80)}...` : citation.snippet}
+                      {citation.source_id.slice(0, 6)}
                     </button>
                   ))}
                 </div>
@@ -181,7 +182,7 @@ function SortableStepRow({
   );
 }
 
-export function GuidesPage({ hubId, selectedSourceIds, hasSelectableSources, canEdit }: Props) {
+export function GuidesPage({ hubId, sources, canEdit }: Props) {
   const queryClient = useQueryClient();
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [page, setPage] = useState(1);
@@ -189,7 +190,24 @@ export function GuidesPage({ hubId, selectedSourceIds, hasSelectableSources, can
 
   const [topic, setTopic] = useState("");
   const [stepCountInput, setStepCountInput] = useState("8");
+  const [createSourceIds, setCreateSourceIds] = useState<string[]>([]);
 
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [pendingGenerations, setPendingGenerations] = useState<Set<string>>(new Set());
+
+  const completeSources = useMemo(() => sources.filter((s) => s.status === 'complete'), [sources]);
+
+  // Pre-select all sources when opening create modal
+  const openCreateModal = () => {
+    setCreateSourceIds(completeSources.map((s) => s.id));
+    setShowCreateModal(true);
+  };
+
+  const toggleCreateSource = (id: string) => {
+    setCreateSourceIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  };
   const [selectedGuide, setSelectedGuide] = useState<GuideEntry | null>(null);
   const [editingTitleId, setEditingTitleId] = useState<string | null>(null);
   const [titleDraft, setTitleDraft] = useState("");
@@ -234,32 +252,46 @@ export function GuidesPage({ hubId, selectedSourceIds, hasSelectableSources, can
     }
   }, [guides]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const hasSelection = selectedSourceIds.length > 0;
-  const canGenerate = canEdit && hasSelection;
+  const canGenerate = canEdit && createSourceIds.length > 0;
 
-  const totalPages = Math.max(1, Math.ceil(guides.length / GUIDES_PER_PAGE));
+  const pendingCount = pendingGenerations.size;
+  const slotsForGuides = Math.max(0, GUIDES_PER_PAGE - pendingCount);
+  const totalPages = Math.max(1, Math.ceil(guides.length / Math.max(1, slotsForGuides)));
   const safePage = Math.min(page, totalPages);
-  const pagedGuides = guides.slice((safePage - 1) * GUIDES_PER_PAGE, safePage * GUIDES_PER_PAGE);
+  const pagedGuides = guides.slice((safePage - 1) * slotsForGuides, safePage * slotsForGuides);
 
-  const generateMutation = useMutation({
-    mutationFn: () => {
-      const count = Math.max(1, Math.min(20, Number(stepCountInput) || 1));
-      return generateGuide({
-        hub_id: hubId,
-        source_ids: selectedSourceIds,
-        topic: topic.trim() || undefined,
-        step_count: count,
+  const startGeneration = () => {
+    const id = crypto.randomUUID();
+    const count = Math.max(1, Math.min(20, Number(stepCountInput) || 1));
+    const sourceIds = [...createSourceIds];
+    const topicVal = topic.trim() || undefined;
+
+    setPendingGenerations((prev) => new Set(prev).add(id));
+    setShowCreateModal(false);
+    setTopic("");
+
+    generateGuide({
+      hub_id: hubId,
+      source_ids: sourceIds,
+      topic: topicVal,
+      step_count: count,
+    })
+      .then(async (data) => {
+        const actual = data.entry?.steps?.length ?? 0;
+        setStatusMessage(`Generated ${actual} of ${count} steps.`);
+        await queryClient.invalidateQueries({ queryKey: ["guides", hubId] });
+      })
+      .catch((err) => {
+        setStatusMessage((err as Error).message);
+      })
+      .finally(() => {
+        setPendingGenerations((prev) => {
+          const next = new Set(prev);
+          next.delete(id);
+          return next;
+        });
       });
-    },
-    onSuccess: (data) => {
-      const count = Math.max(1, Math.min(20, Number(stepCountInput) || 1));
-      const actual = data.entry?.steps?.length ?? 0;
-      setStatusMessage(`Generated ${actual} of ${count} steps.`);
-      queryClient.invalidateQueries({ queryKey: ["guides", hubId] });
-      setTopic("");
-    },
-    onError: (err) => setStatusMessage((err as Error).message),
-  });
+  };
 
   const updateGuideMutation = useMutation({
     mutationFn: ({ guideId, payload }: { guideId: string; payload: Parameters<typeof updateGuide>[1] }) =>
@@ -417,64 +449,34 @@ export function GuidesPage({ hubId, selectedSourceIds, hasSelectableSources, can
   };
 
   return (
-    <div className="hdash__guides">
+    <div className={`hdash__guides${totalPages > 1 ? ' hdash__guides--with-pagination' : ''}`}>
       {statusMessage && <div className="hdash__guides-toast">{statusMessage}</div>}
 
       <div className="hubs-grid hubs-grid--4col">
         {canEdit && (
-          <div className="hub-card guide-card guide-card--create">
-            <div className="guide-card__create-inner">
-              <div className="hub-card-create-icon">
-                <PlusIcon />
-              </div>
-              <h3 className="hub-card-create-title">Create New Guide</h3>
-              <div className="guide-card__create-form">
-                <label className="guide-card__create-label">
-                  <span className="guide-card__create-label-text">Name of guide</span>
-                  <input
-                    type="text"
-                    className="hdash__form-input"
-                    value={topic}
-                    onChange={(e) => setTopic(e.target.value)}
-                    placeholder="e.g. Finance Audit"
-                  />
-                </label>
-                <label className="guide-card__create-label">
-                  <span className="guide-card__create-label-text visually-hidden">Steps</span>
-                  <input
-                    type="number"
-                    className="hdash__form-input"
-                    min={1}
-                    max={20}
-                    value={stepCountInput}
-                    onChange={(e) => setStepCountInput(e.target.value)}
-                    onBlur={() => {
-                      const v = Math.max(1, Math.min(20, Number(stepCountInput) || 1));
-                      setStepCountInput(String(v));
-                    }}
-                  />
-                </label>
-                <button
-                  className="guide-card__draft-btn"
-                  onClick={() => generateMutation.mutate()}
-                  disabled={!canGenerate || generateMutation.isPending}
-                >
-                  {generateMutation.isPending ? "Generating..." : "Draft Guide"}
-                  {!generateMutation.isPending && (
-                    <ChevronRightIcon style={{ width: 14, height: 14 }} />
-                  )}
-                </button>
-                {!hasSelectableSources && (
-                  <p className="guide-card__create-hint">Upload sources to generate guides.</p>
-                )}
-                {hasSelectableSources && !hasSelection && (
-                  <p className="guide-card__create-hint">Select at least one source to generate guides.</p>
-                )}
-              </div>
+          <div
+            className="hub-card hub-card--create"
+            onClick={() => openCreateModal()}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => { if (e.key === 'Enter') openCreateModal(); }}
+          >
+            <div className="hub-card-create-icon">
+              <PlusIcon />
             </div>
+            <h3 className="hub-card-create-title">Create New Guide</h3>
+            <p className="hub-card-create-desc">Generate a step-by-step checklist from your sources</p>
           </div>
         )}
 
+        {!showCreateModal && Array.from(pendingGenerations).map((id) => (
+          <div key={id} className="hub-card guide-card guide-card--generating">
+            <div className="guide-card__generating-inner">
+              <span className="gmodal__spinner gmodal__spinner--accent" />
+              <p className="guide-card__generating-text">Generating guide...</p>
+            </div>
+          </div>
+        ))}
         {isLoading && (
           <div className="hub-card guide-card guide-card--loading">
             <p className="muted">Loading guides...</p>
@@ -557,35 +559,135 @@ export function GuidesPage({ hubId, selectedSourceIds, hasSelectableSources, can
         )}
       </div>
 
-      {totalPages > 1 && (
-        <div className="hubs-pagination">
-          <span className="hubs-pagination__info">
-            Showing {(safePage - 1) * GUIDES_PER_PAGE + 1}–{Math.min(safePage * GUIDES_PER_PAGE, guides.length)} of {guides.length} guides
-          </span>
-          <div className="hubs-pagination__controls">
+      <div className="hubs-pagination">
+        <span className="hubs-pagination-info">
+          {guides.length > 0
+            ? `Showing ${(safePage - 1) * slotsForGuides + 1}–${Math.min(safePage * slotsForGuides, guides.length)} of ${guides.length} guides`
+            : '\u00A0'}
+        </span>
+        {totalPages > 1 && (
+          <div className="hubs-pagination-buttons">
             <button
-              className="hubs-pagination__btn"
+              className="hubs-pagination-arrow"
               disabled={safePage <= 1}
               onClick={() => setPage((p) => Math.max(1, p - 1))}
             >
-              <ChevronLeftIcon style={{ width: 14, height: 14 }} />
+              <ChevronLeftIcon className="hubs-pagination-arrow-icon" />
             </button>
             {Array.from({ length: totalPages }, (_, i) => i + 1).map((n) => (
               <button
                 key={n}
-                className={`hubs-pagination__page${n === safePage ? ' hubs-pagination__page--active' : ''}`}
+                className={`hubs-pagination-page${n === safePage ? ' hubs-pagination-page--active' : ''}`}
                 onClick={() => setPage(n)}
               >
                 {n}
               </button>
             ))}
             <button
-              className="hubs-pagination__btn"
+              className="hubs-pagination-arrow"
               disabled={safePage >= totalPages}
               onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
             >
-              <ChevronRightIcon style={{ width: 14, height: 14 }} />
+              <ChevronRightIcon className="hubs-pagination-arrow-icon" />
             </button>
+          </div>
+        )}
+      </div>
+
+      {showCreateModal && (
+        <div className="modal-backdrop" onClick={() => setShowCreateModal(false)}>
+          <div className="gmodal gmodal--sm" onClick={(e) => e.stopPropagation()}>
+            <div className="gmodal__header">
+              <span className="gmodal__badge">NEW GUIDE</span>
+              <button className="gmodal__icon-btn" type="button" onClick={() => setShowCreateModal(false)}>
+                <XMarkIcon />
+              </button>
+            </div>
+            <h2 className="gmodal__title">Create New Guide</h2>
+            <div className="gmodal__create-form">
+              <label className="hdash__form-label">
+                <span className="hdash__form-label-text">What do you want a guide for?</span>
+                <input
+                  type="text"
+                  className="hdash__form-input"
+                  value={topic}
+                  onChange={(e) => setTopic(e.target.value)}
+                  placeholder="e.g. New hire onboarding"
+                  autoFocus
+                />
+              </label>
+              <label className="hdash__form-label">
+                <span className="hdash__form-label-text">How many steps?</span>
+                <input
+                  type="number"
+                  className="hdash__form-input"
+                  min={1}
+                  max={20}
+                  value={stepCountInput}
+                  onChange={(e) => setStepCountInput(e.target.value)}
+                  onBlur={() => {
+                    const v = Math.max(1, Math.min(20, Number(stepCountInput) || 1));
+                    setStepCountInput(String(v));
+                  }}
+                />
+              </label>
+              <div className="gmodal__source-section">
+                <div className="gmodal__source-section-header">
+                  <span className="hdash__form-label-text">Sources ({createSourceIds.length}/{completeSources.length})</span>
+                  {completeSources.length > 0 && (
+                    <div className="gmodal__source-section-actions">
+                      <button
+                        type="button"
+                        className="button--small"
+                        disabled={createSourceIds.length === completeSources.length}
+                        onClick={() => setCreateSourceIds(completeSources.map((s) => s.id))}
+                      >
+                        Select all
+                      </button>
+                      <button
+                        type="button"
+                        className="button--small"
+                        disabled={createSourceIds.length === 0}
+                        onClick={() => setCreateSourceIds([])}
+                      >
+                        Clear
+                      </button>
+                    </div>
+                  )}
+                </div>
+                {completeSources.length > 0 ? (
+                  <ul className="gmodal__source-list">
+                    {completeSources.map((source) => {
+                      const isSelected = createSourceIds.includes(source.id);
+                      return (
+                        <li key={source.id}>
+                          <button
+                            type="button"
+                            className={`gmodal__source-list-item${isSelected ? ' gmodal__source-list-item--selected' : ''}`}
+                            onClick={() => toggleCreateSource(source.id)}
+                          >
+                            {source.original_name}
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                ) : (
+                  <p className="gmodal__create-hint">Upload and process sources first to generate guides.</p>
+                )}
+                {completeSources.length > 0 && createSourceIds.length === 0 && (
+                  <p className="gmodal__create-hint">Select at least one source to generate guides.</p>
+                )}
+              </div>
+              <button
+                className="guide-card__draft-btn"
+                onClick={() => startGeneration()}
+                disabled={!canGenerate}
+              >
+                Draft Guide
+                <ChevronRightIcon style={{ width: 14, height: 14 }} />
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -604,25 +706,14 @@ export function GuidesPage({ hubId, selectedSourceIds, hasSelectableSources, can
                 <span className="gmodal__badge">GUIDE</span>
                 <div className="gmodal__header-actions">
                   {canEdit && (
-                    <>
-                      <button
-                        className="gmodal__icon-btn"
-                        type="button"
-                        title="Regenerate"
-                        onClick={() => generateMutation.mutate()}
-                        disabled={!canGenerate || generateMutation.isPending}
-                      >
-                        <ArrowPathIcon />
-                      </button>
-                      <button
-                        className="gmodal__icon-btn gmodal__icon-btn--danger"
-                        type="button"
-                        title="Archive"
-                        onClick={() => handleArchive(guide)}
-                      >
-                        <TrashIcon />
-                      </button>
-                    </>
+                    <button
+                      className="gmodal__icon-btn gmodal__icon-btn--danger"
+                      type="button"
+                      title="Archive"
+                      onClick={() => handleArchive(guide)}
+                    >
+                      <TrashIcon />
+                    </button>
                   )}
                   <button className="gmodal__icon-btn" type="button" title="Close" onClick={() => setSelectedGuide(null)}>
                     <XMarkIcon />
@@ -753,7 +844,7 @@ export function GuidesPage({ hubId, selectedSourceIds, hasSelectableSources, can
       })()}
 
       {activeCitation && (
-        <div className="modal-backdrop" style={{ zIndex: 60 }} onClick={() => setActiveCitation(null)}>
+        <div className="modal-backdrop" style={{ zIndex: 210 }} onClick={() => setActiveCitation(null)}>
           <div className="gmodal gmodal--sm" onClick={(e) => e.stopPropagation()}>
             <div className="gmodal__header">
               <strong>Source {activeCitation.source_id.slice(0, 8)}</strong>

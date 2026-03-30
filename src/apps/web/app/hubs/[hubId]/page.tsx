@@ -225,8 +225,7 @@ export default function HubDetail({ params }: { params: { hubId: string } }) {
               {activeDashTab === 'guides' && (
                 <GuidesPage
                   hubId={params.hubId}
-                  selectedSourceIds={chatSourceIds}
-                  hasSelectableSources={completeSourceIds.length > 0}
+                  sources={sources ?? []}
                   canEdit={canUpload}
                 />
               )}
