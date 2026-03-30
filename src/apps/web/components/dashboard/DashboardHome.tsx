@@ -24,6 +24,69 @@ import { getEventIcon, buildHubNameMap } from './dashboardUtils';
 import { selectDashboardPrompts } from './dashboardPromptRules';
 import { ProfileAvatar } from '../profile/ProfileAvatar';
 
+function DashboardHomeHubSkeleton({ index }: { index: number }) {
+  return (
+    <div className="hub-card hub-card--skeleton" aria-hidden="true" data-testid={`dashboard-hub-skeleton-${index}`}>
+      <div className="hub-card-top">
+        <div className="hub-card-icon dash-skeleton dash-skeleton--hub-icon" />
+      </div>
+      <div className="dash-skeleton dash-skeleton--hub-title" />
+      <div className="dash-skeleton dash-skeleton--hub-description" />
+      <div className="dash-skeleton dash-skeleton--hub-description dash-skeleton--hub-description-short" />
+      <div className="hub-card-footer">
+        <div className="hub-card-stats">
+          <span className="hub-stat">
+            <span className="dash-skeleton dash-skeleton--hub-stat" />
+          </span>
+          <span className="hub-stat">
+            <span className="dash-skeleton dash-skeleton--hub-stat" />
+          </span>
+        </div>
+        <div className="hub-card-footer-bottom">
+          <span className="dash-skeleton dash-skeleton--hub-time" />
+          <div className="hub-card-avatars">
+            <span className="dash-skeleton dash-skeleton--hub-avatar" />
+            <span className="dash-skeleton dash-skeleton--hub-avatar" />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DashboardHomeActivitySkeleton({ index }: { index: number }) {
+  return (
+    <div className="dash-activity-item dash-activity-item--skeleton" aria-hidden="true" data-testid={`dashboard-activity-skeleton-${index}`}>
+      <div className="dash-activity-avatar dash-skeleton dash-skeleton--activity-avatar" />
+      <div className="dash-activity-content">
+        <div className="dash-skeleton dash-skeleton--activity-line" />
+        <div className="dash-skeleton dash-skeleton--activity-line dash-skeleton--activity-line-short" />
+      </div>
+      <span className="dash-skeleton dash-skeleton--activity-time" />
+    </div>
+  );
+}
+
+function DashboardHomePromptSkeleton({ index }: { index: number }) {
+  return (
+    <div className="dash-prompt-card dash-prompt-card--skeleton" aria-hidden="true" data-testid={`dashboard-prompt-skeleton-${index}`}>
+      <div className="dash-skeleton dash-skeleton--prompt-line" />
+      <div className="dash-skeleton dash-skeleton--prompt-line dash-skeleton--prompt-line-short" />
+      <span className="dash-skeleton dash-skeleton--prompt-badge" />
+    </div>
+  );
+}
+
+function DashboardHomeReminderEmptySkeleton() {
+  return (
+    <div className="dash-empty-state dash-empty-state--compact dash-empty-state--skeleton" aria-hidden="true" data-testid="dashboard-reminder-empty-skeleton">
+      <span className="dash-skeleton dash-skeleton--reminder-empty-icon" />
+      <span className="dash-skeleton dash-skeleton--reminder-empty-line" />
+      <span className="dash-skeleton dash-skeleton--reminder-empty-line dash-skeleton--reminder-empty-line-short" />
+    </div>
+  );
+}
+
 export function DashboardHome() {
   const { user } = useAuth();
   const router = useRouter();
@@ -143,6 +206,7 @@ export function DashboardHome() {
     () => selectDashboardPrompts(hubs, reminders, 2, promptRefreshIndex),
     [hubs, reminders, promptRefreshIndex],
   );
+  const promptsLoading = hubsLoading || remindersLoading;
 
   return (
     <div className="dash-home">
@@ -222,7 +286,9 @@ export function DashboardHome() {
               {recentHubs.length > 0 && <Link href="/hubs" className="dash-section-link">View all hubs</Link>}
             </div>
             <div className="dash-recent-hubs">
-              {recentHubs.length > 0 ? (
+              {hubsLoading ? (
+                Array.from({ length: 2 }, (_, index) => <DashboardHomeHubSkeleton key={index} index={index} />)
+              ) : recentHubs.length > 0 ? (
                 recentHubs.map((hub) => {
                   const appearance = resolveHubAppearance(hub.icon_key, hub.color_key);
                   const HubIcon = appearance.icon.icon;
@@ -310,7 +376,9 @@ export function DashboardHome() {
             </div>
             <div className="dash-activity-card">
               <div className="dash-activity-list">
-                {activityItems.length > 0 ? (
+                {activityLoading ? (
+                  Array.from({ length: 5 }, (_, index) => <DashboardHomeActivitySkeleton key={index} index={index} />)
+                ) : activityItems.length > 0 ? (
                   activityItems.slice(0, 5).map((event) => {
                     const Icon = getEventIcon(event);
                     const tone = getEventTone(event);
@@ -373,6 +441,9 @@ export function DashboardHome() {
                   </div>
                 </>
               )}
+              {closestReminders.length === 0 && remindersLoading && (
+                <DashboardHomeReminderEmptySkeleton />
+              )}
               {closestReminders.length === 0 && !remindersLoading && (
                 <div className="dash-empty-state dash-empty-state--compact">
                   <BellIcon className="dash-empty-state-icon" />
@@ -382,7 +453,7 @@ export function DashboardHome() {
           </div>
 
           {/* Suggested Prompts */}
-          {suggestedPrompts.length > 0 && (
+          {(promptsLoading || suggestedPrompts.length > 0) && (
             <div className="dash-prompts-section">
               <div className="dash-prompts-header">
                 <div className="dash-prompts-heading">
@@ -395,26 +466,31 @@ export function DashboardHome() {
                   onClick={() => setPromptRefreshIndex((current) => current + 1)}
                   aria-label="Refresh suggested prompts"
                   title="Refresh suggested prompts"
+                  disabled={promptsLoading}
                 >
                   <ArrowPathIcon className="dash-prompts-refresh-icon" />
                 </button>
               </div>
               <div className="dash-prompt-list">
-                {suggestedPrompts.map((prompt, i) => (
-                  <button
-                    key={i}
-                    className="dash-prompt-card"
-                    onClick={() => {
-                      if (prompt.hubId) {
-                        router.push(`/hubs/${prompt.hubId}?tab=chat&session=new&promptAction=send&prompt=${encodeURIComponent(prompt.text)}`);
-                      }
-                    }}
-                    type="button"
-                  >
-                    <p className="dash-prompt-text">&ldquo;{prompt.text}&rdquo;</p>
-                    <span className="dash-prompt-hub-badge">{hubNameMap.get(prompt.hubId!) ?? 'Hub'}</span>
-                  </button>
-                ))}
+                {promptsLoading ? (
+                  Array.from({ length: 2 }, (_, index) => <DashboardHomePromptSkeleton key={index} index={index} />)
+                ) : (
+                  suggestedPrompts.map((prompt, i) => (
+                    <button
+                      key={i}
+                      className="dash-prompt-card"
+                      onClick={() => {
+                        if (prompt.hubId) {
+                          router.push(`/hubs/${prompt.hubId}?tab=chat&session=new&promptAction=send&prompt=${encodeURIComponent(prompt.text)}`);
+                        }
+                      }}
+                      type="button"
+                    >
+                      <p className="dash-prompt-text">&ldquo;{prompt.text}&rdquo;</p>
+                      <span className="dash-prompt-hub-badge">{hubNameMap.get(prompt.hubId!) ?? 'Hub'}</span>
+                    </button>
+                  ))
+                )}
               </div>
             </div>
           )}

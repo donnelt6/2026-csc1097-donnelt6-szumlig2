@@ -38,6 +38,24 @@ describe("DashboardHome", () => {
     vi.clearAllMocks();
   });
 
+  it("renders dashboard skeletons while home data is loading", () => {
+    const pending = new Promise<never>(() => {});
+    vi.mocked(listHubs).mockReturnValue(pending);
+    vi.mocked(listReminders).mockReturnValue(pending);
+    vi.mocked(listActivity).mockReturnValue(pending);
+    vi.mocked(listChatSessions).mockReturnValue(pending);
+
+    renderWithQueryClient(<DashboardHome />);
+
+    expect(screen.getByTestId("dashboard-hub-skeleton-0")).toBeInTheDocument();
+    expect(screen.getByTestId("dashboard-hub-skeleton-1")).toBeInTheDocument();
+    expect(screen.getByTestId("dashboard-activity-skeleton-0")).toBeInTheDocument();
+    expect(screen.getByTestId("dashboard-activity-skeleton-4")).toBeInTheDocument();
+    expect(screen.getByTestId("dashboard-reminder-empty-skeleton")).toBeInTheDocument();
+    expect(screen.getByTestId("dashboard-prompt-skeleton-0")).toBeInTheDocument();
+    expect(screen.getByTestId("dashboard-prompt-skeleton-1")).toBeInTheDocument();
+  });
+
   it("renders persisted appearance for recent hubs", async () => {
     vi.mocked(listHubs).mockResolvedValue([
       {

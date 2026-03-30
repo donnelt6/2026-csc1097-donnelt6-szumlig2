@@ -20,7 +20,6 @@ import {
 } from '@heroicons/react/24/outline';
 import { useHubTab } from '../../lib/HubTabContext';
 import { useCurrentHub } from '../../lib/CurrentHubContext';
-import { useSearch } from '../../lib/SearchContext';
 import { listChatSessions, deleteChatSession, renameChatSession } from '../../lib/api';
 import type { ChatSessionSummary } from '../../lib/types';
 
@@ -62,7 +61,6 @@ export function Sidebar({ state, onStateChange, mobileOpen, onMobileClose, onCre
   const searchParams = useSearchParams();
   const { activeTab, setActiveTab } = useHubTab();
   const { currentHub } = useCurrentHub();
-  const { searchQuery } = useSearch();
 
   const hubId = params?.hubId ?? null;
   const isOnHub = pathname.startsWith('/hubs/');
@@ -75,10 +73,6 @@ export function Sidebar({ state, onStateChange, mobileOpen, onMobileClose, onCre
     enabled: !!hubId && showChatSessions,
     staleTime: 0,
   });
-
-  const filteredSessions = searchQuery.trim()
-    ? sessions.filter((s: ChatSessionSummary) => s.title.toLowerCase().includes(searchQuery.toLowerCase()))
-    : sessions;
 
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState('');
@@ -105,6 +99,7 @@ export function Sidebar({ state, onStateChange, mobileOpen, onMobileClose, onCre
   function navigateToSession(sessionId: string) {
     const p = new URLSearchParams(searchParams.toString());
     p.set('session', sessionId);
+    p.delete('message');
     setSessionActionError(null);
     router.replace(`${pathname}?${p.toString()}`, { scroll: false });
   }
@@ -113,6 +108,7 @@ export function Sidebar({ state, onStateChange, mobileOpen, onMobileClose, onCre
     const p = new URLSearchParams(searchParams.toString());
     p.set('session', 'new');
     p.set('tab', 'chat');
+    p.delete('message');
     setSessionActionError(null);
     router.replace(`${pathname}?${p.toString()}`, { scroll: false });
   }
@@ -284,7 +280,7 @@ export function Sidebar({ state, onStateChange, mobileOpen, onMobileClose, onCre
             <p className="chat__banner-error sidebar-chat-error">Error: {sessionActionError}</p>
           )}
           <ul className="sidebar-nav-list sidebar-chat-list">
-            {filteredSessions.map((session: ChatSessionSummary) => (
+            {sessions.map((session: ChatSessionSummary) => (
               <li key={session.id} className="sidebar-chat-item">
                 {editingSessionId === session.id ? (
                   <input

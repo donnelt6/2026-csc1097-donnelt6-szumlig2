@@ -34,6 +34,7 @@ export default function HubDetail({ params }: { params: { hubId: string } }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const hasTrackedAccess = useRef(false);
+  const previousHubId = useRef<string | null>(null);
   const { activeTab, setActiveTab } = useHubTab();
   const { currentHub: hub, isLoading: currentHubLoading } = useCurrentHub();
   const { setSearchQuery } = useSearch();
@@ -42,9 +43,12 @@ export default function HubDetail({ params }: { params: { hubId: string } }) {
   // Switch to the tab specified in ?tab= URL param (e.g. from dashboard prompt links)
   useEffect(() => {
     const tabParam = searchParams.get('tab') as HubTab | null;
+    const isNewHub = previousHubId.current !== params.hubId;
+    previousHubId.current = params.hubId;
+
     if (tabParam && VALID_TABS.includes(tabParam)) {
       setActiveTab(tabParam);
-    } else {
+    } else if (isNewHub) {
       setActiveTab('chat');
     }
   }, [params.hubId, searchParams, setActiveTab]);
@@ -191,6 +195,7 @@ export default function HubDetail({ params }: { params: { hubId: string } }) {
             <UploadPanel
               hubId={params.hubId}
               sources={sources ?? []}
+              sourcesLoading={currentHubLoading || !hubResolved || sourcesLoading}
               onRefresh={() => refetchSources()}
               canUpload={canUpload}
               canReviewSuggestions={canUpload}

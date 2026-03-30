@@ -24,6 +24,22 @@ describe("MembersPanel", () => {
     vi.clearAllMocks();
   });
 
+  it("renders member skeleton rows while loading", () => {
+    const pending = new Promise<never>(() => {});
+    vi.mocked(listMembers).mockReturnValue(pending);
+
+    renderWithQueryClient(<MembersPanel hubId="hub-1" role="owner" />);
+
+    expect(screen.getByText("Member")).toBeInTheDocument();
+    expect(screen.getByTestId("members-header-btn-skeleton-0")).toBeInTheDocument();
+    expect(screen.getByTestId("members-header-btn-skeleton-1")).toBeInTheDocument();
+    expect(screen.getByTestId("members-filter-pill-skeleton-0")).toBeInTheDocument();
+    expect(screen.getByTestId("members-filter-pill-skeleton-6")).toBeInTheDocument();
+    expect(screen.getByTestId("members-row-skeleton-0")).toBeInTheDocument();
+    expect(screen.getByTestId("members-row-skeleton-4")).toBeInTheDocument();
+    expect(screen.queryByText("Loading members...")).not.toBeInTheDocument();
+  });
+
   it("does not expose direct owner assignment controls", async () => {
     vi.mocked(listMembers).mockResolvedValue([
       {

@@ -125,6 +125,17 @@ export interface ChatSessionDetail {
   messages: SessionMessage[];
 }
 
+export interface ChatSearchResult {
+  session_id: string;
+  session_title: string;
+  hub_id: string;
+  message_id: string | null;
+  matched_role: "user" | "assistant" | "title";
+  snippet: string;
+  matched_text?: string | null;
+  created_at: string;
+}
+
 export interface ActivityEvent {
   id: string;
   hub_id: string;

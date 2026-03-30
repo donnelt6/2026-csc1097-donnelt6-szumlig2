@@ -8,7 +8,7 @@ from postgrest.exceptions import APIError
 from supabase import Client
 
 from ..dependencies import CurrentUser, get_current_user, get_supabase_user_client, rate_limit_user_ip
-from ..schemas import ChatPromptSuggestionResponse, ChatRequest, ChatResponse, ChatSessionDetail, ChatSessionRenameRequest, ChatSessionSummary, HistoryMessage
+from ..schemas import ChatPromptSuggestionResponse, ChatRequest, ChatResponse, ChatSearchResult, ChatSessionDetail, ChatSessionRenameRequest, ChatSessionSummary, HistoryMessage
 from ..services.store import store
 from .access import require_accepted, require_hub_member
 from .errors import raise_postgrest_error
@@ -116,6 +116,25 @@ def get_session_messages(
         return store.get_chat_session_with_messages(client, current_user.id, str(hub_id), str(session_id))
     except KeyError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Chat session not found.") from exc
+    except APIError as exc:
+        raise_postgrest_error(exc)
+
+
+@router.get(
+    "/search",
+    response_model=List[ChatSearchResult],
+    dependencies=[Depends(rate_limit_user_ip("chat:read", "rate_limit_read_per_minute"))],
+)
+def search_messages(
+    hub_id: UUID = Query(...),
+    q: str = Query(..., min_length=2, max_length=200),
+    client: Client = Depends(get_supabase_user_client),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> List[ChatSearchResult]:
+    try:
+        member = require_hub_member(client, str(hub_id), current_user.id)
+        require_accepted(member)
+        return store.search_chat_messages(client, current_user.id, str(hub_id), q)
     except APIError as exc:
         raise_postgrest_error(exc)
 

@@ -20,6 +20,7 @@ from ..schemas import (
     AssignableMembershipRole,
     ChatRequest,
     ChatResponse,
+    ChatSearchResult,
     ChatSessionDetail,
     ChatSessionSummary,
     Citation,
@@ -1249,6 +1250,101 @@ class SupabaseStore:
         )
         complete_source_ids = self._complete_source_ids_for_hub(client, hub_id)
         return [self._serialize_chat_session(row, complete_source_ids) for row in (response.data or [])]
+
+    def search_chat_messages(
+        self,
+        client: Client,
+        user_id: str,
+        hub_id: str,
+        query: str,
+        limit: int = 8,
+    ) -> List[ChatSearchResult]:
+        normalized_query = re.sub(r"\s+", " ", (query or "").strip())
+        if len(normalized_query) < 2:
+            return []
+
+        sessions_response = (
+            client.table("chat_sessions")
+            .select("id, hub_id, title, last_message_at")
+            .eq("hub_id", str(hub_id))
+            .eq("created_by", str(user_id))
+            .is_("deleted_at", "null")
+            .order("last_message_at", desc=True)
+            .limit(200)
+            .execute()
+        )
+        session_rows = sessions_response.data or []
+        if not session_rows:
+            return []
+
+        session_lookup = {str(row["id"]): row for row in session_rows}
+        session_ids = list(session_lookup.keys())
+        pattern = f"%{_escape_ilike_pattern(normalized_query)}%"
+        results: List[ChatSearchResult] = []
+
+        for session in session_rows:
+            session_title = str(session.get("title") or "New Chat")
+            title_snippet, matched_text = _build_search_snippet(session_title, normalized_query, radius=20)
+            if not title_snippet:
+                continue
+            results.append(
+                ChatSearchResult(
+                    session_id=str(session.get("id") or ""),
+                    session_title=session_title,
+                    hub_id=str(session.get("hub_id") or hub_id),
+                    message_id=None,
+                    matched_role="title",
+                    snippet=title_snippet,
+                    matched_text=matched_text,
+                    created_at=session.get("last_message_at") or datetime.now(timezone.utc).isoformat(),
+                )
+            )
+
+        messages_response = (
+            client.table("messages")
+            .select("id, session_id, role, content, created_at")
+            .in_("session_id", session_ids)
+            .ilike("content", pattern)
+            .order("created_at", desc=True)
+            .limit(200)
+            .execute()
+        )
+
+        for row in messages_response.data or []:
+            session_id = str(row.get("session_id") or "")
+            session = session_lookup.get(session_id)
+            if not session:
+                continue
+            content = str(row.get("content") or "")
+            snippet, matched_text = _build_search_snippet(content, normalized_query)
+            if not snippet:
+                continue
+            results.append(
+                ChatSearchResult(
+                    session_id=session_id,
+                    session_title=str(session.get("title") or "New Chat"),
+                    hub_id=str(session.get("hub_id") or hub_id),
+                    message_id=str(row.get("id") or ""),
+                    matched_role=str(row.get("role") or "assistant"),
+                    snippet=snippet,
+                    matched_text=matched_text,
+                    created_at=row.get("created_at") or datetime.now(timezone.utc).isoformat(),
+                )
+            )
+
+        results.sort(
+            key=lambda item: (
+                _chat_search_score(
+                    item.session_title,
+                    item.snippet,
+                    item.matched_text or normalized_query,
+                    item.matched_role,
+                ),
+                str(item.created_at),
+            ),
+            reverse=True,
+        )
+        return results[:limit]
 
     def get_chat_session_with_messages(
         self,
@@ -3518,6 +3614,49 @@ def _preview_text(value: Any, limit: int = 140) -> str:
     if len(text) <= limit:
         return text
     return f"{text[: max(0, limit - 1)].rstrip()}..."
+
+
+def _escape_ilike_pattern(value: str) -> str:
+    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
+def _build_search_snippet(content: str, query: str, radius: int = 72) -> tuple[str, str | None]:
+    collapsed = re.sub(r"\s+", " ", (content or "")).strip()
+    normalized_query = re.sub(r"\s+", " ", (query or "")).strip()
+    if not collapsed or not normalized_query:
+        return "", None
+
+    lower_content = collapsed.lower()
+    lower_query = normalized_query.lower()
+    index = lower_content.find(lower_query)
+    if index == -1:
+        words = [word for word in lower_query.split(" ") if word]
+        index = next((lower_content.find(word) for word in words if lower_content.find(word) != -1), -1)
+        if index == -1:
+            return "", None
+        matched_text = next((word for word in words if lower_content.find(word) == index), None)
+    else:
+        matched_text = collapsed[index:index + len(normalized_query)]
+
+    start = max(0, index - radius)
+    end = min(len(collapsed), index + len(matched_text or normalized_query) + radius)
+    snippet = collapsed[start:end].strip()
+    if start > 0:
+        snippet = f"...{snippet}"
+    if end < len(collapsed):
+        snippet = f"{snippet}..."
+    return snippet, matched_text
+
+
+def _chat_search_score(session_title: str, snippet: str, matched_text: str, matched_role: str) -> int:
+    haystack = f"{session_title} {snippet}".lower()
+    needle = (matched_text or "").lower()
+    if not haystack or not needle:
+        return 0
+    occurrences = haystack.count(needle)
+    starts_sentence = 1 if needle and needle in haystack[: max(len(needle) + 16, 24)] else 0
+    title_boost = 100 if matched_role == "title" else 0
+    return title_boost + occurrences * 10 + starts_sentence
 
 
 def _average_similarity(matches: List[Dict[str, Any]]) -> float:

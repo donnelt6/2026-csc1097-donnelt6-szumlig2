@@ -65,6 +65,7 @@ const sources: Source[] = [
 describe("ChatPanel", () => {
   beforeEach(() => {
     currentSearchParams = "";
+    Element.prototype.scrollIntoView = vi.fn();
   });
 
   afterEach(() => {
@@ -76,7 +77,7 @@ describe("ChatPanel", () => {
   it("shows the empty state on first visit when there are no sessions", async () => {
     vi.mocked(listChatSessions).mockResolvedValue([]);
 
-    renderWithQueryClient(
+    const { container } = renderWithQueryClient(
       <ChatPanel hubId="hub-1" sources={sources} />
     );
 
@@ -86,6 +87,8 @@ describe("ChatPanel", () => {
     expect(screen.getByRole("button", { name: "Summarise" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Key Risks" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Suggest a tailored prompt" })).toBeInTheDocument();
+    expect(container.querySelector(".chat__lane--messages")).toBeTruthy();
+    expect(container.querySelector(".chat__lane--composer")).toBeTruthy();
   });
 
   it("prefills the composer with a tailored AI suggestion", async () => {
@@ -247,6 +250,49 @@ describe("ChatPanel", () => {
     expect(screen.getByRole("button", { name: "Suggest a tailored prompt" })).toBeInTheDocument();
   });
 
+  it("highlights a deep-linked message when opening a session from search", async () => {
+    currentSearchParams = "session=session-1&message=msg-1";
+    vi.mocked(listChatSessions).mockResolvedValue([
+      {
+        id: "session-1",
+        hub_id: "hub-1",
+        title: "Assignments",
+        scope: "hub",
+        source_ids: ["src-1", "src-2"],
+        created_at: "2026-01-02T12:00:00Z",
+        last_message_at: "2026-01-02T12:00:00Z",
+      },
+    ]);
+    vi.mocked(getChatSessionMessages).mockResolvedValue({
+      session: {
+        id: "session-1",
+        hub_id: "hub-1",
+        title: "Assignments",
+        scope: "hub",
+        source_ids: ["src-1", "src-2"],
+        created_at: "2026-01-02T12:00:00Z",
+        last_message_at: "2026-01-02T12:00:00Z",
+      },
+      messages: [
+        {
+          id: "msg-1",
+          role: "user",
+          content: "How do I submit assignments?",
+          citations: [],
+          created_at: "2026-01-02T12:00:00Z",
+          flag_status: "none",
+        },
+      ],
+    });
+
+    renderWithQueryClient(
+      <ChatPanel hubId="hub-1" sources={sources} />
+    );
+
+    const message = await screen.findByText("How do I submit assignments?");
+    await waitFor(() => expect(message.closest(".chat__message--highlighted")).toBeInTheDocument());
+  });
+
   it("blocks composer input and submission while the chat is bootstrapping", async () => {
     let resolveSessions!: () => void;
     vi.mocked(listChatSessions).mockImplementation(
@@ -260,7 +306,7 @@ describe("ChatPanel", () => {
       <ChatPanel hubId="hub-1" sources={sources} />
     );
 
-    expect(await screen.findByText("Loading chat...")).toBeInTheDocument();
+    expect(screen.getByTestId("chat-loading-skeleton")).toBeInTheDocument();
     const textarea = screen.getByLabelText("Ask a question");
     const sendButton = screen.getByRole("button", { name: "Send message" });
 
@@ -275,6 +321,7 @@ describe("ChatPanel", () => {
 
     resolveSessions();
     await waitFor(() => expect(screen.getByText("Ask a question about your hub")).toBeInTheDocument());
+    expect(screen.queryByTestId("chat-loading-skeleton")).not.toBeInTheDocument();
     expect(textarea).not.toBeDisabled();
   });
 

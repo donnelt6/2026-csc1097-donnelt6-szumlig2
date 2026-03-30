@@ -16,6 +16,7 @@ import {
   ChevronRightIcon,
   ExclamationTriangleIcon,
   ClipboardDocumentIcon,
+  CheckIcon,
 } from "@heroicons/react/24/outline";
 import {
   deleteSource,
@@ -30,6 +31,7 @@ import type { Source } from "../lib/types";
 interface Props {
   hubId: string;
   sources: Source[];
+  sourcesLoading?: boolean;
   onRefresh: () => void | Promise<unknown>;
   canUpload?: boolean;
   canReviewSuggestions?: boolean;
@@ -44,6 +46,7 @@ interface Props {
 export function UploadPanel({
   hubId,
   sources,
+  sourcesLoading = false,
   onRefresh,
   canUpload = true,
   canReviewSuggestions = false,
@@ -252,6 +255,34 @@ export function UploadPanel({
   const safePage = Math.min(page, totalPages - 1);
   const pagedSources = filteredSources.slice(safePage * pageSize, (safePage + 1) * pageSize);
 
+  const sourceSkeletonRows = Array.from({ length: 5 }, (_, index) => (
+    <div key={index} className="sources__row sources__row--skeleton" aria-hidden="true" data-testid={`sources-row-skeleton-${index}`}>
+      <div className="sources__cell sources__cell--select">
+        <span className="sources__select-toggle sources__select-toggle--skeleton dash-skeleton" />
+      </div>
+      <div className="sources__cell sources__cell--name">
+          <div className="sources__resource-main">
+            <span className="sources__resource-icon sources__resource-icon--skeleton dash-skeleton" />
+            <div className="sources__resource-details">
+              <span className="sources__resource-name-skeleton dash-skeleton" />
+              <span className="sources__resource-meta-skeleton dash-skeleton" />
+            </div>
+          </div>
+        </div>
+      <div className="sources__cell sources__cell--type">
+        <span className="sources__type-badge-skeleton dash-skeleton" />
+      </div>
+      <div className="sources__cell sources__cell--status">
+        <span className="sources__status-skeleton dash-skeleton" />
+      </div>
+      <div className="sources__cell sources__cell--actions">
+        <span className="sources__action-btn sources__action-btn--skeleton dash-skeleton" />
+        <span className="sources__action-btn sources__action-btn--skeleton dash-skeleton" />
+        <span className="sources__action-btn sources__action-btn--skeleton dash-skeleton" />
+      </div>
+    </div>
+  ));
+
   return (
     <div className="sources">
       {/* Header: title on top, subtitle + actions on second row */}
@@ -349,9 +380,10 @@ export function UploadPanel({
       )}
 
       {/* Table header */}
-      {sortedSources.length > 0 && (
+      {(sourcesLoading || sortedSources.length > 0) && (
         <div className="sources__table-header">
-          <span className="sources__th sources__th--name">Resource Name</span>
+          <span className="sources__th sources__th--select">Select</span>
+          <span className="sources__th sources__th--name">Source Name</span>
           <span className="sources__th sources__th--type">Type</span>
           <span className="sources__th sources__th--status">Status</span>
           <span className="sources__th sources__th--actions">Actions</span>
@@ -360,7 +392,7 @@ export function UploadPanel({
 
       {/* Table rows */}
       <div className="sources__table-body">
-        {pagedSources.map((source) => {
+        {sourcesLoading ? sourceSkeletonRows : pagedSources.map((source) => {
           const isSelectable = source.status === "complete";
           const isSelected = isSelectable && selectedSourceSet.has(source.id);
           const isRemoteSource = source.type === "web" || source.type === "youtube";
@@ -372,7 +404,7 @@ export function UploadPanel({
               className={`sources__row${isSelectable ? " sources__row--selectable" : ""}${isSelected ? " sources__row--selected" : ""}`}
               role={isSelectable ? "button" : undefined}
               tabIndex={isSelectable ? 0 : undefined}
-              aria-label={isSelectable ? `${isSelected ? "Deselect" : "Select"} ${source.original_name}` : undefined}
+              aria-label={isSelectable ? `${isSelected ? "Deselect" : "Select"} row ${source.original_name}` : undefined}
               aria-pressed={isSelectable ? isSelected : undefined}
               onClick={isSelectable ? (e) => {
                 if ((e.target as HTMLElement).closest("button, a, input")) return;
@@ -385,21 +417,39 @@ export function UploadPanel({
                 }
               } : undefined}
             >
-              {/* Resource name */}
+              <div className="sources__cell sources__cell--select">
+                {isSelectable ? (
+                  <button
+                    type="button"
+                    className={`sources__select-toggle${isSelected ? " sources__select-toggle--selected" : ""}`}
+                    onClick={() => onToggleSource?.(source.id)}
+                    aria-label={`${isSelected ? "Deselect" : "Select"} ${source.original_name}`}
+                    aria-pressed={isSelected}
+                    title={isSelected ? "Deselect source" : "Select source"}
+                  >
+                    {isSelected && <CheckIcon className="sources__select-toggle-icon" />}
+                  </button>
+                ) : (
+                  <span className="sources__select-toggle sources__select-toggle--disabled" aria-hidden="true" />
+                )}
+              </div>
+              {/* Source name */}
               <div className="sources__cell sources__cell--name">
-                <div className={`sources__resource-icon sources__resource-icon--${source.type}`}>
-                  {source.type === "file" && <DocumentTextIcon className="sources__type-icon sources__type-icon--file" />}
-                  {source.type === "web" && <GlobeAltIcon className="sources__type-icon sources__type-icon--web" />}
-                  {source.type === "youtube" && <PlayCircleIcon className="sources__type-icon sources__type-icon--youtube" />}
-                </div>
-                <div className="sources__resource-details">
-                  <span className="sources__resource-name">{source.original_name}</span>
-                  <span className="sources__resource-meta">
-                    Uploaded {formatRelativeDate(new Date(source.created_at))}
-                    {source.type === "youtube" && (source.ingestion_metadata as Record<string, unknown> | null)?.captions_source === "auto" && (
-                      <span className="sources__auto-caption-badge" title="Auto-generated captions">&#x26A0; Auto-captions</span>
-                    )}
-                  </span>
+                <div className="sources__resource-main">
+                  <div className={`sources__resource-icon sources__resource-icon--${source.type}`}>
+                    {source.type === "file" && <DocumentTextIcon className="sources__type-icon sources__type-icon--file" />}
+                    {source.type === "web" && <GlobeAltIcon className="sources__type-icon sources__type-icon--web" />}
+                    {source.type === "youtube" && <PlayCircleIcon className="sources__type-icon sources__type-icon--youtube" />}
+                  </div>
+                  <div className="sources__resource-details">
+                    <span className="sources__resource-name">{source.original_name}</span>
+                    <span className="sources__resource-meta">
+                      Uploaded {formatRelativeDate(new Date(source.created_at))}
+                      {source.type === "youtube" && (source.ingestion_metadata as Record<string, unknown> | null)?.captions_source === "auto" && (
+                        <span className="sources__auto-caption-badge" title="Auto-generated captions">&#x26A0; Auto-captions</span>
+                      )}
+                    </span>
+                  </div>
                 </div>
               </div>
 
@@ -508,10 +558,10 @@ export function UploadPanel({
             </div>
           );
         })}
-        {sortedSources.length > 0 && filteredSources.length === 0 && (
+        {!sourcesLoading && sortedSources.length > 0 && filteredSources.length === 0 && (
           <p className="sources__empty-message muted">No sources match your search.</p>
         )}
-        {!sortedSources.length && (
+        {!sourcesLoading && !sortedSources.length && (
           <div className="sources__empty">
             <DocumentPlusIcon className="sources__empty-icon" />
             <p className="sources__empty-title">No sources yet</p>

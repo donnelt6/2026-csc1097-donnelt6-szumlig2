@@ -74,6 +74,17 @@ describe("UploadPanel", () => {
     vi.clearAllMocks();
   });
 
+  it("shows source skeleton rows while sources are loading", () => {
+    renderWithQueryClient(
+      <UploadPanel hubId="hub-1" sources={[]} sourcesLoading onRefresh={() => undefined} />
+    );
+
+    expect(screen.getByText("Source Name")).toBeInTheDocument();
+    expect(screen.getByTestId("sources-row-skeleton-0")).toBeInTheDocument();
+    expect(screen.getByTestId("sources-row-skeleton-4")).toBeInTheDocument();
+    expect(screen.queryByText("No sources yet")).not.toBeInTheDocument();
+  });
+
   it("uploads a file and enqueues processing", async () => {
     const onRefresh = vi.fn();
     vi.mocked(createSource).mockResolvedValue({
@@ -332,7 +343,7 @@ describe("UploadPanel", () => {
     expect(screen.getByRole("button", { name: "Refresh" })).toBeInTheDocument();
   });
 
-  it("renders selectable cards for complete sources and not for incomplete", () => {
+  it("renders selection toggles for complete sources and not for incomplete", () => {
     const completeSource: Source = {
       id: "src-complete-1",
       hub_id: "hub-1",
@@ -359,14 +370,12 @@ describe("UploadPanel", () => {
       />
     );
 
-    const completeCard = screen.getByRole("button", { name: /done\.pdf/ });
-    expect(completeCard).toHaveAttribute("aria-pressed", "true");
-
-    // Processing source should not have a button role (not selectable)
-    expect(screen.queryByRole("button", { name: /processing\.pdf/ })).not.toBeInTheDocument();
+    const completeToggle = screen.getByRole("button", { name: /deselect done\.pdf/i });
+    expect(completeToggle).toHaveAttribute("aria-pressed", "true");
+    expect(screen.queryByRole("button", { name: /processing\.pdf/i })).not.toBeInTheDocument();
   });
 
-  it("calls selection callbacks from card click and controls", async () => {
+  it("calls selection callbacks from toggle and controls", async () => {
     const source: Source = {
       id: "src-select-1",
       hub_id: "hub-1",
@@ -383,7 +392,7 @@ describe("UploadPanel", () => {
     );
 
     const user = userEvent.setup();
-    await user.click(screen.getByRole("button", { name: /select\.txt/ }));
+    await user.click(screen.getByRole("button", { name: /deselect select\.txt/i }));
     await user.click(screen.getByRole("button", { name: "Clear" }));
 
     expect(selectionProps.onToggleSource).toHaveBeenCalledWith("src-select-1");
