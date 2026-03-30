@@ -404,7 +404,7 @@ export function UploadPanel({
               className={`sources__row${isSelectable ? " sources__row--selectable" : ""}${isSelected ? " sources__row--selected" : ""}`}
               role={isSelectable ? "button" : undefined}
               tabIndex={isSelectable ? 0 : undefined}
-              aria-label={isSelectable ? `${isSelected ? "Deselect" : "Select"} ${source.original_name}` : undefined}
+              aria-label={isSelectable ? `${isSelected ? "Deselect" : "Select"} row ${source.original_name}` : undefined}
               aria-pressed={isSelectable ? isSelected : undefined}
               onClick={isSelectable ? (e) => {
                 if ((e.target as HTMLElement).closest("button, a, input")) return;
