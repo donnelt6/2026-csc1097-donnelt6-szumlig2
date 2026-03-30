@@ -6,7 +6,7 @@
   gap: 16px;
   flex: 1;
   min-height: 0;
-  overflow: hidden;
+  overflow: visible;
   padding: 24px 24px 0;
 }
 
@@ -16,7 +16,7 @@
   gap: 24px;
   flex: 1;
   min-height: 0;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .members__main {
@@ -57,6 +57,20 @@
   flex-shrink: 0;
 }
 
+.members__header-actions--loading {
+  min-height: 44px;
+}
+
+.members__header-btn-skeleton {
+  width: 156px;
+  height: 42px;
+  border-radius: 8px;
+}
+
+.members__header-btn-skeleton--primary {
+  width: 148px;
+}
+
 .members__invite-btn {
   display: inline-flex;
   align-items: center;
@@ -64,6 +78,7 @@
   padding: 11px 22px;
   font-size: 0.875rem;
   border-radius: 8px;
+  transform: translateY(32px);
 }
 
 .members__btn-icon {
@@ -81,6 +96,10 @@
   gap: 10px;
 }
 
+.members__toolbar--loading {
+  justify-content: flex-start;
+}
+
 .members__filter-groups {
   display: flex;
   align-items: center;
@@ -96,6 +115,20 @@
   border: 1px solid var(--border);
   flex-wrap: wrap;
   align-items: center;
+}
+
+.members__filter-pills--loading {
+  gap: 8px;
+}
+
+.members__filter-pill-skeleton {
+  width: 92px;
+  height: 30px;
+  border-radius: 8px;
+}
+
+.members__filter-pill-skeleton--short {
+  width: 74px;
 }
 
 .members__filter-pill {
@@ -164,6 +197,10 @@
   transition: border-color var(--transition-fast), background var(--transition-fast);
 }
 
+.members__row--skeleton {
+  pointer-events: none;
+}
+
 .members__row:hover {
   border-color: var(--border-hover);
 }
@@ -199,10 +236,27 @@
   letter-spacing: 0.02em;
 }
 
+.members__avatar--skeleton {
+  color: transparent;
+}
+
 .members__member-details {
   display: flex;
   flex-direction: column;
   min-width: 0;
+}
+
+.members__member-name-skeleton {
+  width: min(220px, 70%);
+  height: 15px;
+  border-radius: 6px;
+}
+
+.members__member-email-skeleton {
+  width: min(170px, 52%);
+  height: 12px;
+  margin-top: 7px;
+  border-radius: 6px;
 }
 
 .members__member-name {
@@ -341,6 +395,12 @@
   color: var(--text-secondary);
 }
 
+.members__role-skeleton {
+  width: 88px;
+  height: 32px;
+  border-radius: 8px;
+}
+
 /* Status badges */
 
 .members__status-badge {
@@ -378,6 +438,12 @@
   color: var(--text-secondary);
 }
 
+.members__status-skeleton {
+  width: 84px;
+  height: 14px;
+  border-radius: 999px;
+}
+
 .members__status-spinner {
   width: 14px;
   height: 14px;
@@ -407,6 +473,11 @@
   cursor: pointer;
   color: var(--text-secondary);
   transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.members__action-btn--skeleton {
+  cursor: default;
+  color: transparent;
 }
 
 .members__action-btn:hover {
@@ -465,6 +536,7 @@
 
 .members__transfer-btn {
   font-size: 0.8125rem;
+  transform: translateY(32px);
 }
 
 /* Sidebar */
@@ -479,14 +551,15 @@
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: 14px;
-  padding: 20px;
+  padding: 50px 20px 42px;
+  margin-top: -60px;
 }
 
 .members__info-title {
-  font-size: 1rem;
+  font-size: 1.2rem;
   font-weight: var(--font-bold);
   color: var(--text);
-  margin: 0 0 16px;
+  margin: -10px 0 26px;
   font-family: var(--font-headline, inherit);
 }
 
@@ -502,8 +575,8 @@
 
 .members__info-icon {
   flex-shrink: 0;
-  width: 36px;
-  height: 36px;
+  width: 40px;
+  height: 40px;
   border-radius: 10px;
   display: flex;
   align-items: center;
@@ -526,7 +599,7 @@
 }
 
 .members__info-role {
-  font-size: 0.875rem;
+  font-size: 0.95rem;
   font-weight: var(--font-semibold);
   color: var(--text);
   display: block;
@@ -534,10 +607,10 @@
 }
 
 .members__info-desc {
-  font-size: 0.8125rem;
+  font-size: 0.875rem;
   color: var(--text-secondary);
   margin: 0;
-  line-height: 1.4;
+  line-height: 1.5;
 }
 
 /* Capacity card */
@@ -546,10 +619,10 @@
   background: var(--text);
   color: var(--bg);
   border-radius: 14px;
-  padding: 20px;
+  padding: 36px 20px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
 }
 
 .members__capacity-label {

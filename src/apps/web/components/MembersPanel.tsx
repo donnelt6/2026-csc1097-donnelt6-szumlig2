@@ -30,6 +30,58 @@ function capitalize(s: string) {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
+function MembersPanelSkeletonRow({ index }: { index: number }) {
+  return (
+    <div className="members__row members__row--skeleton" aria-hidden="true" data-testid={`members-row-skeleton-${index}`}>
+      <div className="members__cell members__cell--member">
+        <span className="members__avatar members__avatar--skeleton dash-skeleton" />
+        <div className="members__member-details">
+          <span className="members__member-name-skeleton dash-skeleton" />
+          <span className="members__member-email-skeleton dash-skeleton" />
+        </div>
+      </div>
+      <div className="members__cell members__cell--role">
+        <span className="members__role-skeleton dash-skeleton" />
+      </div>
+      <div className="members__cell members__cell--status">
+        <span className="members__status-skeleton dash-skeleton" />
+      </div>
+      <div className="members__cell members__cell--actions">
+        <span className="members__action-btn members__action-btn--skeleton dash-skeleton" />
+      </div>
+    </div>
+  );
+}
+
+function MembersPanelLoadingActions({ isOwner }: { isOwner: boolean }) {
+  return (
+    <div className="members__header-actions members__header-actions--loading" aria-hidden="true">
+      {isOwner && <span className="members__header-btn-skeleton dash-skeleton" data-testid="members-header-btn-skeleton-0" />}
+      {isOwner && <span className="members__header-btn-skeleton members__header-btn-skeleton--primary dash-skeleton" data-testid="members-header-btn-skeleton-1" />}
+    </div>
+  );
+}
+
+function MembersPanelLoadingFilters() {
+  return (
+    <div className="members__toolbar members__toolbar--loading" aria-hidden="true">
+      <div className="members__filter-groups">
+        <div className="members__filter-pills members__filter-pills--loading">
+          <span className="members__filter-pill-skeleton dash-skeleton" data-testid="members-filter-pill-skeleton-0" />
+          <span className="members__filter-pill-skeleton members__filter-pill-skeleton--short dash-skeleton" data-testid="members-filter-pill-skeleton-1" />
+          <span className="members__filter-pill-skeleton dash-skeleton" data-testid="members-filter-pill-skeleton-2" />
+          <span className="members__filter-pill-skeleton members__filter-pill-skeleton--short dash-skeleton" data-testid="members-filter-pill-skeleton-3" />
+        </div>
+        <div className="members__filter-pills members__filter-pills--loading">
+          <span className="members__filter-pill-skeleton dash-skeleton" data-testid="members-filter-pill-skeleton-4" />
+          <span className="members__filter-pill-skeleton members__filter-pill-skeleton--short dash-skeleton" data-testid="members-filter-pill-skeleton-5" />
+          <span className="members__filter-pill-skeleton members__filter-pill-skeleton--short dash-skeleton" data-testid="members-filter-pill-skeleton-6" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function RoleDropdown({
   value,
   options,
@@ -255,34 +307,38 @@ export function MembersPanel({ hubId, role }: Props) {
         <p className="members__description">
           Manage hub roles, invites, and ownership transfer.
         </p>
-        <div className="members__header-actions">
-          {isOwner && acceptedAdmins.length > 0 && (
-            <button
-              className="button button--danger members__transfer-btn"
-              type="button"
-              onClick={() => setShowTransferModal(true)}
-            >
-              Transfer Ownership
-            </button>
-          )}
-          {isOwner && (
-            <button
-              className="button button--primary members__invite-btn"
-              type="button"
-              onClick={() => setShowInviteModal(true)}
-            >
-              <PlusIcon className="members__btn-icon" />
-              Invite Member
-            </button>
-          )}
-        </div>
+        {isLoading ? (
+          <MembersPanelLoadingActions isOwner={isOwner} />
+        ) : (
+          <div className="members__header-actions">
+            {isOwner && acceptedAdmins.length > 0 && (
+              <button
+                className="button button--danger members__transfer-btn"
+                type="button"
+                onClick={() => setShowTransferModal(true)}
+              >
+                Transfer Ownership
+              </button>
+            )}
+            {isOwner && (
+              <button
+                className="button button--primary members__invite-btn"
+                type="button"
+                onClick={() => setShowInviteModal(true)}
+              >
+                <PlusIcon className="members__btn-icon" />
+                Invite Member
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
-      {isLoading && <p className="muted">Loading members...</p>}
       {error && <p className="muted">Failed to load members: {(error as Error).message}</p>}
 
       {/* Filter pills */}
-      {memberCount > 0 && (
+      {isLoading && <MembersPanelLoadingFilters />}
+      {!isLoading && memberCount > 0 && (
         <div className="members__toolbar">
           <div className="members__filter-groups">
             <div className="members__filter-pills">
@@ -314,7 +370,7 @@ export function MembersPanel({ hubId, role }: Props) {
       )}
 
       {/* Table header */}
-      {filteredMembers.length > 0 && (
+      {(isLoading || filteredMembers.length > 0) && (
         <div className="members__table-header">
           <span>Member</span>
           <span>Role</span>
@@ -328,12 +384,15 @@ export function MembersPanel({ hubId, role }: Props) {
         <div className="members__main">
           {/* Member rows */}
           <div className="members__table-body">
-            {memberCount > 0 && filteredMembers.length === 0 && (
+            {isLoading ? (
+              Array.from({ length: 5 }, (_, index) => <MembersPanelSkeletonRow key={index} index={index} />)
+            ) : null}
+            {!isLoading && memberCount > 0 && filteredMembers.length === 0 && (
               <p className="muted" style={{ textAlign: "center", padding: "24px 0" }}>
                 No members match the current filters.
               </p>
             )}
-            {filteredMembers.map((member: HubMember) => {
+            {!isLoading && filteredMembers.map((member: HubMember) => {
               const isSelf = member.user_id === user?.id;
               const isMemberOwner = member.role === "owner";
               const isDeleting = deletingMemberIds.has(member.user_id);
@@ -424,7 +483,7 @@ export function MembersPanel({ hubId, role }: Props) {
               <div>
                 <strong className="members__info-role">Admins</strong>
                 <p className="members__info-desc">
-                  Full access to hub settings, member management, and all content.
+                  Full access to hub settings, member management, chat moderation, and all content.
                 </p>
               </div>
             </div>
@@ -436,7 +495,7 @@ export function MembersPanel({ hubId, role }: Props) {
               <div>
                 <strong className="members__info-role">Editors</strong>
                 <p className="members__info-desc">
-                  Can create, edit, and organise documents in the Vault.
+                  Can create, edit, and organise documents and artifacts.
                 </p>
               </div>
             </div>

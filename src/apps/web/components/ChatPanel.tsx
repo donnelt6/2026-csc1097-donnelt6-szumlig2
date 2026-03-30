@@ -378,7 +378,6 @@ export const ChatPanel = forwardRef<ChatPanelHandle, Props>(function ChatPanel({
     const params = new URLSearchParams(searchParams.toString());
     params.delete("prompt");
     params.delete("promptAction");
-    params.delete("tab");
     if (sessionId) {
       params.set("session", sessionId);
     } else {
@@ -687,7 +686,6 @@ export const ChatPanel = forwardRef<ChatPanelHandle, Props>(function ChatPanel({
     const params = new URLSearchParams(searchParams.toString());
     params.delete("prompt");
     params.delete("promptAction");
-    params.delete("tab");
     if (params.get("session") === "new") {
       params.delete("session");
     }
