@@ -102,6 +102,9 @@ def update_reminder(
         updates["completed_at"] = now.isoformat()
     elif payload.action == ReminderUpdateAction.cancel:
         updates["status"] = ReminderStatus.cancelled.value
+    elif payload.action == ReminderUpdateAction.reopen:
+        updates["status"] = ReminderStatus.scheduled.value
+        updates["completed_at"] = None
     elif payload.action == ReminderUpdateAction.snooze:
         if payload.snooze_minutes is None:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="snooze_minutes is required.")
@@ -123,6 +126,8 @@ def update_reminder(
         updates["title"] = payload.title
     if payload.message is not None:
         updates["message"] = payload.message
+    if payload.notify_before is not None:
+        updates["notify_before"] = payload.notify_before
 
     if not updates:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No updates provided.")
@@ -133,7 +138,7 @@ def update_reminder(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Reminder not found") from exc
     except APIError as exc:
         raise_postgrest_error(exc)
-    if payload.action in (ReminderUpdateAction.complete, ReminderUpdateAction.cancel):
+    if payload.action in (ReminderUpdateAction.complete, ReminderUpdateAction.cancel, ReminderUpdateAction.reopen):
         store.log_activity(client, reminder.hub_id, current_user.id, payload.action.value, "reminder", reminder.id, {"title": reminder.title, "message": reminder.message})
     elif payload.action is None:
         store.log_activity(client, reminder.hub_id, current_user.id, "updated", "reminder", reminder.id, {"title": reminder.title, "message": reminder.message})

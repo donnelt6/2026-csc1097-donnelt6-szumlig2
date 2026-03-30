@@ -285,6 +285,7 @@ export interface Reminder {
   timezone: string;
   title?: string | null;
   message?: string | null;
+  notify_before?: number | null;
   status: ReminderStatus;
   created_at: string;
   sent_at?: string | null;

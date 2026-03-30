@@ -19,9 +19,11 @@ interface TimePickerProps {
   onMinuteChange: (m: number) => void;
   /** YYYY-MM-DD string — used to filter out past times when date is today */
   selectedDate?: string;
+  maxHour?: number;
+  maxMinute?: number;
 }
 
-export function TimePicker({ hour, minute, onHourChange, onMinuteChange, selectedDate }: TimePickerProps) {
+export function TimePicker({ hour, minute, onHourChange, onMinuteChange, selectedDate, maxHour, maxMinute }: TimePickerProps) {
   const [openSeg, setOpenSeg] = useState<OpenSegment>('closed');
   const wrapRef = useRef<HTMLDivElement>(null);
   const activeListRef = useRef<HTMLDivElement>(null);
@@ -31,11 +33,17 @@ export function TimePicker({ hour, minute, onHourChange, onMinuteChange, selecte
   const currentHour = now.getHours();
   const currentMinute = now.getMinutes();
 
-  /* Filter past times */
-  const filteredHours = isToday ? HOURS.filter(h => h >= currentHour) : HOURS;
-  const filteredMinutes = (isToday && hour === currentHour)
+  let filteredHours = isToday ? HOURS.filter(h => h >= currentHour) : HOURS;
+  if (maxHour != null) {
+    const maxH = (maxMinute != null && maxMinute === 0) ? maxHour - 1 : maxHour;
+    filteredHours = filteredHours.filter(h => h <= maxH);
+  }
+
+  let filteredMinutes = (isToday && hour === currentHour)
     ? MINUTES.filter(m => m >= currentMinute)
     : MINUTES;
+  if (maxHour != null && maxMinute != null && hour === maxHour)
+    filteredMinutes = filteredMinutes.filter(m => m < maxMinute);
 
   /* Close on click outside */
   useEffect(() => {

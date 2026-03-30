@@ -34,9 +34,10 @@ type OpenSegment = 'closed' | 'day' | 'month' | 'year' | 'calendar';
 interface DatePickerProps {
   value: string; /* YYYY-MM-DD */
   onChange: (value: string) => void;
+  maxDate?: string;
 }
 
-export function DatePicker({ value, onChange }: DatePickerProps) {
+export function DatePicker({ value, onChange, maxDate }: DatePickerProps) {
   const [openSeg, setOpenSeg] = useState<OpenSegment>('closed');
   const wrapRef = useRef<HTMLDivElement>(null);
   const activeListRef = useRef<HTMLDivElement>(null);
@@ -80,15 +81,26 @@ export function DatePicker({ value, onChange }: DatePickerProps) {
     if (el) el.scrollIntoView({ block: 'center' });
   }, [openSeg]);
 
-  /* ---- Filtered options (no past dates) ---- */
-  const maxDay = getDaysInMonth(month, year);
+  const maxParsed = maxDate ? new Date(maxDate + 'T00:00:00') : null;
+  const maxDay2 = maxParsed ? maxParsed.getDate() : null;
+  const maxMonth = maxParsed ? maxParsed.getMonth() : null;
+  const maxYear = maxParsed ? maxParsed.getFullYear() : null;
+
+  const totalDaysInMonth = getDaysInMonth(month, year);
   const minDay = (year === todayYear && month === todayMonth) ? todayDay : 1;
-  const DAYS = Array.from({ length: maxDay - minDay + 1 }, (_, i) => minDay + i);
+  let upperDay = totalDaysInMonth;
+  if (maxYear != null && maxMonth != null && maxDay2 != null && year === maxYear && month === maxMonth) {
+    upperDay = Math.min(upperDay, maxDay2);
+  }
+  const DAYS = Array.from({ length: upperDay - minDay + 1 }, (_, i) => minDay + i);
 
-  const minMonth = (year === todayYear) ? todayMonth : 0;
-  const MONTHS = SHORT_MONTHS.map((name, i) => ({ name, index: i })).filter(m => m.index >= minMonth);
+  const minMonth2 = (year === todayYear) ? todayMonth : 0;
+  let maxMonthFilter = 11;
+  if (maxYear != null && maxMonth != null && year === maxYear) maxMonthFilter = maxMonth;
+  const MONTHS = SHORT_MONTHS.map((name, i) => ({ name, index: i })).filter(m => m.index >= minMonth2 && m.index <= maxMonthFilter);
 
-  const filteredYears = YEARS.filter(y => y >= todayYear);
+  let filteredYears = YEARS.filter(y => y >= todayYear);
+  if (maxYear != null) filteredYears = filteredYears.filter(y => y <= maxYear);
 
   /* ---- Calendar grid ---- */
   const selectedCalDay = (() => {
@@ -107,10 +119,15 @@ export function DatePicker({ value, onChange }: DatePickerProps) {
   for (let d = 1; d <= totalDays; d++) cells.push(d);
   while (cells.length % 7 !== 0) cells.push(null);
 
-  const isCalDayPast = (d: number) => {
+  const isCalDayDisabled = (d: number) => {
     if (viewYear < todayYear) return true;
     if (viewYear === todayYear && viewMonth < todayMonth) return true;
     if (viewYear === todayYear && viewMonth === todayMonth && d < todayDay) return true;
+    if (maxYear != null && maxMonth != null && maxDay2 != null) {
+      if (viewYear > maxYear) return true;
+      if (viewYear === maxYear && viewMonth > maxMonth) return true;
+      if (viewYear === maxYear && viewMonth === maxMonth && d > maxDay2) return true;
+    }
     return false;
   };
 
@@ -124,7 +141,7 @@ export function DatePicker({ value, onChange }: DatePickerProps) {
   };
 
   const selectCalDay = (d: number) => {
-    if (isCalDayPast(d)) return;
+    if (isCalDayDisabled(d)) return;
     onChange(`${viewYear}-${pad2(viewMonth + 1)}-${pad2(d)}`);
     setOpenSeg('closed');
   };
@@ -238,7 +255,7 @@ export function DatePicker({ value, onChange }: DatePickerProps) {
               <div key={i} className="hdash__datepicker-weekday">{d}</div>
             ))}
             {cells.map((d, i) => {
-              const past = d !== null && isCalDayPast(d);
+              const past = d !== null && isCalDayDisabled(d);
               return (
                 <button
                   key={i}

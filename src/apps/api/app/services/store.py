@@ -2669,6 +2669,7 @@ class SupabaseStore:
                     "timezone": payload.timezone,
                     "title": payload.title,
                     "message": payload.message,
+                    "notify_before": payload.notify_before,
                     "status": ReminderStatus.scheduled.value,
                 }
             )

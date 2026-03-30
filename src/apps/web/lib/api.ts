@@ -629,6 +629,7 @@ export async function createReminder(data: {
   timezone: string;
   title?: string;
   message?: string;
+  notify_before?: number;
 }): Promise<Reminder> {
   const res = await authedFetch(`${API_BASE}/reminders`, {
     method: "POST",
@@ -645,6 +646,7 @@ export async function updateReminder(
     timezone?: string;
     title?: string;
     message?: string;
+    notify_before?: number;
     action?: ReminderUpdateAction;
     snooze_minutes?: number;
   }
