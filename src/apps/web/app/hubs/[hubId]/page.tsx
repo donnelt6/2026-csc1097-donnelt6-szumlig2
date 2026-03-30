@@ -8,10 +8,9 @@ import type { ChatPanelHandle } from "../../../components/ChatPanel";
 import { HubModerationPanel } from "../../../components/HubModerationPanel";
 import { UploadPanel } from "../../../components/UploadPanel";
 import { MembersPanel } from "../../../components/MembersPanel";
-import { GuidePanel } from "../../../components/GuidePanel";
-import { FaqPanel } from "../../../components/FaqPanel";
 import { DashboardOverview } from "../../../components/hub-dashboard/DashboardOverview";
 import { GuidesPage } from "../../../components/hub-dashboard/GuidesPage";
+import { FaqsPage } from "../../../components/hub-dashboard/FaqsPage";
 import { RemindersPage } from "../../../components/hub-dashboard/RemindersPage";
 
 import { acceptInvite, listInvites, listSources, trackHubAccess } from "../../../lib/api";
@@ -21,8 +20,6 @@ import { useHubDashboardTab } from "../../../lib/HubDashboardTabContext";
 import { useSearch } from "../../../lib/SearchContext";
 import type { HubTab } from "../../../lib/HubTabContext";
 import type { Hub } from "../../../lib/types";
-
-const EMPTY_SOURCES: never[] = [];
 
 const VALID_TABS: HubTab[] = ['chat', 'sources', 'dashboard', 'members', 'settings', 'admin'];
 
@@ -86,7 +83,6 @@ export default function HubDetail({ params }: { params: { hubId: string } }) {
 
   const chatPanelRef = useRef<ChatPanelHandle>(null);
   const [chatSourceIds, setChatSourceIds] = useState<string[]>([]);
-  const completeSourceIds = (sources ?? EMPTY_SOURCES).filter((s) => s.status === 'complete').map((s) => s.id);
   const handleChatSourceChange = useCallback((ids: string[]) => setChatSourceIds(ids), []);
   const handleToggleSource = useCallback((sourceId: string) => chatPanelRef.current?.toggleSource(sourceId), []);
   const handleSelectAllSources = useCallback((scope?: string[]) => chatPanelRef.current?.selectAllSources(scope), []);
@@ -231,10 +227,9 @@ export default function HubDetail({ params }: { params: { hubId: string } }) {
                 <RemindersPage hubId={params.hubId} />
               )}
               {activeDashTab === 'faqs' && (
-                <FaqPanel
+                <FaqsPage
                   hubId={params.hubId}
-                  selectedSourceIds={chatSourceIds}
-                  hasSelectableSources={completeSourceIds.length > 0}
+                  sources={sources ?? []}
                   canEdit={canUpload}
                 />
               )}

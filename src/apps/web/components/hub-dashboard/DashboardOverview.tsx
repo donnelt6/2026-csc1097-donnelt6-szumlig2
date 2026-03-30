@@ -10,7 +10,7 @@ import {
 } from '@heroicons/react/24/outline';
 import { MiniCalendar } from '../dashboard/MiniCalendar';
 import { ReminderModal } from './ReminderModal';
-import { listGuides, listReminders, updateGuideStepProgress } from '../../lib/api';
+import { listFaqs, listGuides, listReminders, updateGuideStepProgress } from '../../lib/api';
 import { formatLocal } from '../../lib/dateUtils';
 import type { HubDashboardTab } from '../../lib/HubDashboardTabContext';
 import type { GuideEntry, Reminder } from '../../lib/types';
@@ -51,6 +51,18 @@ export function DashboardOverview({
   const activeGuides = useMemo(
     () => guides.filter((g: GuideEntry) => !g.archived_at),
     [guides]
+  );
+
+  /* ---- FAQs ---- */
+  const { data: faqs = [] } = useQuery({
+    queryKey: ['faqs', hubId],
+    queryFn: () => listFaqs(hubId),
+    staleTime: 0,
+  });
+
+  const previewFaqs = useMemo(
+    () => faqs.slice(0, 3),
+    [faqs]
   );
 
   const currentGuide = activeGuides[guideIndex] as GuideEntry | undefined;
@@ -288,16 +300,31 @@ export function DashboardOverview({
 
           {contentTab === 'faqs' && (
             <div className="hdash__guide-preview">
-              <p className="muted" style={{ padding: '24px 0', textAlign: 'center' }}>
-                FAQs preview coming soon.{' '}
-                <button
-                  className="hdash__overview-link"
-                  type="button"
-                  onClick={() => onSwitchTab('faqs')}
-                >
-                  View all <ArrowRightIcon className="hdash__overview-link-icon" />
-                </button>
-              </p>
+              {faqs.length === 0 ? (
+                <p className="muted" style={{ padding: '24px 0', textAlign: 'center' }}>
+                  No FAQs yet.{' '}
+                  {canEdit && (
+                    <button
+                      className="hdash__overview-link"
+                      type="button"
+                      onClick={() => onSwitchTab('faqs')}
+                    >
+                      Generate some <ArrowRightIcon className="hdash__overview-link-icon" />
+                    </button>
+                  )}
+                </p>
+              ) : (
+                <div className="hdash__faq-list">
+                  {previewFaqs.map((faq) => (
+                    <div key={faq.id} className="hdash__faq-item">
+                      <h4 className="hdash__faq-question">{faq.question}</h4>
+                      <p className="hdash__faq-answer">
+                        {faq.answer.length > 120 ? `${faq.answer.slice(0, 120)}...` : faq.answer}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>
