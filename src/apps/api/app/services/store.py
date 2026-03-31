@@ -738,6 +738,42 @@ class SupabaseStore:
             )
         return invites
 
+    def list_invite_notifications(self, client: Client, user_id: str) -> List[dict[str, Any]]:
+        response = (
+            client.table("hub_members")
+            .select("hub_id,role,invited_at, hubs (id, owner_id, name, description, created_at)")
+            .eq("user_id", str(user_id))
+            .is_("accepted_at", "null")
+            .is_("invite_notification_dismissed_at", "null")
+            .order("invited_at", desc=True)
+            .execute()
+        )
+        invites: List[dict[str, Any]] = []
+        for row in response.data:
+            hub_row = row.get("hubs") or {}
+            invites.append(
+                {
+                    "hub": Hub(**hub_row),
+                    "role": row.get("role"),
+                    "invited_at": row.get("invited_at"),
+                }
+            )
+        return invites
+
+    def dismiss_invite_notification(self, client: Client, hub_id: str, user_id: str) -> None:
+        now = datetime.now(timezone.utc).isoformat()
+        response = (
+            client.table("hub_members")
+            .update({"invite_notification_dismissed_at": now})
+            .eq("hub_id", str(hub_id))
+            .eq("user_id", str(user_id))
+            .is_("accepted_at", "null")
+            .is_("invite_notification_dismissed_at", "null")
+            .execute()
+        )
+        if not response.data:
+            raise KeyError("Invite notification not found")
+
     def invite_member(self, client: Client, hub_id: str, payload: HubInviteRequest) -> HubMember:
         users = self.service_client.auth.admin.list_users()
         target = next((user for user in users if (user.email or "").lower() == payload.email.lower()), None)
@@ -750,6 +786,7 @@ class SupabaseStore:
                     "hub_id": str(hub_id),
                     "user_id": target.id,
                     "role": payload.role.value,
+                    "invite_notification_dismissed_at": None,
                 }
             )
             .execute()
@@ -2696,8 +2733,8 @@ class SupabaseStore:
         ).execute()
 
     def list_notifications(self, client: Client, user_id: str, reminder_id: Optional[str] = None) -> List[NotificationEvent]:
-        select = "id, reminder_id, channel, status, scheduled_for, sent_at, reminders (id, hub_id, source_id, due_at, message, status)"
-        query = client.table("notifications").select(select).eq("user_id", user_id)
+        select = "id, reminder_id, channel, status, scheduled_for, sent_at, dismissed_at, reminders (id, hub_id, source_id, due_at, message, status, hubs (name))"
+        query = client.table("notifications").select(select).eq("user_id", user_id).is_("dismissed_at", "null")
         if reminder_id:
             query = query.eq("reminder_id", reminder_id)
         response = query.order("scheduled_for", desc=True).execute()
@@ -2710,7 +2747,13 @@ class SupabaseStore:
                 continue
             if row.get("channel") != "in_app":
                 continue
+            hub_row = reminder_row.get("hubs") or {}
+            if isinstance(hub_row, list):
+                hub_row = hub_row[0] if hub_row else {}
+            reminder_row = {**reminder_row, "hub_name": hub_row.get("name")}
             reminder = ReminderSummary(**reminder_row)
+            if reminder.status in {ReminderStatus.completed, ReminderStatus.cancelled}:
+                continue
             events.append(
                 NotificationEvent(
                     id=row["id"],
@@ -2719,10 +2762,54 @@ class SupabaseStore:
                     status=row["status"],
                     scheduled_for=row["scheduled_for"],
                     sent_at=row.get("sent_at"),
+                    dismissed_at=row.get("dismissed_at"),
                     reminder=reminder,
                 )
             )
         return events
+
+    def dismiss_notification(self, client: Client, user_id: str, notification_id: str) -> NotificationEvent:
+        now = datetime.now(timezone.utc).isoformat()
+        response = (
+            client.table("notifications")
+            .update({"dismissed_at": now})
+            .eq("id", notification_id)
+            .eq("user_id", user_id)
+            .is_("dismissed_at", "null")
+            .execute()
+        )
+        if not response.data:
+            raise KeyError("Notification not found")
+        row = response.data[0]
+        reminder_response = (
+            client.table("notifications")
+            .select("id, reminder_id, channel, status, scheduled_for, sent_at, dismissed_at, reminders (id, hub_id, source_id, due_at, message, status, hubs (name))")
+            .eq("id", notification_id)
+            .eq("user_id", user_id)
+            .limit(1)
+            .execute()
+        )
+        if not reminder_response.data:
+            raise KeyError("Notification not found")
+        row = reminder_response.data[0]
+        reminder_row = row.get("reminders") or {}
+        if isinstance(reminder_row, list):
+            reminder_row = reminder_row[0] if reminder_row else {}
+        if not reminder_row:
+            raise KeyError("Notification reminder not found")
+        hub_row = reminder_row.get("hubs") or {}
+        if isinstance(hub_row, list):
+            hub_row = hub_row[0] if hub_row else {}
+        return NotificationEvent(
+            id=row["id"],
+            reminder_id=row["reminder_id"],
+            channel=row["channel"],
+            status=row["status"],
+            scheduled_for=row["scheduled_for"],
+            sent_at=row.get("sent_at"),
+            dismissed_at=row.get("dismissed_at"),
+            reminder=ReminderSummary(**{**reminder_row, "hub_name": hub_row.get("name")}),
+        )
 
     def log_activity(
         self,

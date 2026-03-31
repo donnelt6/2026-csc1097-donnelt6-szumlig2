@@ -556,6 +556,15 @@ export async function acceptInvite(hubId: string): Promise<HubMember> {
   return handle<HubMember>(res);
 }
 
+export async function dismissInviteNotification(hubId: string): Promise<void> {
+  const res = await authedFetch(`${API_BASE}/hubs/${hubId}/members/dismiss-notification`, {
+    method: "POST",
+  });
+  if (!res.ok) {
+    await handle(res);
+  }
+}
+
 export async function updateMemberRole(
   hubId: string,
   userId: string,
@@ -587,6 +596,11 @@ export async function removeMember(hubId: string, userId: string): Promise<void>
 
 export async function listInvites(): Promise<PendingInvite[]> {
   const res = await authedFetch(`${API_BASE}/invites`, { cache: "no-store" });
+  return handle<PendingInvite[]>(res);
+}
+
+export async function listInviteNotifications(): Promise<PendingInvite[]> {
+  const res = await authedFetch(`${API_BASE}/invites/notifications`, { cache: "no-store" });
   return handle<PendingInvite[]>(res);
 }
 
@@ -691,4 +705,11 @@ export async function listReminderNotifications(params: { reminderId?: string } 
     : `${API_BASE}/reminders/notifications`;
   const res = await authedFetch(url, { cache: "no-store" });
   return handle<NotificationEvent[]>(res);
+}
+
+export async function dismissReminderNotification(notificationId: string): Promise<NotificationEvent> {
+  const res = await authedFetch(`${API_BASE}/reminders/notifications/${notificationId}/dismiss`, {
+    method: "POST",
+  });
+  return handle<NotificationEvent>(res);
 }

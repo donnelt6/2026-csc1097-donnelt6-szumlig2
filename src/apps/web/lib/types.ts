@@ -306,6 +306,7 @@ export interface ReminderCandidate {
 export interface ReminderSummary {
   id: string;
   hub_id: string;
+  hub_name?: string | null;
   source_id?: string | null;
   due_at: string;
   message?: string | null;
@@ -319,5 +320,6 @@ export interface NotificationEvent {
   status: NotificationStatus;
   scheduled_for: string;
   sent_at?: string | null;
+  dismissed_at?: string | null;
   reminder: ReminderSummary;
 }

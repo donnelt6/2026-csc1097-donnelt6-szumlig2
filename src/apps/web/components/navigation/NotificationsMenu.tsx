@@ -1,11 +1,18 @@
 'use client';
 
-import { useMemo, useState, useRef, useEffect } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { BellIcon } from "@heroicons/react/24/solid";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { acceptInvite, listInvites, listReminderNotifications } from "../../lib/api";
+import {
+  acceptInvite,
+  dismissInviteNotification,
+  dismissReminderNotification,
+  listInviteNotifications,
+  listReminderNotifications,
+  updateReminder,
+} from "../../lib/api";
 import { useAuth } from "../auth/AuthProvider";
-import type { NotificationEvent } from "../../lib/types";
+import type { NotificationEvent, PendingInvite, Reminder } from "../../lib/types";
 
 function formatTimeAgo(value?: string | null) {
   if (!value) return "recently";
@@ -33,13 +40,11 @@ function formatLocalDate(value?: string | null) {
 export function NotificationsMenu() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
-  const [dismissedInvites, setDismissedInvites] = useState<string[]>([]);
-  const [dismissedReminders, setDismissedReminders] = useState<string[]>([]);
   const detailsRef = useRef<HTMLDetailsElement>(null);
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ["invites"],
-    queryFn: listInvites,
+    queryKey: ["invite-notifications"],
+    queryFn: listInviteNotifications,
     enabled: !!user,
     refetchInterval: 5000,
     refetchIntervalInBackground: true,
@@ -62,34 +67,91 @@ export function NotificationsMenu() {
   const acceptMutation = useMutation({
     mutationFn: (hubId: string) => acceptInvite(hubId),
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["invite-notifications"] });
       queryClient.invalidateQueries({ queryKey: ["invites"] });
       queryClient.invalidateQueries({ queryKey: ["hubs"] });
     },
   });
 
-  const visibleInvites = useMemo(() => {
-    if (!data?.length) return [];
-    return data.filter((invite) => !dismissedInvites.includes(invite.hub.id));
-  }, [data, dismissedInvites]);
+  const dismissInviteMutation = useMutation({
+    mutationFn: (hubId: string) => dismissInviteNotification(hubId),
+    onMutate: async (hubId: string) => {
+      await queryClient.cancelQueries({ queryKey: ["invite-notifications"] });
+      const previousInvites = queryClient.getQueryData<PendingInvite[]>(["invite-notifications"]);
+      queryClient.setQueryData<PendingInvite[]>(["invite-notifications"], (current = []) =>
+        current.filter((invite) => invite.hub.id !== hubId)
+      );
+      return { previousInvites };
+    },
+    onError: (_error, _hubId, context) => {
+      if (context?.previousInvites) {
+        queryClient.setQueryData(["invite-notifications"], context.previousInvites);
+      }
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["invite-notifications"] });
+    },
+  });
 
-  const visibleReminders = useMemo(() => {
-    if (!reminderNotifications?.length) return [];
-    return reminderNotifications.filter((notice) => !dismissedReminders.includes(notice.id));
-  }, [reminderNotifications, dismissedReminders]);
+  const dismissReminderMutation = useMutation({
+    mutationFn: (notificationId: string) => dismissReminderNotification(notificationId),
+    onMutate: async (notificationId: string) => {
+      await queryClient.cancelQueries({ queryKey: ["reminder-notifications"] });
+      const previousNotifications = queryClient.getQueryData<NotificationEvent[]>(["reminder-notifications"]);
+      queryClient.setQueryData<NotificationEvent[]>(["reminder-notifications"], (current = []) =>
+        current.filter((notice) => notice.id !== notificationId)
+      );
+      return { previousNotifications };
+    },
+    onError: (_error, _notificationId, context) => {
+      if (context?.previousNotifications) {
+        queryClient.setQueryData(["reminder-notifications"], context.previousNotifications);
+      }
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["reminder-notifications"] });
+    },
+  });
+
+  const completeReminderMutation = useMutation({
+    mutationFn: ({ reminderId }: { reminderId: string }) => updateReminder(reminderId, { action: "complete" }),
+    onMutate: async ({ reminderId }: { reminderId: string }) => {
+      await queryClient.cancelQueries({ queryKey: ["reminder-notifications"] });
+      const previousNotifications = queryClient.getQueryData<NotificationEvent[]>(["reminder-notifications"]);
+      queryClient.setQueryData<NotificationEvent[]>(["reminder-notifications"], (current = []) =>
+        current.filter((notice) => notice.reminder_id !== reminderId)
+      );
+      return { previousNotifications };
+    },
+    onError: (_error, _variables, context) => {
+      if (context?.previousNotifications) {
+        queryClient.setQueryData(["reminder-notifications"], context.previousNotifications);
+      }
+    },
+    onSuccess: (updatedReminder) => {
+      queryClient.setQueriesData(
+        { queryKey: ["reminders"] },
+        (current: Reminder[] | undefined) =>
+          current?.map((reminder) => (reminder.id === updatedReminder.id ? updatedReminder : reminder))
+      );
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["reminder-notifications"] });
+      queryClient.invalidateQueries({ queryKey: ["reminders"] });
+    },
+  });
+
+  const visibleInvites = useMemo(() => data ?? [], [data]);
+  const visibleReminders = useMemo(
+    () => (reminderNotifications ?? []).filter((notice) => !["completed", "cancelled"].includes(notice.reminder.status)),
+    [reminderNotifications]
+  );
 
   const count = visibleInvites.length + visibleReminders.length;
   const summaryLabel = useMemo(() => {
     if (!count) return "Notifications";
     return `${count} new notification${count === 1 ? "" : "s"}`;
   }, [count]);
-
-  const dismissInvite = (hubId: string) => {
-    setDismissedInvites((prev) => (prev.includes(hubId) ? prev : [...prev, hubId]));
-  };
-
-  const dismissReminder = (notificationId: string) => {
-    setDismissedReminders((prev) => (prev.includes(notificationId) ? prev : [...prev, notificationId]));
-  };
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -135,7 +197,14 @@ export function NotificationsMenu() {
             <p className="notifications-empty">No new notifications</p>
           )}
           {visibleReminders.map((notice) => (
-            <ReminderNotificationCard key={notice.id} notice={notice} onDismiss={dismissReminder} />
+            <ReminderNotificationCard
+              key={notice.id}
+              notice={notice}
+              onDismiss={(notificationId) => dismissReminderMutation.mutate(notificationId)}
+              onComplete={(reminderId) => completeReminderMutation.mutate({ reminderId })}
+              isDismissing={dismissReminderMutation.variables === notice.id}
+              isCompleting={completeReminderMutation.variables?.reminderId === notice.reminder_id}
+            />
           ))}
           {visibleInvites.map((invite) => {
             const hubLabel = truncateLabel(invite.hub.name, 25);
@@ -165,17 +234,27 @@ export function NotificationsMenu() {
                     className="notification-accept"
                     type="button"
                     onClick={() => acceptMutation.mutate(invite.hub.id)}
-                    disabled={acceptMutation.isPending}
+                    disabled={acceptMutation.isPending || dismissInviteMutation.variables === invite.hub.id}
                   >
                     {acceptMutation.isPending ? "Accepting..." : "Accept"}
                   </button>
-                  <button className="notification-dismiss" type="button" onClick={() => dismissInvite(invite.hub.id)}>
+                  <button
+                    className="notification-dismiss"
+                    type="button"
+                    onClick={() => dismissInviteMutation.mutate(invite.hub.id)}
+                    disabled={acceptMutation.isPending || dismissInviteMutation.variables === invite.hub.id}
+                  >
                     Dismiss
                   </button>
                 </div>
               </div>
             );
           })}
+          {(dismissInviteMutation.error || dismissReminderMutation.error || completeReminderMutation.error) && (
+            <p className="notifications-error">
+              Failed to update notification: {((dismissInviteMutation.error || dismissReminderMutation.error || completeReminderMutation.error) as Error).message}
+            </p>
+          )}
         </div>
       </div>
     </details>
@@ -185,13 +264,20 @@ export function NotificationsMenu() {
 function ReminderNotificationCard({
   notice,
   onDismiss,
+  onComplete,
+  isDismissing,
+  isCompleting,
 }: {
   notice: NotificationEvent;
   onDismiss: (notificationId: string) => void;
+  onComplete: (reminderId: string) => void;
+  isDismissing: boolean;
+  isCompleting: boolean;
 }) {
   const title = notice.reminder.message || "Reminder alert";
   const dueLabel = formatLocalDate(notice.reminder.due_at);
   const sentLabel = formatTimeAgo(notice.sent_at ?? notice.scheduled_for);
+  const hubLabel = notice.reminder.hub_name?.trim() || "Unknown hub";
 
   return (
     <div className="notification-card">
@@ -207,13 +293,28 @@ function ReminderNotificationCard({
           <div className="notification-meta-row">
             <span className="notification-meta-right">
               <span className="notification-time">{sentLabel}</span>
-              <span className="notification-role">{notice.channel.replace("_", " ")}</span>
+              <span className="notification-role notification-role--hub" title={hubLabel}>{hubLabel}</span>
             </span>
           </div>
         </div>
       </div>
       <div className="notification-actions">
-        <button className="notification-dismiss" type="button" onClick={() => onDismiss(notice.id)}>
+        {notice.reminder.status !== "completed" && (
+          <button
+            className="notification-accept"
+            type="button"
+            onClick={() => onComplete(notice.reminder_id)}
+            disabled={isDismissing || isCompleting}
+          >
+            {isCompleting ? "Completing..." : "Complete"}
+          </button>
+        )}
+        <button
+          className="notification-dismiss"
+          type="button"
+          onClick={() => onDismiss(notice.id)}
+          disabled={isDismissing || isCompleting}
+        >
           Dismiss
         </button>
       </div>

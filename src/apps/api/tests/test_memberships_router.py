@@ -107,6 +107,34 @@ def test_invite_member_requires_owner(client, monkeypatch) -> None:
     assert resp.status_code == 403
 
 
+def test_list_invite_notifications_returns_items(client, monkeypatch) -> None:
+    owner = {
+        "hub": {
+            "id": "11111111-1111-1111-1111-111111111111",
+            "owner_id": "00000000-0000-0000-0000-000000000002",
+            "name": "Module Hub",
+            "description": None,
+            "created_at": datetime.utcnow(),
+        },
+        "role": MembershipRole.viewer,
+        "invited_at": datetime.utcnow(),
+    }
+    monkeypatch.setattr(store_module.store, "list_invite_notifications", lambda _client, user_id: [owner])
+
+    resp = client.get("/invites/notifications")
+
+    assert resp.status_code == 200
+    assert resp.json()[0]["hub"]["name"] == "Module Hub"
+
+
+def test_dismiss_invite_notification_returns_204(client, monkeypatch) -> None:
+    monkeypatch.setattr(store_module.store, "dismiss_invite_notification", lambda _client, hub_id, user_id: None)
+
+    resp = client.post("/hubs/11111111-1111-1111-1111-111111111111/members/dismiss-notification")
+
+    assert resp.status_code == 204
+
+
 def test_update_member_role_rejects_owner_assignment(client) -> None:
     resp = client.patch(
         "/hubs/11111111-1111-1111-1111-111111111111/members/00000000-0000-0000-0000-000000000002",

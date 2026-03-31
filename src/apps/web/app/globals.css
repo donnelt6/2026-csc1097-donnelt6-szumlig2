@@ -1300,6 +1300,17 @@ a {
   letter-spacing: 0.12em;
 }
 
+.notification-role--hub {
+  text-transform: none;
+  letter-spacing: normal;
+  font-size: 0.72rem;
+  font-weight: var(--font-semibold);
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .notification-time {
   color: var(--muted);
   font-size: 0.75rem;

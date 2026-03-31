@@ -259,6 +259,24 @@ def list_notifications(
         raise_postgrest_error(exc)
 
 
+@router.post(
+    "/notifications/{notification_id}/dismiss",
+    response_model=NotificationEvent,
+    dependencies=[Depends(rate_limit_user_ip("reminders:write", "rate_limit_write_per_minute"))],
+)
+def dismiss_notification(
+    notification_id: UUID,
+    client: Client = Depends(get_supabase_user_client),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> NotificationEvent:
+    try:
+        return store.dismiss_notification(client, current_user.id, str(notification_id))
+    except KeyError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Notification not found") from exc
+    except APIError as exc:
+        raise_postgrest_error(exc)
+
+
 # Build a default reminder message from the candidate snippet/title.
 def _auto_message(candidate: ReminderCandidate) -> str:
     source = candidate.snippet or candidate.title_suggestion or ""
