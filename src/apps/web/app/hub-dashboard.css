@@ -2327,7 +2327,7 @@
 .hdash__faqs {
   display: flex;
   flex-direction: column;
-  padding: 64px 48px 68px;
+  padding: 24px 48px 68px;
   min-height: 0;
   flex: 1;
   gap: 20px;
@@ -2447,6 +2447,30 @@
   align-items: center;
   justify-content: center;
   min-height: 180px;
+}
+
+.faq-card--archiving {
+  opacity: 0.5;
+  pointer-events: none;
+  position: relative;
+}
+
+.faq-card__archiving-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 0.8125rem;
+  font-weight: var(--font-semibold);
+  color: var(--text-secondary);
+  z-index: 2;
+}
+
+.faq-card__archiving-overlay .gmodal__spinner {
+  border-color: rgba(0, 0, 0, 0.15);
+  border-top-color: var(--text-secondary);
 }
 
 .faq-card__question {

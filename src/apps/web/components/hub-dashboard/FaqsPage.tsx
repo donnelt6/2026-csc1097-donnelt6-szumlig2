@@ -130,14 +130,7 @@ export function FaqsPage({ hubId, sources, canEdit }: Props) {
     onError: (err) => setStatusMessage((err as Error).message),
   });
 
-  const archiveMutation = useMutation({
-    mutationFn: (faqId: string) => archiveFaq(faqId),
-    onSuccess: () => {
-      setSelectedFaq(null);
-      queryClient.invalidateQueries({ queryKey: ["faqs", hubId] });
-    },
-    onError: (err) => setStatusMessage((err as Error).message),
-  });
+  const [archivingIds, setArchivingIds] = useState<Set<string>>(new Set());
 
   const buildDefaultDraft = (entry: FaqEntry): DraftValues => ({
     question: entry.question,
@@ -178,7 +171,22 @@ export function FaqsPage({ hubId, sources, canEdit }: Props) {
       const confirmed = window.confirm("Archive this FAQ? You can regenerate later.");
       if (!confirmed) return;
     }
-    archiveMutation.mutate(entry.id);
+    setArchivingIds((prev) => new Set(prev).add(entry.id));
+    archiveFaq(entry.id)
+      .then(() => {
+        setSelectedFaq((prev) => prev?.id === entry.id ? null : prev);
+        queryClient.setQueryData<FaqEntry[]>(["faqs", hubId], (old) =>
+          old?.filter((f) => f.id !== entry.id)
+        );
+      })
+      .catch((err) => setStatusMessage((err as Error).message))
+      .finally(() => {
+        setArchivingIds((prev) => {
+          const next = new Set(prev);
+          next.delete(entry.id);
+          return next;
+        });
+      });
   };
 
   const openFaq = (faq: FaqEntry) => {
@@ -267,12 +275,18 @@ export function FaqsPage({ hubId, sources, canEdit }: Props) {
         {pagedFaqs.map((faq) => (
           <div
             key={faq.id}
-            className="hub-card faq-card"
-            onClick={() => openFaq(faq)}
+            className={`hub-card faq-card${archivingIds.has(faq.id) ? ' faq-card--archiving' : ''}`}
+            onClick={() => !archivingIds.has(faq.id) && openFaq(faq)}
             role="button"
             tabIndex={0}
-            onKeyDown={(e) => { if (e.key === 'Enter') openFaq(faq); }}
+            onKeyDown={(e) => { if (e.key === 'Enter' && !archivingIds.has(faq.id)) openFaq(faq); }}
           >
+            {archivingIds.has(faq.id) && (
+              <div className="faq-card__archiving-overlay">
+                <span className="gmodal__spinner" />
+                <span>Archiving...</span>
+              </div>
+            )}
             <h3 className="faq-card__question">{truncate(faq.question, 80)}</h3>
             <p className="faq-card__answer-preview">{cardPreview(faq.answer)}</p>
             <div className="faq-card__footer">

@@ -33,7 +33,7 @@ class Settings(BaseSettings):
     environment: str = "local"
     allowed_origins: str = ""
     faq_default_count: int = 6
-    faq_context_chunks_per_source: int = 2
+    faq_context_chunks_per_source: int = 4
     faq_max_citations: int = 3
     faq_min_similarity: float = 0.55
     guide_default_steps: int = 8

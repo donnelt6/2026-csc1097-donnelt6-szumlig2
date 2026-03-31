@@ -1,5 +1,8 @@
 import json
+import logging
 import math
+
+logger = logging.getLogger(__name__)
 import random
 import re
 import time
@@ -2241,8 +2244,22 @@ class SupabaseStore:
         if not source_ids:
             raise ValueError("Select at least one source to generate FAQs.")
 
+        existing = (
+            client.table("faq_entries")
+            .select("question")
+            .eq("hub_id", hub_id)
+            .is_("archived_at", "null")
+            .execute()
+        )
+        existing_questions = [q["question"] for q in existing.data]
+
+        faq_limit = 60
+        remaining = faq_limit - len(existing_questions)
+        if remaining <= 0:
+            raise ValueError(f"This hub already has {len(existing_questions)} FAQs (limit {faq_limit}).")
+
         count = payload.count or self.faq_default_count
-        count = max(1, min(int(count), 20))
+        count = max(1, min(int(count), 20, remaining))
 
         context_chunks: List[dict] = []
         for source_id in source_ids:
@@ -2261,7 +2278,21 @@ class SupabaseStore:
                 f"Source {chunk.get('source_id')} [chunk {chunk.get('chunk_index')}]: {snippet}"
             )
 
-        questions = self._generate_faq_questions(context_blocks, count)
+        questions = self._generate_faq_questions(context_blocks, count, existing_questions)
+        logger.info("FAQ generation: LLM returned %d questions: %s", len(questions), questions)
+        if not questions:
+            return []
+
+        existing_normalised = {
+            re.sub(r"[^a-z0-9\s]", "", q.lower()).strip()
+            for q in existing_questions
+        }
+        before_dedup = len(questions)
+        questions = [
+            q for q in questions
+            if re.sub(r"[^a-z0-9\s]", "", q.lower()).strip() not in existing_normalised
+        ]
+        logger.info("FAQ generation: %d/%d survived dedup filter", len(questions), before_dedup)
         if not questions:
             return []
 
@@ -2316,15 +2347,6 @@ class SupabaseStore:
 
         if not entries_payload:
             return []
-
-        (
-            client.table("faq_entries")
-            .update({"archived_at": now, "updated_at": now, "updated_by": user_id})
-            .eq("hub_id", hub_id)
-            .is_("archived_at", "null")
-            .eq("is_pinned", False)
-            .execute()
-        )
 
         response = client.table("faq_entries").insert(entries_payload).execute()
         return [FaqEntry(**row) for row in response.data]
@@ -3067,15 +3089,23 @@ class SupabaseStore:
         )
         return response.data or []
 
-    def _generate_faq_questions(self, context_blocks: List[str], count: int) -> List[str]:
+    def _generate_faq_questions(self, context_blocks: List[str], count: int, existing_questions: Optional[List[str]] = None) -> List[str]:
         system_prompt = (
             "You are Caddie, an onboarding assistant. Generate distinct FAQ questions "
             "grounded strictly in the provided context. Return a JSON array of strings only."
         )
         context = "\n".join(context_blocks)
+        existing_block = ""
+        if existing_questions:
+            existing_list = "\n".join(f"- {q}" for q in existing_questions)
+            existing_block = (
+                f"\n\nExisting FAQs (do NOT repeat, rephrase, or ask similar questions):\n{existing_list}\n"
+                "Focus on NEW topics, details, or angles not yet covered above."
+            )
         user_prompt = (
-            f"Context:\n{context}\n\n"
-            f"Generate {count} concise FAQ questions that an onboarding user would ask."
+            f"Context:\n{context}{existing_block}\n\n"
+            f"Generate exactly {count} concise FAQ questions that an onboarding user would ask. "
+            f"You MUST return {count} questions. Cover different topics from the context."
         )
         completion = self.llm_client.chat.completions.create(
             model=self.chat_model,
@@ -3083,7 +3113,7 @@ class SupabaseStore:
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
             ],
-            temperature=0.2,
+            temperature=0.4,
         )
         raw = completion.choices[0].message.content or ""
         return _parse_questions_from_text(raw, count)
