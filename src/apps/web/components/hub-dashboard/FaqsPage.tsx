@@ -189,6 +189,9 @@ export function FaqsPage({ hubId, sources, canEdit }: Props) {
   const truncate = (text: string, max: number) =>
     text.length > max ? `${text.slice(0, max)}...` : text;
 
+  const cardPreview = (answer: string) =>
+    answer.length > 280 ? answer.slice(0, 280).trimEnd() + '...' : answer;
+
   const pinnedCount = allEntries.filter((f) => f.is_pinned).length;
 
   return (
@@ -271,7 +274,7 @@ export function FaqsPage({ hubId, sources, canEdit }: Props) {
             onKeyDown={(e) => { if (e.key === 'Enter') openFaq(faq); }}
           >
             <h3 className="faq-card__question">{truncate(faq.question, 80)}</h3>
-            <p className="faq-card__answer-preview">{truncate(faq.answer, 160)}</p>
+            <p className="faq-card__answer-preview">{cardPreview(faq.answer)}</p>
             <div className="faq-card__footer">
               <span className="faq-card__confidence-badge">
                 {Math.round((faq.confidence || 0) * 100)}%

@@ -7,13 +7,14 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
   DocumentTextIcon,
+  XMarkIcon,
 } from '@heroicons/react/24/outline';
 import { MiniCalendar } from '../dashboard/MiniCalendar';
 import { ReminderModal } from './ReminderModal';
 import { listFaqs, listGuides, listReminders, updateGuideStepProgress } from '../../lib/api';
 import { formatLocal } from '../../lib/dateUtils';
 import type { HubDashboardTab } from '../../lib/HubDashboardTabContext';
-import type { GuideEntry, Reminder } from '../../lib/types';
+import type { Citation, FaqEntry, GuideEntry, Reminder } from '../../lib/types';
 
 type ModalState =
   | { mode: 'closed' }
@@ -40,6 +41,8 @@ export function DashboardOverview({
   const [modal, setModal] = useState<ModalState>({ mode: 'closed' });
   const [contentTab, setContentTab] = useState<ContentTab>('guides');
   const [guideIndex, setGuideIndex] = useState(0);
+  const [selectedFaq, setSelectedFaq] = useState<FaqEntry | null>(null);
+  const [activeCitation, setActiveCitation] = useState<Citation | null>(null);
 
   /* ---- Guides ---- */
   const { data: guides = [] } = useQuery({
@@ -316,10 +319,22 @@ export function DashboardOverview({
               ) : (
                 <div className="hdash__faq-list">
                   {previewFaqs.map((faq) => (
-                    <div key={faq.id} className="hdash__faq-item">
-                      <h4 className="hdash__faq-question">{faq.question}</h4>
+                    <div
+                      key={faq.id}
+                      className="hdash__faq-item hdash__faq-item--clickable"
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => setSelectedFaq(faq)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') setSelectedFaq(faq); }}
+                    >
+                      <div className="hdash__faq-header">
+                        <h4 className="hdash__faq-question">{faq.question}</h4>
+                        <span className="faq-card__confidence-badge">
+                          {Math.round((faq.confidence || 0) * 100)}%
+                        </span>
+                      </div>
                       <p className="hdash__faq-answer">
-                        {faq.answer.length > 120 ? `${faq.answer.slice(0, 120)}...` : faq.answer}
+                        {faq.answer.length > 150 ? `${faq.answer.slice(0, 150)}...` : faq.answer}
                       </p>
                     </div>
                   ))}
@@ -407,6 +422,75 @@ export function DashboardOverview({
           onClose={closeModal}
           onSaved={closeModal}
         />
+      )}
+
+      {selectedFaq && (
+        <div className="modal-backdrop" onClick={() => setSelectedFaq(null)}>
+          <div className="gmodal" onClick={(e) => e.stopPropagation()}>
+            <div className="gmodal__header">
+              <div className="faq-modal__badges">
+                <span className="gmodal__badge">FAQ</span>
+                {selectedFaq.is_pinned && <span className="gmodal__badge faq-modal__badge--pinned">PINNED</span>}
+              </div>
+              <button className="gmodal__icon-btn" type="button" title="Close" onClick={() => setSelectedFaq(null)}>
+                <XMarkIcon />
+              </button>
+            </div>
+
+            <div className="faq-modal__question-section">
+              <span className="faq-modal__label">QUESTION</span>
+              <h2 className="gmodal__title">{selectedFaq.question}</h2>
+            </div>
+
+            <div className="faq-modal__answer-section">
+              <div className="faq-modal__answer-header">
+                <span className="faq-modal__label">ANSWER</span>
+                <span className="faq-modal__confidence">
+                  {Math.round((selectedFaq.confidence || 0) * 100)}% confidence
+                </span>
+              </div>
+              <p className="faq-modal__answer-text">{selectedFaq.answer}</p>
+            </div>
+
+            {selectedFaq.citations.length > 0 && (
+              <div className="faq-modal__citations">
+                <span className="faq-modal__label">CITATIONS</span>
+                <div className="faq-modal__citations-list">
+                  {selectedFaq.citations.map((citation, idx) => {
+                    const preview = citation.snippet.length > 140
+                      ? `${citation.snippet.slice(0, 140)}...`
+                      : citation.snippet;
+                    return (
+                      <button
+                        key={`${citation.source_id}-${citation.chunk_index ?? idx}`}
+                        className="faq-modal__citation-pill"
+                        type="button"
+                        onClick={() => setActiveCitation(citation)}
+                      >
+                        <span className="faq-modal__citation-id">{citation.source_id.slice(0, 6)}</span>
+                        <span className="faq-modal__citation-snippet">{preview}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {activeCitation && (
+        <div className="modal-backdrop" style={{ zIndex: 210 }} onClick={() => setActiveCitation(null)}>
+          <div className="gmodal gmodal--sm" onClick={(e) => e.stopPropagation()}>
+            <div className="gmodal__header">
+              <strong>Source {activeCitation.source_id.slice(0, 8)}</strong>
+              <button className="gmodal__icon-btn" type="button" onClick={() => setActiveCitation(null)}>
+                <XMarkIcon />
+              </button>
+            </div>
+            <p className="gmodal__citation-text">{activeCitation.snippet}</p>
+          </div>
+        </div>
       )}
     </div>
   );
