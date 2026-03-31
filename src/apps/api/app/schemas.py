@@ -524,6 +524,12 @@ class FaqEntry(BaseModel):
     generation_batch_id: Optional[str] = None
 
 
+class FaqCreateRequest(StrictModel):
+    hub_id: UUID
+    question: str = Field(..., min_length=1, max_length=4000)
+    answer: str = Field(..., min_length=1, max_length=8000)
+
+
 class FaqGenerateRequest(StrictModel):
     hub_id: UUID
     source_ids: List[UUID]
@@ -576,6 +582,7 @@ class GuideEntry(BaseModel):
     topic: Optional[str] = None
     summary: Optional[str] = None
     source_ids: List[str] = Field(default_factory=list)
+    is_favourited: bool = False
     archived_at: Optional[datetime] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
     created_by: Optional[str] = None
@@ -600,6 +607,7 @@ class GuideUpdateRequest(StrictModel):
     title: Optional[str] = Field(default=None, min_length=1, max_length=240)
     topic: Optional[str] = Field(default=None, max_length=240)
     summary: Optional[str] = Field(default=None, max_length=2000)
+    is_favourited: Optional[bool] = None
     archived: Optional[bool] = None
 
 

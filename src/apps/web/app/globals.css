@@ -2533,6 +2533,7 @@ a {
   color: #eab308;
 }
 
+.hub-favourite-button svg,
 .hub-favourite-icon {
   width: 22px;
   height: 22px;
@@ -6745,10 +6746,24 @@ textarea {
 }
 
 /* Navbar tabs */
+.dash-nav-row {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  margin-left: 12px;
+  flex: 1;
+  min-width: 0;
+}
+
 .dash-nav-tabs {
   display: flex;
   gap: 32px;
-  margin-left: 12px;
+  flex-shrink: 0;
+}
+
+.nav-search--dash {
+  max-width: 280px;
+  flex: 1;
 }
 
 .dash-nav-tab {

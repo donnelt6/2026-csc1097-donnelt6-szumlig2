@@ -6,7 +6,7 @@ from postgrest.exceptions import APIError
 from supabase import Client
 
 from ..dependencies import CurrentUser, get_current_user, get_supabase_user_client, rate_limit_user_ip
-from ..schemas import FaqEntry, FaqGenerateRequest, FaqGenerateResponse, FaqUpdateRequest, MembershipRole
+from ..schemas import FaqCreateRequest, FaqEntry, FaqGenerateRequest, FaqGenerateResponse, FaqUpdateRequest, MembershipRole
 from ..services.store import store
 from .errors import raise_postgrest_error
 
@@ -31,6 +31,31 @@ def list_faqs(
     _ = current_user
     try:
         return store.list_faqs(client, str(hub_id))
+    except APIError as exc:
+        raise_postgrest_error(exc)
+
+
+@router.post(
+    "",
+    response_model=FaqEntry,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(rate_limit_user_ip("faqs:write", "rate_limit_write_per_minute"))],
+)
+def create_faq(
+    payload: FaqCreateRequest,
+    client: Client = Depends(get_supabase_user_client),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> FaqEntry:
+    try:
+        member = store.get_member_role(client, payload.hub_id, current_user.id)
+        if not member.accepted_at:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invite not accepted yet.")
+        _require_editor(member.role)
+        entry = store.create_faq(client, str(payload.hub_id), current_user.id, payload.question, payload.answer)
+        store.log_activity(client, str(payload.hub_id), current_user.id, "created", "faq")
+        return entry
+    except KeyError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except APIError as exc:
         raise_postgrest_error(exc)
 

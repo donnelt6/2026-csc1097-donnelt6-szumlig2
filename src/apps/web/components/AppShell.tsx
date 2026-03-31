@@ -228,16 +228,30 @@ export function AppShell({ children }: AppShellProps) {
                   </div>
                 )}
                 {activeTab === 'dashboard' ? (
-                  <div className="dash-nav-tabs">
-                    {hubDashboardTabs.map((tab) => (
-                      <button
-                        key={tab.key}
-                        className={`dash-nav-tab ${activeDashTab === tab.key ? 'dash-nav-tab--active' : ''}`}
-                        onClick={() => setActiveDashTab(tab.key)}
-                      >
-                        {tab.label}
-                      </button>
-                    ))}
+                  <div className="dash-nav-row">
+                    <div className="dash-nav-tabs">
+                      {hubDashboardTabs.map((tab) => (
+                        <button
+                          key={tab.key}
+                          className={`dash-nav-tab ${activeDashTab === tab.key ? 'dash-nav-tab--active' : ''}`}
+                          onClick={() => { setActiveDashTab(tab.key); setSearchQuery(''); }}
+                        >
+                          {tab.label}
+                        </button>
+                      ))}
+                    </div>
+                    {(activeDashTab === 'faqs' || activeDashTab === 'guides') && (
+                      <div className="nav-search nav-search--dash">
+                        <MagnifyingGlassIcon className="nav-search-icon" />
+                        <input
+                          type="text"
+                          placeholder={activeDashTab === 'faqs' ? "Search FAQs..." : "Search guides..."}
+                          value={searchQuery}
+                          onChange={(e) => setSearchQuery(e.target.value)}
+                          className="nav-search-input"
+                        />
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <div className="nav-search nav-search--hub-chat">

@@ -26,7 +26,10 @@ import {
   ChevronRightIcon,
   XMarkIcon,
   DocumentTextIcon,
+  PencilSquareIcon,
+  StarIcon as StarOutline,
 } from "@heroicons/react/24/outline";
+import { StarIcon as StarSolid } from "@heroicons/react/24/solid";
 import {
   archiveGuide,
   createGuideStep,
@@ -39,6 +42,7 @@ import {
 } from "../../lib/api";
 import type { Citation, GuideEntry, GuideStep, Source } from "../../lib/types";
 import { formatRelativeTime } from "../../lib/utils";
+import { useSearch } from "../../lib/SearchContext";
 
 interface Props {
   hubId: string;
@@ -183,6 +187,7 @@ export function GuidesPage({ hubId, sources, canEdit }: Props) {
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [filterTab, setFilterTab] = useState<'recent' | 'favourites'>('recent');
 
   const [topic, setTopic] = useState("");
   const [stepCountInput, setStepCountInput] = useState("8");
@@ -236,17 +241,43 @@ export function GuidesPage({ hubId, sources, canEdit }: Props) {
     staleTime: 0,
   });
 
-  const guides = useMemo(() => data ?? [], [data]);
+  const { searchQuery } = useSearch();
+
+  const allGuides = useMemo(() => data ?? [], [data]);
+  const guides = useMemo(() => {
+    let filtered = allGuides;
+    if (filterTab === 'favourites') filtered = filtered.filter((g) => g.is_favourited);
+    if (searchQuery.trim()) {
+      const q = searchQuery.trim().toLowerCase();
+      filtered = filtered.filter(
+        (g) =>
+          g.title.toLowerCase().includes(q) ||
+          (g.topic && g.topic.toLowerCase().includes(q)) ||
+          g.steps.some(
+            (s) =>
+              (s.title && s.title.toLowerCase().includes(q)) ||
+              s.instruction.toLowerCase().includes(q)
+          )
+      );
+    }
+    return filtered;
+  }, [allGuides, filterTab, searchQuery]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [filterTab, searchQuery]);
+
+  const favouriteCount = allGuides.filter((g) => g.is_favourited).length;
 
   useEffect(() => {
     if (!selectedGuide) return;
-    const fresh = guides.find((g) => g.id === selectedGuide.id);
+    const fresh = allGuides.find((g) => g.id === selectedGuide.id);
     if (fresh) {
       setSelectedGuide(fresh);
     } else {
       setSelectedGuide(null);
     }
-  }, [guides]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [allGuides]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const canGenerate = canEdit && createSourceIds.length > 0;
 
@@ -287,6 +318,30 @@ export function GuidesPage({ hubId, sources, canEdit }: Props) {
           return next;
         });
       });
+  };
+
+  const favouriteMutation = useMutation({
+    mutationFn: ({ guideId, is_favourited }: { guideId: string; is_favourited: boolean }) =>
+      updateGuide(guideId, { is_favourited }),
+    onMutate: async ({ guideId, is_favourited }) => {
+      await queryClient.cancelQueries({ queryKey: ["guides", hubId] });
+      const previous = queryClient.getQueryData<GuideEntry[]>(["guides", hubId]);
+      if (previous) {
+        queryClient.setQueryData(["guides", hubId],
+          previous.map((g) => g.id === guideId ? { ...g, is_favourited } : g)
+        );
+      }
+      return { previous };
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["guides", hubId] }),
+    onError: (err, _vars, ctx) => {
+      if (ctx?.previous) queryClient.setQueryData(["guides", hubId], ctx.previous);
+      setStatusMessage((err as Error).message);
+    },
+  });
+
+  const toggleFavourite = (guide: GuideEntry) => {
+    favouriteMutation.mutate({ guideId: guide.id, is_favourited: !guide.is_favourited });
   };
 
   const updateGuideMutation = useMutation({
@@ -449,8 +504,25 @@ export function GuidesPage({ hubId, sources, canEdit }: Props) {
     <div className={`hdash__guides${totalPages > 1 ? ' hdash__guides--with-pagination' : ''}`}>
       {statusMessage && <div className="hdash__guides-toast">{statusMessage}</div>}
 
+      <div className="faq-toolbar">
+        <div className="hubs-toolbar-tabs">
+          <button
+            className={`hubs-tab${filterTab === 'recent' ? ' hubs-tab--active' : ''}`}
+            onClick={() => setFilterTab('recent')}
+          >
+            Recent
+          </button>
+          <button
+            className={`hubs-tab${filterTab === 'favourites' ? ' hubs-tab--active' : ''}`}
+            onClick={() => setFilterTab('favourites')}
+          >
+            Favourites{favouriteCount > 0 ? ` (${favouriteCount})` : ''}
+          </button>
+        </div>
+      </div>
+
       <div className="hubs-grid hubs-grid--4col">
-        {canEdit && (
+        {canEdit && safePage === 1 && (
           <div
             className="hub-card hub-card--create"
             onClick={() => openCreateModal()}
@@ -502,6 +574,14 @@ export function GuidesPage({ hubId, sources, canEdit }: Props) {
                   <DocumentTextIcon />
                 </div>
                 <div className="hub-card-actions" onClick={(e) => e.stopPropagation()}>
+                  <button
+                    className="hub-favourite-button"
+                    type="button"
+                    title={guide.is_favourited ? 'Unfavourite' : 'Favourite'}
+                    onClick={() => toggleFavourite(guide)}
+                  >
+                    {guide.is_favourited ? <StarSolid className="hub-favourite-icon filled" /> : <StarOutline className="hub-favourite-icon" />}
+                  </button>
                   <div className="hub-card-menu">
                     <button
                       className="hub-menu-button"
@@ -516,6 +596,19 @@ export function GuidesPage({ hubId, sources, canEdit }: Props) {
                     </button>
                     {openMenuId === guide.id && (
                       <div className="hub-card-menu__dropdown">
+                        <button
+                          className="hub-card-menu__item"
+                          type="button"
+                          onClick={() => {
+                            openGuide(guide);
+                            setEditingTitleId(guide.id);
+                            setTitleDraft(guide.title);
+                            setOpenMenuId(null);
+                          }}
+                        >
+                          Edit
+                          <PencilSquareIcon className="hub-card-menu__item-icon" />
+                        </button>
                         <button
                           className="hub-card-menu__item hub-card-menu__item--danger"
                           type="button"
@@ -549,9 +642,15 @@ export function GuidesPage({ hubId, sources, canEdit }: Props) {
           );
         })}
 
-        {!isLoading && !error && guides.length === 0 && !canEdit && (
+        {!isLoading && !error && guides.length === 0 && (
           <div className="hub-card guide-card">
-            <p className="muted" style={{ textAlign: 'center', padding: '24px 0' }}>No guides yet.</p>
+            <p className="muted" style={{ textAlign: 'center', padding: '24px 0' }}>
+              {filterTab === 'favourites'
+                ? 'No favourite guides yet.'
+                : canEdit
+                  ? 'No guides yet. Create one from your sources.'
+                  : 'No guides yet.'}
+            </p>
           </div>
         )}
       </div>

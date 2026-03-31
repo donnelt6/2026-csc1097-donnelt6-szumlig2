@@ -2226,11 +2226,25 @@ class SupabaseStore:
             .select("*")
             .eq("hub_id", str(hub_id))
             .is_("archived_at", "null")
-            .order("is_pinned", desc=True)
             .order("created_at", desc=True)
             .execute()
         )
         return [FaqEntry(**row) for row in response.data]
+
+    def create_faq(self, client: Client, hub_id: str, user_id: str, question: str, answer: str) -> FaqEntry:
+        now = datetime.now(timezone.utc).isoformat()
+        row = {
+            "hub_id": hub_id,
+            "question": question,
+            "answer": answer,
+            "citations": [],
+            "source_ids": [],
+            "confidence": 1.0,
+            "created_at": now,
+            "created_by": user_id,
+        }
+        response = client.table("faq_entries").insert(row).execute()
+        return FaqEntry(**response.data[0])
 
     def get_faq(self, client: Client, faq_id: str) -> FaqEntry:
         response = client.table("faq_entries").select("*").eq("id", str(faq_id)).limit(1).execute()
@@ -2253,7 +2267,7 @@ class SupabaseStore:
         )
         existing_questions = [q["question"] for q in existing.data]
 
-        faq_limit = 60
+        faq_limit = 55
         remaining = faq_limit - len(existing_questions)
         if remaining <= 0:
             raise ValueError(f"This hub already has {len(existing_questions)} FAQs (limit {faq_limit}).")

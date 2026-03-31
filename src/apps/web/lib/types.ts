@@ -185,6 +185,7 @@ export interface GuideEntry {
   topic?: string | null;
   summary?: string | null;
   source_ids: string[];
+  is_favourited?: boolean;
   archived_at?: string | null;
   created_at: string;
   created_by?: string | null;

@@ -7,14 +7,17 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
   XMarkIcon,
-  MapPinIcon,
   PencilSquareIcon,
   TrashIcon,
-  ArrowRightIcon,
-  FunnelIcon,
+  EllipsisVerticalIcon,
+  QuestionMarkCircleIcon,
+  StarIcon as StarOutline,
 } from "@heroicons/react/24/outline";
-import { archiveFaq, generateFaqs, listFaqs, updateFaq } from "../../lib/api";
+import { StarIcon as StarSolid } from "@heroicons/react/24/solid";
+import { archiveFaq, createFaq, generateFaqs, listFaqs, updateFaq } from "../../lib/api";
+import { useSearch } from "../../lib/SearchContext";
 import type { Citation, FaqEntry, Source } from "../../lib/types";
+import { formatRelativeTime } from "../../lib/utils";
 
 interface Props {
   hubId: string;
@@ -27,9 +30,9 @@ interface DraftValues {
   answer: string;
 }
 
-type FilterTab = 'recent' | 'pinned';
+type FilterTab = 'recent' | 'favourites';
 
-const FAQS_PER_PAGE = 6;
+const FAQS_PER_PAGE = 8;
 
 export function FaqsPage({ hubId, sources, canEdit }: Props) {
   const queryClient = useQueryClient();
@@ -37,7 +40,13 @@ export function FaqsPage({ hubId, sources, canEdit }: Props) {
   const [page, setPage] = useState(1);
   const [filterTab, setFilterTab] = useState<FilterTab>('recent');
 
-  const [showCreateModal, setShowCreateModal] = useState(false);
+  const { searchQuery } = useSearch();
+
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [showGenerateModal, setShowGenerateModal] = useState(false);
+  const [showManualModal, setShowManualModal] = useState(false);
+  const [manualQuestion, setManualQuestion] = useState("");
+  const [manualAnswer, setManualAnswer] = useState("");
   const [createSourceIds, setCreateSourceIds] = useState<string[]>([]);
   const [pendingGenerations, setPendingGenerations] = useState<Set<string>>(new Set());
 
@@ -45,12 +54,13 @@ export function FaqsPage({ hubId, sources, canEdit }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<Record<string, DraftValues>>({});
   const [activeCitation, setActiveCitation] = useState<Citation | null>(null);
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
 
   const completeSources = useMemo(() => sources.filter((s) => s.status === 'complete'), [sources]);
 
-  const openCreateModal = () => {
+  const openGenerateModal = () => {
     setCreateSourceIds(completeSources.map((s) => s.id));
-    setShowCreateModal(true);
+    setShowGenerateModal(true);
   };
 
   const toggleCreateSource = (id: string) => {
@@ -65,6 +75,13 @@ export function FaqsPage({ hubId, sources, canEdit }: Props) {
     return () => window.clearTimeout(t);
   }, [statusMessage]);
 
+  useEffect(() => {
+    if (!openMenuId) return;
+    const handler = () => setOpenMenuId(null);
+    window.addEventListener('click', handler);
+    return () => window.removeEventListener('click', handler);
+  }, [openMenuId]);
+
   const { data, isLoading, error } = useQuery({
     queryKey: ["faqs", hubId],
     queryFn: () => listFaqs(hubId),
@@ -74,13 +91,20 @@ export function FaqsPage({ hubId, sources, canEdit }: Props) {
   const allEntries = useMemo(() => data ?? [], [data]);
 
   const entries = useMemo(() => {
-    if (filterTab === 'pinned') return allEntries.filter((f) => f.is_pinned);
-    return allEntries;
-  }, [allEntries, filterTab]);
+    let filtered = allEntries;
+    if (filterTab === 'favourites') filtered = filtered.filter((f) => f.is_pinned);
+    if (searchQuery.trim()) {
+      const q = searchQuery.trim().toLowerCase();
+      filtered = filtered.filter(
+        (f) => f.question.toLowerCase().includes(q) || f.answer.toLowerCase().includes(q)
+      );
+    }
+    return filtered;
+  }, [allEntries, filterTab, searchQuery]);
 
   useEffect(() => {
     setPage(1);
-  }, [filterTab]);
+  }, [filterTab, searchQuery]);
 
   useEffect(() => {
     if (!selectedFaq) return;
@@ -94,16 +118,22 @@ export function FaqsPage({ hubId, sources, canEdit }: Props) {
 
   const canGenerate = canEdit && createSourceIds.length > 0;
 
-  const totalPages = Math.max(1, Math.ceil(entries.length / FAQS_PER_PAGE));
+  const createSlots = canEdit ? 1 : 0;
+  const firstPageLimit = FAQS_PER_PAGE - createSlots;
+  const totalPages = entries.length <= firstPageLimit
+    ? 1
+    : 1 + Math.ceil((entries.length - firstPageLimit) / FAQS_PER_PAGE);
   const safePage = Math.min(page, totalPages);
-  const pagedFaqs = entries.slice((safePage - 1) * FAQS_PER_PAGE, safePage * FAQS_PER_PAGE);
+  const pageStart = safePage === 1 ? 0 : firstPageLimit + (safePage - 2) * FAQS_PER_PAGE;
+  const pageLimit = safePage === 1 ? firstPageLimit : FAQS_PER_PAGE;
+  const pagedFaqs = entries.slice(pageStart, pageStart + pageLimit);
 
   const startGeneration = () => {
     const id = crypto.randomUUID();
     const sourceIds = [...createSourceIds];
 
     setPendingGenerations((prev) => new Set(prev).add(id));
-    setShowCreateModal(false);
+    setShowGenerateModal(false);
 
     generateFaqs({ hub_id: hubId, source_ids: sourceIds })
       .then(async (data) => {
@@ -122,6 +152,18 @@ export function FaqsPage({ hubId, sources, canEdit }: Props) {
         });
       });
   };
+
+  const createMutation = useMutation({
+    mutationFn: (data: { hub_id: string; question: string; answer: string }) => createFaq(data),
+    onSuccess: () => {
+      setShowManualModal(false);
+      setManualQuestion("");
+      setManualAnswer("");
+      queryClient.invalidateQueries({ queryKey: ["faqs", hubId] });
+      setStatusMessage("FAQ added.");
+    },
+    onError: (err) => setStatusMessage((err as Error).message),
+  });
 
   const updateMutation = useMutation({
     mutationFn: ({ faqId, payload }: { faqId: string; payload: Parameters<typeof updateFaq>[1] }) =>
@@ -162,8 +204,28 @@ export function FaqsPage({ hubId, sources, canEdit }: Props) {
     setEditingId(null);
   };
 
-  const togglePin = (entry: FaqEntry) => {
-    updateMutation.mutate({ faqId: entry.id, payload: { is_pinned: !entry.is_pinned } });
+  const favouriteMutation = useMutation({
+    mutationFn: ({ faqId, is_pinned }: { faqId: string; is_pinned: boolean }) =>
+      updateFaq(faqId, { is_pinned }),
+    onMutate: async ({ faqId, is_pinned }) => {
+      await queryClient.cancelQueries({ queryKey: ["faqs", hubId] });
+      const previous = queryClient.getQueryData<FaqEntry[]>(["faqs", hubId]);
+      if (previous) {
+        queryClient.setQueryData(["faqs", hubId],
+          previous.map((f) => f.id === faqId ? { ...f, is_pinned } : f)
+        );
+      }
+      return { previous };
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["faqs", hubId] }),
+    onError: (err, _vars, ctx) => {
+      if (ctx?.previous) queryClient.setQueryData(["faqs", hubId], ctx.previous);
+      setStatusMessage((err as Error).message);
+    },
+  });
+
+  const toggleFavourite = (entry: FaqEntry) => {
+    favouriteMutation.mutate({ faqId: entry.id, is_pinned: !entry.is_pinned });
   };
 
   const handleArchive = (entry: FaqEntry) => {
@@ -200,7 +262,7 @@ export function FaqsPage({ hubId, sources, canEdit }: Props) {
   const cardPreview = (answer: string) =>
     answer.length > 280 ? answer.slice(0, 280).trimEnd() + '...' : answer;
 
-  const pinnedCount = allEntries.filter((f) => f.is_pinned).length;
+  const favouriteCount = allEntries.filter((f) => f.is_pinned).length;
 
   return (
     <div className={`hdash__faqs${totalPages > 1 ? ' hdash__faqs--with-pagination' : ''}`}>
@@ -215,53 +277,31 @@ export function FaqsPage({ hubId, sources, canEdit }: Props) {
             Recent
           </button>
           <button
-            className={`hubs-tab${filterTab === 'pinned' ? ' hubs-tab--active' : ''}`}
-            onClick={() => setFilterTab('pinned')}
+            className={`hubs-tab${filterTab === 'favourites' ? ' hubs-tab--active' : ''}`}
+            onClick={() => setFilterTab('favourites')}
           >
-            Pinned{pinnedCount > 0 ? ` (${pinnedCount})` : ''}
+            Favourites{favouriteCount > 0 ? ` (${favouriteCount})` : ''}
           </button>
         </div>
-        <button className="toolbar-button" type="button" disabled>
-          <FunnelIcon className="toolbar-button-icon" />
-        </button>
       </div>
 
-      {canEdit && (
-        <div className="faq-input-bar">
-          <PlusIcon className="faq-input-bar__icon" />
-          <span className="faq-input-bar__placeholder">Ask a new question...</span>
-          <button
-            className="faq-input-bar__generate"
-            type="button"
-            onClick={() => openCreateModal()}
-            disabled={pendingGenerations.size > 0}
+      <div className="hubs-grid hubs-grid--4col">
+        {canEdit && safePage === 1 && (
+          <div
+            className="hub-card hub-card--create"
+            onClick={() => setShowAddModal(true)}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => { if (e.key === 'Enter') setShowAddModal(true); }}
           >
-            {pendingGenerations.size > 0 ? (
-              <>
-                <span className="gmodal__spinner gmodal__spinner--accent" />
-                Generating...
-              </>
-            ) : (
-              <>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
-                </svg>
-                Generate for me
-              </>
-            )}
-          </button>
-          <button
-            className="faq-input-bar__submit"
-            type="button"
-            title="Press Enter"
-            disabled
-          >
-            <ArrowRightIcon />
-          </button>
-        </div>
-      )}
+            <div className="hub-card-create-icon">
+              <PlusIcon />
+            </div>
+            <h3 className="hub-card-create-title">Add FAQ</h3>
+            <p className="hub-card-create-desc">Write manually or generate from your sources</p>
+          </div>
+        )}
 
-      <div className="hubs-grid hubs-grid--3col">
         {isLoading && (
           <div className="hub-card faq-card faq-card--loading">
             <p className="muted">Loading FAQs...</p>
@@ -287,43 +327,67 @@ export function FaqsPage({ hubId, sources, canEdit }: Props) {
                 <span>Archiving...</span>
               </div>
             )}
-            <h3 className="faq-card__question">{truncate(faq.question, 80)}</h3>
-            <p className="faq-card__answer-preview">{cardPreview(faq.answer)}</p>
+            <div className="hub-card-top">
+              <div className="faq-card__icon">
+                <QuestionMarkCircleIcon />
+              </div>
+              <div className="hub-card-actions" onClick={(e) => e.stopPropagation()}>
+                <button
+                  className="hub-favourite-button"
+                  type="button"
+                  title={faq.is_pinned ? 'Unfavourite' : 'Favourite'}
+                  onClick={() => toggleFavourite(faq)}
+                >
+                  {faq.is_pinned ? <StarSolid className="hub-favourite-icon filled" /> : <StarOutline className="hub-favourite-icon" />}
+                </button>
+                {canEdit && (
+                  <div className="hub-card-menu">
+                    <button
+                      className="hub-menu-button"
+                      type="button"
+                      aria-label="FAQ options"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setOpenMenuId(openMenuId === faq.id ? null : faq.id);
+                      }}
+                    >
+                      <EllipsisVerticalIcon style={{ width: 18, height: 18 }} />
+                    </button>
+                    {openMenuId === faq.id && (
+                      <div className="hub-card-menu__dropdown">
+                        <button
+                          className="hub-card-menu__item"
+                          type="button"
+                          onClick={() => {
+                            openFaq(faq);
+                            startEditing(faq);
+                            setOpenMenuId(null);
+                          }}
+                        >
+                          Edit
+                          <PencilSquareIcon className="hub-card-menu__item-icon" />
+                        </button>
+                        <button
+                          className="hub-card-menu__item hub-card-menu__item--danger"
+                          type="button"
+                          onClick={() => handleArchive(faq)}
+                        >
+                          Archive
+                          <TrashIcon className="hub-card-menu__item-icon" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+            <h3 className="hub-card-title">{truncate(faq.question, 80)}</h3>
+            <p className="hub-card-description">{cardPreview(faq.answer)}</p>
             <div className="faq-card__footer">
               <span className="faq-card__confidence-badge">
                 {Math.round((faq.confidence || 0) * 100)}%
               </span>
-              {canEdit && (
-                <div className="faq-card__actions" onClick={(e) => e.stopPropagation()}>
-                  <button
-                    className={`faq-card__action-btn${faq.is_pinned ? ' faq-card__action-btn--active' : ''}`}
-                    type="button"
-                    title={faq.is_pinned ? 'Unpin' : 'Pin'}
-                    onClick={() => togglePin(faq)}
-                  >
-                    <MapPinIcon />
-                  </button>
-                  <button
-                    className="faq-card__action-btn"
-                    type="button"
-                    title="Edit"
-                    onClick={() => {
-                      openFaq(faq);
-                      startEditing(faq);
-                    }}
-                  >
-                    <PencilSquareIcon />
-                  </button>
-                  <button
-                    className="faq-card__action-btn faq-card__action-btn--danger"
-                    type="button"
-                    title="Archive"
-                    onClick={() => handleArchive(faq)}
-                  >
-                    <TrashIcon />
-                  </button>
-                </div>
-              )}
+              <span className="faq-card__date">Created {formatRelativeTime(faq.created_at)}</span>
             </div>
           </div>
         ))}
@@ -331,8 +395,8 @@ export function FaqsPage({ hubId, sources, canEdit }: Props) {
         {!isLoading && !error && entries.length === 0 && (
           <div className="hub-card faq-card faq-card--empty">
             <p className="muted">
-              {filterTab === 'pinned'
-                ? 'No pinned FAQs yet.'
+              {filterTab === 'favourites'
+                ? 'No favourite FAQs yet.'
                 : canEdit
                   ? 'No FAQs yet. Generate them from your sources.'
                   : 'No FAQs yet.'}
@@ -376,12 +440,55 @@ export function FaqsPage({ hubId, sources, canEdit }: Props) {
         )}
       </div>
 
-      {showCreateModal && (
-        <div className="modal-backdrop" onClick={() => setShowCreateModal(false)}>
+      {showAddModal && (
+        <div className="modal-backdrop" onClick={() => setShowAddModal(false)}>
+          <div className="gmodal gmodal--sm" onClick={(e) => e.stopPropagation()}>
+            <div className="gmodal__header">
+              <span className="gmodal__badge">NEW FAQ</span>
+              <button className="gmodal__icon-btn" type="button" onClick={() => setShowAddModal(false)}>
+                <XMarkIcon />
+              </button>
+            </div>
+            <h2 className="gmodal__title">Add FAQ</h2>
+            <div className="gmodal__create-form">
+              <button
+                className="faq-add-option"
+                type="button"
+                onClick={() => { setShowAddModal(false); setShowManualModal(true); }}
+              >
+                <PencilSquareIcon style={{ width: 20, height: 20 }} />
+                <div className="faq-add-option__text">
+                  <strong>Write manually</strong>
+                  <span>Add your own question and answer</span>
+                </div>
+                <ChevronRightIcon style={{ width: 16, height: 16, flexShrink: 0 }} />
+              </button>
+              <button
+                className="faq-add-option"
+                type="button"
+                onClick={() => { setShowAddModal(false); openGenerateModal(); }}
+                disabled={pendingGenerations.size > 0}
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
+                </svg>
+                <div className="faq-add-option__text">
+                  <strong>Generate from sources</strong>
+                  <span>AI generates FAQs from your uploaded content</span>
+                </div>
+                <ChevronRightIcon style={{ width: 16, height: 16, flexShrink: 0 }} />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showGenerateModal && (
+        <div className="modal-backdrop" onClick={() => setShowGenerateModal(false)}>
           <div className="gmodal gmodal--sm" onClick={(e) => e.stopPropagation()}>
             <div className="gmodal__header">
               <span className="gmodal__badge">GENERATE</span>
-              <button className="gmodal__icon-btn" type="button" onClick={() => setShowCreateModal(false)}>
+              <button className="gmodal__icon-btn" type="button" onClick={() => setShowGenerateModal(false)}>
                 <XMarkIcon />
               </button>
             </div>
@@ -448,6 +555,52 @@ export function FaqsPage({ hubId, sources, canEdit }: Props) {
         </div>
       )}
 
+      {showManualModal && (
+        <div className="modal-backdrop" onClick={() => setShowManualModal(false)}>
+          <div className="gmodal gmodal--sm" onClick={(e) => e.stopPropagation()}>
+            <div className="gmodal__header">
+              <span className="gmodal__badge">NEW FAQ</span>
+              <button className="gmodal__icon-btn" type="button" onClick={() => setShowManualModal(false)}>
+                <XMarkIcon />
+              </button>
+            </div>
+            <h2 className="gmodal__title">Add FAQ</h2>
+            <div className="gmodal__create-form">
+              <label className="hdash__form-label">
+                <span className="hdash__form-label-text">Question</span>
+                <textarea
+                  className="hdash__form-input hdash__form-textarea"
+                  value={manualQuestion}
+                  onChange={(e) => setManualQuestion(e.target.value)}
+                  placeholder="e.g. How do I reset my password?"
+                  rows={2}
+                  autoFocus
+                />
+              </label>
+              <label className="hdash__form-label">
+                <span className="hdash__form-label-text">Answer</span>
+                <textarea
+                  className="hdash__form-input hdash__form-textarea"
+                  value={manualAnswer}
+                  onChange={(e) => setManualAnswer(e.target.value)}
+                  placeholder="Type the answer..."
+                  rows={4}
+                />
+              </label>
+              <button
+                className="guide-card__draft-btn"
+                type="button"
+                onClick={() => createMutation.mutate({ hub_id: hubId, question: manualQuestion.trim(), answer: manualAnswer.trim() })}
+                disabled={!manualQuestion.trim() || !manualAnswer.trim() || createMutation.isPending}
+              >
+                {createMutation.isPending ? "Adding..." : "Add FAQ"}
+                <ChevronRightIcon style={{ width: 14, height: 14 }} />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {selectedFaq && (() => {
         const faq = selectedFaq;
         const isEditing = editingId === faq.id;
@@ -460,18 +613,18 @@ export function FaqsPage({ hubId, sources, canEdit }: Props) {
               <div className="gmodal__header">
                 <div className="faq-modal__badges">
                   <span className="gmodal__badge">FAQ</span>
-                  {faq.is_pinned && <span className="gmodal__badge faq-modal__badge--pinned">PINNED</span>}
+                  {faq.is_pinned && <span className="gmodal__badge faq-modal__badge--pinned">FAVOURITE</span>}
                 </div>
                 <div className="gmodal__header-actions">
                   {canEdit && (
                     <>
                       <button
-                        className={`gmodal__icon-btn${faq.is_pinned ? ' gmodal__icon-btn--active' : ''}`}
+                        className="hub-favourite-button"
                         type="button"
-                        title={faq.is_pinned ? 'Unpin' : 'Pin'}
-                        onClick={() => togglePin(faq)}
+                        title={faq.is_pinned ? 'Unfavourite' : 'Favourite'}
+                        onClick={() => toggleFavourite(faq)}
                       >
-                        <MapPinIcon />
+                        {faq.is_pinned ? <StarSolid className="hub-favourite-icon filled" /> : <StarOutline className="hub-favourite-icon" />}
                       </button>
                       {!isEditing && (
                         <button
