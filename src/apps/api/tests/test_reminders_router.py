@@ -3,6 +3,8 @@
 from datetime import datetime, timedelta, timezone
 
 from app.schemas import (
+    HubMember,
+    MembershipRole,
     NotificationEvent,
     NotificationStatus,
     Reminder,
@@ -12,6 +14,13 @@ from app.schemas import (
     ReminderSummary,
 )
 from app.services import store as store_module
+
+OWNER = HubMember(
+    hub_id="11111111-1111-1111-1111-111111111111",
+    user_id="00000000-0000-0000-0000-000000000001",
+    role=MembershipRole.owner,
+    accepted_at="2026-01-01T00:00:00Z",
+)
 
 
 def test_list_reminders_returns_reminders(client, monkeypatch) -> None:
@@ -72,6 +81,7 @@ def test_accept_candidate_creates_reminder(client, monkeypatch) -> None:
         status=ReminderStatus.scheduled,
     )
 
+    monkeypatch.setattr(store_module.store, "get_member_role", lambda _client, hub_id, user_id: OWNER)
     monkeypatch.setattr(store_module.store, "get_candidate", lambda _client, candidate_id: candidate)
     monkeypatch.setattr(store_module.store, "create_reminder", lambda _client, user_id, payload: reminder)
     monkeypatch.setattr(store_module.store, "update_candidate", lambda _client, candidate_id, payload: candidate)

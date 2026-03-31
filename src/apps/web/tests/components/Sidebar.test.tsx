@@ -28,6 +28,7 @@ vi.mock("../../lib/HubTabContext", () => ({
     activeTab,
     setActiveTab: setActiveTabMock,
   }),
+  HubTabProvider: ({ children }: { children: React.ReactNode }) => children,
 }));
 
 vi.mock("../../lib/CurrentHubContext", () => ({

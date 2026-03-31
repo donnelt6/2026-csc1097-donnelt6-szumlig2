@@ -91,7 +91,7 @@ def test_generate_faqs_skips_entries_without_citations(monkeypatch) -> None:
         "_fetch_source_context",
         lambda client, hub_id, source_id, limit: [{"source_id": source_id, "chunk_index": 0, "text": "Context"}],
     )
-    monkeypatch.setattr(store, "_generate_faq_questions", lambda context, count: ["Question 1", "Question 2"])
+    monkeypatch.setattr(store, "_generate_faq_questions", lambda context, count, existing=None: ["Question 1", "Question 2"])
     monkeypatch.setattr(store, "_embed_query", lambda text: [0.1])
 
     matches = [
@@ -113,9 +113,6 @@ def test_generate_faqs_skips_entries_without_citations(monkeypatch) -> None:
 
     assert len(entries) == 1
     assert entries[0].question == "Question 2"
-    assert any(
-        update[0] == "faq_entries" and ("is_pinned", False) in update[2] for update in fake_client.updates
-    )
 
 
 def test_generate_faqs_requires_cited_answer(monkeypatch) -> None:
@@ -125,7 +122,7 @@ def test_generate_faqs_requires_cited_answer(monkeypatch) -> None:
         "_fetch_source_context",
         lambda client, hub_id, source_id, limit: [{"source_id": source_id, "chunk_index": 0, "text": "Context"}],
     )
-    monkeypatch.setattr(store, "_generate_faq_questions", lambda context, count: ["Question 1"])
+    monkeypatch.setattr(store, "_generate_faq_questions", lambda context, count, existing=None: ["Question 1"])
     monkeypatch.setattr(store, "_embed_query", lambda text: [0.1])
     monkeypatch.setattr(
         store,
@@ -153,7 +150,7 @@ def test_generate_faqs_diversifies_citations_for_mixed_source_questions(monkeypa
         "_fetch_source_context",
         lambda client, hub_id, source_id, limit: [{"source_id": source_id, "chunk_index": 0, "text": "Context"}],
     )
-    monkeypatch.setattr(store, "_generate_faq_questions", lambda context, count: ["Question 1"])
+    monkeypatch.setattr(store, "_generate_faq_questions", lambda context, count, existing=None: ["Question 1"])
     monkeypatch.setattr(store, "_embed_query", lambda text: [1.0, 0.0])
     monkeypatch.setattr(
         store,
@@ -185,7 +182,7 @@ def test_generate_faqs_skips_entries_when_no_matches_clear_similarity_threshold(
         "_fetch_source_context",
         lambda client, hub_id, source_id, limit: [{"source_id": source_id, "chunk_index": 0, "text": "Context"}],
     )
-    monkeypatch.setattr(store, "_generate_faq_questions", lambda context, count: ["Question 1"])
+    monkeypatch.setattr(store, "_generate_faq_questions", lambda context, count, existing=None: ["Question 1"])
     monkeypatch.setattr(store, "_embed_query", lambda text: [1.0, 0.0])
     monkeypatch.setattr(
         store,

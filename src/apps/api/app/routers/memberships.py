@@ -22,7 +22,7 @@ def _require_owner(member: HubMember) -> None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Owner role required.")
 
 
-def _attach_profiles(members: List[HubMember]) -> List[HubMember]:
+def _attach_profiles(members: list[HubMember]) -> list[HubMember]:
     profile_by_id = store.resolve_user_profiles_by_ids({member.user_id for member in members})
     for member in members:
         profile = profile_by_id.get(member.user_id)
