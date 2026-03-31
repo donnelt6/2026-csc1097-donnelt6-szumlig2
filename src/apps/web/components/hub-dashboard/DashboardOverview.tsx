@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowRightIcon,
@@ -35,9 +35,8 @@ export function DashboardOverview({
   onSwitchTab,
 }: DashboardOverviewProps) {
   const queryClient = useQueryClient();
-  const now = new Date();
-  const [calMonth, setCalMonth] = useState(now.getMonth());
-  const [calYear, setCalYear] = useState(now.getFullYear());
+  const [calMonth, setCalMonth] = useState(() => new Date().getMonth());
+  const [calYear, setCalYear] = useState(() => new Date().getFullYear());
   const [modal, setModal] = useState<ModalState>({ mode: 'closed' });
   const [contentTab, setContentTab] = useState<ContentTab>('guides');
   const [guideIndex, setGuideIndex] = useState(0);
@@ -67,6 +66,12 @@ export function DashboardOverview({
     () => faqs.slice(0, 3),
     [faqs]
   );
+
+  useEffect(() => {
+    if (guideIndex >= activeGuides.length && activeGuides.length > 0) {
+      setGuideIndex(activeGuides.length - 1);
+    }
+  }, [activeGuides.length, guideIndex]);
 
   const currentGuide = activeGuides[guideIndex] as GuideEntry | undefined;
 
@@ -99,8 +104,8 @@ export function DashboardOverview({
     staleTime: 0,
   });
 
-  const dueFrom = new Date(calYear, calMonth, 1).toISOString();
-  const dueTo = new Date(calYear, calMonth + 1, 0, 23, 59, 59).toISOString();
+  const dueFrom = useMemo(() => new Date(calYear, calMonth, 1).toISOString(), [calYear, calMonth]);
+  const dueTo = useMemo(() => new Date(calYear, calMonth + 1, 0, 23, 59, 59).toISOString(), [calYear, calMonth]);
 
   const { data: monthReminders = [] } = useQuery({
     queryKey: ['reminders', hubId, dueFrom, dueTo],
@@ -117,6 +122,7 @@ export function DashboardOverview({
       .map((r) => new Date(r.due_at).getDate())
   );
 
+  const modalDateTs = modal.mode === 'day' ? modal.date.getTime() : 0;
   const dayReminders = useMemo(() => {
     if (modal.mode !== 'day') return [];
     const d = modal.date;
@@ -126,7 +132,7 @@ export function DashboardOverview({
         && rd.getMonth() === d.getMonth()
         && rd.getFullYear() === d.getFullYear();
     });
-  }, [modal, monthReminders]);
+  }, [modal.mode, modalDateTs, monthReminders]);
 
   const upcomingList = useMemo(
     () => [...upcoming].sort((a, b) => new Date(a.due_at).getTime() - new Date(b.due_at).getTime()).slice(0, 5),
@@ -175,7 +181,7 @@ export function DashboardOverview({
           {contentTab === 'guides' && (
             <div className="hdash__guide-preview">
               {activeGuides.length === 0 ? (
-                <p className="muted" style={{ padding: '24px 0', textAlign: 'center' }}>
+                <p className="muted hdash__empty-hint">
                   No guides yet.{' '}
                   {canEdit && (
                     <button
@@ -304,7 +310,7 @@ export function DashboardOverview({
           {contentTab === 'faqs' && (
             <div className="hdash__guide-preview">
               {faqs.length === 0 ? (
-                <p className="muted" style={{ padding: '24px 0', textAlign: 'center' }}>
+                <p className="muted hdash__empty-hint">
                   No FAQs yet.{' '}
                   {canEdit && (
                     <button
@@ -390,10 +396,9 @@ export function DashboardOverview({
           )}
           {upcoming.length > 5 && (
             <button
-              className="hdash__overview-link"
+              className="hdash__overview-link hdash__overview-link--more"
               type="button"
               onClick={() => onSwitchTab('reminders')}
-              style={{ marginTop: 4 }}
             >
               +{upcoming.length - 5} more <ArrowRightIcon className="hdash__overview-link-icon" />
             </button>
@@ -480,7 +485,7 @@ export function DashboardOverview({
       )}
 
       {activeCitation && (
-        <div className="modal-backdrop" style={{ zIndex: 210 }} onClick={() => setActiveCitation(null)}>
+        <div className="modal-backdrop modal-backdrop--raised" onClick={() => setActiveCitation(null)}>
           <div className="gmodal gmodal--sm" onClick={(e) => e.stopPropagation()}>
             <div className="gmodal__header">
               <strong>Source {activeCitation.source_id.slice(0, 8)}</strong>

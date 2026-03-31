@@ -106,15 +106,16 @@ export function FaqsPage({ hubId, sources, canEdit }: Props) {
     setPage(1);
   }, [filterTab, searchQuery]);
 
+  const selectedFaqId = selectedFaq?.id ?? null;
   useEffect(() => {
-    if (!selectedFaq) return;
-    const fresh = allEntries.find((f) => f.id === selectedFaq.id);
+    if (!selectedFaqId) return;
+    const fresh = allEntries.find((f) => f.id === selectedFaqId);
     if (fresh) {
       setSelectedFaq(fresh);
     } else {
       setSelectedFaq(null);
     }
-  }, [allEntries]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [allEntries, selectedFaqId]);
 
   const canGenerate = canEdit && createSourceIds.length > 0;
 
@@ -351,7 +352,7 @@ export function FaqsPage({ hubId, sources, canEdit }: Props) {
                         setOpenMenuId(openMenuId === faq.id ? null : faq.id);
                       }}
                     >
-                      <EllipsisVerticalIcon style={{ width: 18, height: 18 }} />
+                      <EllipsisVerticalIcon className="hdash__icon--lg" />
                     </button>
                     {openMenuId === faq.id && (
                       <div className="hub-card-menu__dropdown">
@@ -408,7 +409,7 @@ export function FaqsPage({ hubId, sources, canEdit }: Props) {
       <div className="hubs-pagination">
         <span className="hubs-pagination-info">
           {entries.length > 0
-            ? `Showing ${(safePage - 1) * FAQS_PER_PAGE + 1}\u2013${Math.min(safePage * FAQS_PER_PAGE, entries.length)} of ${entries.length} entries`
+            ? `Showing ${pageStart + 1}-${Math.min(pageStart + pageLimit, entries.length)} of ${entries.length} entries`
             : '\u00A0'}
         </span>
         {totalPages > 1 && (
@@ -456,12 +457,12 @@ export function FaqsPage({ hubId, sources, canEdit }: Props) {
                 type="button"
                 onClick={() => { setShowAddModal(false); setShowManualModal(true); }}
               >
-                <PencilSquareIcon style={{ width: 20, height: 20 }} />
+                <PencilSquareIcon className="hdash__icon--xl" />
                 <div className="faq-add-option__text">
                   <strong>Write manually</strong>
                   <span>Add your own question and answer</span>
                 </div>
-                <ChevronRightIcon style={{ width: 16, height: 16, flexShrink: 0 }} />
+                <ChevronRightIcon className="hdash__icon--md-shrink" />
               </button>
               <button
                 className="faq-add-option"
@@ -476,7 +477,7 @@ export function FaqsPage({ hubId, sources, canEdit }: Props) {
                   <strong>Generate from sources</strong>
                   <span>AI generates FAQs from your uploaded content</span>
                 </div>
-                <ChevronRightIcon style={{ width: 16, height: 16, flexShrink: 0 }} />
+                <ChevronRightIcon className="hdash__icon--md-shrink" />
               </button>
             </div>
           </div>
@@ -548,7 +549,7 @@ export function FaqsPage({ hubId, sources, canEdit }: Props) {
                 disabled={!canGenerate}
               >
                 Generate FAQs
-                <ChevronRightIcon style={{ width: 14, height: 14 }} />
+                <ChevronRightIcon className="hdash__icon--sm" />
               </button>
             </div>
           </div>
@@ -594,7 +595,7 @@ export function FaqsPage({ hubId, sources, canEdit }: Props) {
                 disabled={!manualQuestion.trim() || !manualAnswer.trim() || createMutation.isPending}
               >
                 {createMutation.isPending ? "Adding..." : "Add FAQ"}
-                <ChevronRightIcon style={{ width: 14, height: 14 }} />
+                <ChevronRightIcon className="hdash__icon--sm" />
               </button>
             </div>
           </div>
@@ -727,7 +728,7 @@ export function FaqsPage({ hubId, sources, canEdit }: Props) {
       })()}
 
       {activeCitation && (
-        <div className="modal-backdrop" style={{ zIndex: 210 }} onClick={() => setActiveCitation(null)}>
+        <div className="modal-backdrop modal-backdrop--raised" onClick={() => setActiveCitation(null)}>
           <div className="gmodal gmodal--sm" onClick={(e) => e.stopPropagation()}>
             <div className="gmodal__header">
               <strong>Source {activeCitation.source_id.slice(0, 8)}</strong>

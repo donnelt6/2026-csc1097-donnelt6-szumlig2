@@ -273,7 +273,7 @@ export interface FlaggedChatDetail {
 
 export type ReminderStatus = "scheduled" | "sent" | "completed" | "cancelled";
 export type ReminderCandidateStatus = "pending" | "accepted" | "declined" | "expired";
-export type ReminderUpdateAction = "complete" | "cancel" | "snooze";
+export type ReminderUpdateAction = "complete" | "cancel" | "snooze" | "reopen";
 export type NotificationStatus = "queued" | "sent" | "failed";
 export type NotificationChannel = "in_app";
 

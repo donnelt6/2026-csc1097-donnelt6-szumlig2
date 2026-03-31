@@ -131,11 +131,11 @@ export default function HubDetail({ params }: { params: { hubId: string } }) {
     return (
       <main className="page-content page-content--no-hero">
         <div className="content-inner">
-          <div className="card" style={{ maxWidth: '720px', margin: '0 auto', padding: '24px' }}>
-            <h2 style={{ marginTop: 0 }}>
+          <div className="card hub-gate">
+            <h2>
               {pendingInvite ? 'Accept your invite to open this hub' : 'Hub access required'}
             </h2>
-            <p className="muted" style={{ marginBottom: '16px' }}>
+            <p className="muted hub-gate__message">
               {pendingInvite
                 ? 'This invite has not been accepted yet. Accept it before viewing chat, sources, or other hub content.'
                 : 'This hub is not available from your accepted memberships.'}
@@ -151,7 +151,7 @@ export default function HubDetail({ params }: { params: { hubId: string } }) {
               </button>
             )}
             {acceptInviteMutation.error && (
-              <p className="muted" role="alert" style={{ marginTop: '12px' }}>
+              <p className="muted hub-gate__error" role="alert">
                 {(acceptInviteMutation.error as Error).message}
               </p>
             )}

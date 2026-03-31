@@ -1,10 +1,10 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { XMarkIcon, TrashIcon, CheckCircleIcon, ArrowPathIcon } from '@heroicons/react/24/outline';
+import { XMarkIcon, TrashIcon, CheckCircleIcon, ArrowPathIcon, ChevronDownIcon } from '@heroicons/react/24/outline';
 import { createReminder, updateReminder, deleteReminder } from '../../lib/api';
-import { formatLocal } from '../../lib/dateUtils';
+import { formatLocal, pad2 } from '../../lib/dateUtils';
 import { DatePicker } from './DatePicker';
 import { TimePicker } from './TimePicker';
 import type { Reminder } from '../../lib/types';
@@ -27,15 +27,30 @@ function getPresetKey(notifyBefore: number | null | undefined): string {
   return match ? match.value : 'custom';
 }
 
-function NotifyPicker({ value, onChange, deadlineDate, deadlineHour, deadlineMinute }: {
+function NotifyPicker({ value, onChange, onValidChange, deadlineDate, deadlineHour, deadlineMinute }: {
   value: number | null;
   onChange: (v: number | null) => void;
+  onValidChange: (valid: boolean) => void;
   deadlineDate: string;
   deadlineHour: number;
   deadlineMinute: number;
 }) {
   const preset = getPresetKey(value);
   const deadlineIso = buildIso(deadlineDate, deadlineHour, deadlineMinute);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+
+  // Close dropdown on click outside
+  useEffect(() => {
+    if (!dropdownOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [dropdownOpen]);
 
   // For custom mode, derive the notification datetime from the deadline minus stored minutes
   const customDefault = useMemo(() => {
@@ -60,28 +75,32 @@ function NotifyPicker({ value, onChange, deadlineDate, deadlineHour, deadlineMin
   // Recalculate custom minutes when custom pickers change
   const commitCustom = (d: string, h: number, m: number) => {
     const deadline = new Date(deadlineIso);
-    const notify = new Date(d);
-    notify.setHours(h, m, 0, 0);
+    const [ny, nm, nd] = d.split('-').map(Number);
+    const notify = new Date(ny, nm - 1, nd, h, m, 0, 0);
     const diffMs = deadline.getTime() - notify.getTime();
     if (diffMs <= 0) {
       setCustomError(true);
-      onChange(-1); // invalid — forms check for this
+      onValidChange(false);
       return;
     }
     setCustomError(false);
+    onValidChange(true);
     const diffMin = Math.round(diffMs / 60000);
     onChange(diffMin);
   };
 
   const handlePresetChange = (key: string) => {
+    setDropdownOpen(false);
     if (key === 'none') {
       setShowCustom(false);
+      onValidChange(true);
       onChange(null);
     } else if (key === 'custom') {
       setShowCustom(true);
       commitCustom(customDate, customHour, customMinute);
     } else {
       setShowCustom(false);
+      onValidChange(true);
       onChange(Number(key));
     }
   };
@@ -90,12 +109,14 @@ function NotifyPicker({ value, onChange, deadlineDate, deadlineHour, deadlineMin
   const [dY, dM, dD] = deadlineDate.split('-').map(Number);
   const deadlineTime = new Date(dY, dM - 1, dD, deadlineHour, deadlineMinute, 0, 0);
   const deadlineMs = deadlineTime.getTime();
-  const nowMs = Date.now();
-  const availablePresets = NOTIFY_PRESETS.filter((o) => {
-    if (o.value === 'none' || o.value === 'custom') return true;
-    const notifyMs = deadlineMs - Number(o.value) * 60000;
-    return notifyMs > nowMs;
-  });
+  const availablePresets = useMemo(() => {
+    const now = Date.now();
+    return NOTIFY_PRESETS.filter((o) => {
+      if (o.value === 'none' || o.value === 'custom') return true;
+      const notifyMs = deadlineMs - Number(o.value) * 60000;
+      return notifyMs > now;
+    });
+  }, [deadlineMs]);
 
   // Auto-correct if current selection was filtered out
   const currentKey = showCustom ? 'custom' : (value == null ? 'none' : String(value));
@@ -107,20 +128,37 @@ function NotifyPicker({ value, onChange, deadlineDate, deadlineHour, deadlineMin
     }
   }, [isValid, showCustom, availablePresets, onChange]);
 
+  const selectedLabel = availablePresets.find((o) => o.value === currentKey)?.label ?? 'Select...';
+
   return (
     <>
-      <label className="hdash__form-label">
+      <div className="hdash__form-label">
         <span className="hdash__form-label-text">Remind me</span>
-        <select
-          value={showCustom ? 'custom' : (value == null ? 'none' : String(value))}
-          onChange={(e) => handlePresetChange(e.target.value)}
-          className="hdash__form-input hdash__form-select"
-        >
-          {availablePresets.map((o) => (
-            <option key={o.value} value={o.value}>{o.label}</option>
-          ))}
-        </select>
-      </label>
+        <div className="hdash__notify-dropdown" ref={dropdownRef}>
+          <button
+            type="button"
+            className="hdash__notify-dropdown-btn"
+            onClick={() => setDropdownOpen(!dropdownOpen)}
+          >
+            <span>{selectedLabel}</span>
+            <ChevronDownIcon className="hdash__notify-dropdown-chevron" />
+          </button>
+          {dropdownOpen && (
+            <div className="hdash__notify-dropdown-menu">
+              {availablePresets.map((o) => (
+                <button
+                  key={o.value}
+                  type="button"
+                  className={`hdash__notify-dropdown-item${o.value === currentKey ? ' hdash__notify-dropdown-item--active' : ''}`}
+                  onClick={() => handlePresetChange(o.value)}
+                >
+                  {o.label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
       {showCustom && (
         <div className="hdash__form-row">
           <div className="hdash__form-label hdash__form-label--grow">
@@ -154,14 +192,10 @@ function NotifyPicker({ value, onChange, deadlineDate, deadlineHour, deadlineMin
 
 /* ---- Helpers ---- */
 
-function pad2(n: number) {
-  return n.toString().padStart(2, '0');
-}
-
 function buildIso(dateStr: string, hour: number, minute: number): string {
-  const d = new Date(dateStr);
-  d.setHours(hour, minute, 0, 0);
-  return d.toISOString();
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const date = new Date(y, m - 1, d, hour, minute, 0, 0);
+  return date.toISOString();
 }
 
 function parseTime(iso: string): { hour: number; minute: number } {
@@ -173,14 +207,10 @@ function toDateStr(d: Date): string {
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 }
 
-function isToday(d: Date): boolean {
-  const now = new Date();
-  return d.getDate() === now.getDate() && d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-}
-
 function defaultTime(d: Date): { hour: number; minute: number } {
-  if (!isToday(d)) return { hour: 9, minute: 0 };
   const now = new Date();
+  const isToday = d.getDate() === now.getDate() && d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+  if (!isToday) return { hour: 9, minute: 0 };
   /* Round up to next 5-minute slot */
   let m = Math.ceil(now.getMinutes() / 5) * 5;
   let h = now.getHours();
@@ -223,9 +253,7 @@ export function ReminderModal(props: ReminderModalProps) {
   return <EditModal {...props} />;
 }
 
-/* ================================================================== */
-/*  Day Modal (clicked a calendar day)                                 */
-/* ================================================================== */
+/* Day Modal (clicked a calendar day) */
 
 function DayModal({ hubId, date, reminders, onClose, onSaved, onEditReminder }: DayModalProps) {
   const [tab, setTab] = useState<'view' | 'create'>(reminders.length > 0 ? 'view' : 'create');
@@ -241,7 +269,7 @@ function DayModal({ hubId, date, reminders, onClose, onSaved, onEditReminder }: 
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal hdash__modal" onClick={(e) => e.stopPropagation()}>
         <button className="modal__close" type="button" onClick={onClose}>
-          <XMarkIcon style={{ width: 20, height: 20 }} />
+          <XMarkIcon className="hdash__icon--xl" />
         </button>
 
         <div className="modal__header">
@@ -328,6 +356,7 @@ function DayCreateForm({ hubId, date, onSaved }: { hubId: string; date: Date; on
   const [title, setTitle] = useState('');
   const [message, setMessage] = useState('');
   const [notifyBefore, setNotifyBefore] = useState<number | null>(1440);
+  const [notifyValid, setNotifyValid] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const createMut = useMutation({
@@ -339,6 +368,7 @@ function DayCreateForm({ hubId, date, onSaved }: { hubId: string; date: Date; on
       setHour(9);
       setMinute(0);
       setNotifyBefore(1440);
+      setNotifyValid(true);
       setError(null);
       onSaved();
     },
@@ -365,7 +395,7 @@ function DayCreateForm({ hubId, date, onSaved }: { hubId: string; date: Date; on
         <span className="hdash__form-label-text">Time</span>
         <TimePicker hour={hour} minute={minute} onHourChange={setHour} onMinuteChange={setMinute} selectedDate={toDateStr(date)} />
       </div>
-      <NotifyPicker value={notifyBefore} onChange={setNotifyBefore} deadlineDate={toDateStr(date)} deadlineHour={hour} deadlineMinute={minute} />
+      <NotifyPicker value={notifyBefore} onChange={setNotifyBefore} onValidChange={setNotifyValid} deadlineDate={toDateStr(date)} deadlineHour={hour} deadlineMinute={minute} />
       <label className="hdash__form-label">
         <span className="hdash__form-label-text">Title</span>
         <input
@@ -392,7 +422,7 @@ function DayCreateForm({ hubId, date, onSaved }: { hubId: string; date: Date; on
       </label>
       {error && <p className="hdash__modal-error">{error}</p>}
       <div className="modal__footer">
-        <button className="button button--primary" type="submit" disabled={createMut.isPending || message.length > NOTE_MAX || notifyBefore === -1}>
+        <button className="button button--primary" type="submit" disabled={createMut.isPending || message.length > NOTE_MAX || !notifyValid}>
           {createMut.isPending ? 'Creating...' : 'Create Reminder'}
         </button>
       </div>
@@ -400,9 +430,7 @@ function DayCreateForm({ hubId, date, onSaved }: { hubId: string; date: Date; on
   );
 }
 
-/* ================================================================== */
-/*  Create Modal (sidebar button — date + time + message)              */
-/* ================================================================== */
+/* Create Modal (sidebar button) */
 
 function CreateModal({ hubId, onClose, onSaved }: CreateModalProps) {
   const queryClient = useQueryClient();
@@ -415,6 +443,7 @@ function CreateModal({ hubId, onClose, onSaved }: CreateModalProps) {
   const [title, setTitle] = useState('');
   const [message, setMessage] = useState('');
   const [notifyBefore, setNotifyBefore] = useState<number | null>(1440);
+  const [notifyValid, setNotifyValid] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const createMut = useMutation({
@@ -445,7 +474,7 @@ function CreateModal({ hubId, onClose, onSaved }: CreateModalProps) {
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal hdash__modal" onClick={(e) => e.stopPropagation()}>
         <button className="modal__close" type="button" onClick={onClose}>
-          <XMarkIcon style={{ width: 20, height: 20 }} />
+          <XMarkIcon className="hdash__icon--xl" />
         </button>
 
         <div className="modal__header">
@@ -477,7 +506,7 @@ function CreateModal({ hubId, onClose, onSaved }: CreateModalProps) {
               maxLength={100}
             />
           </label>
-          <NotifyPicker value={notifyBefore} onChange={setNotifyBefore} deadlineDate={date} deadlineHour={hour} deadlineMinute={minute} />
+          <NotifyPicker value={notifyBefore} onChange={setNotifyBefore} onValidChange={setNotifyValid} deadlineDate={date} deadlineHour={hour} deadlineMinute={minute} />
           <label className="hdash__form-label">
             <span className="hdash__form-label-text">Note <span className="hdash__form-optional">(optional)</span></span>
             <textarea
@@ -493,7 +522,7 @@ function CreateModal({ hubId, onClose, onSaved }: CreateModalProps) {
           </label>
           {error && <p className="hdash__modal-error">{error}</p>}
           <div className="modal__footer">
-            <button className="button button--primary" type="submit" disabled={createMut.isPending || message.length > NOTE_MAX || notifyBefore === -1}>
+            <button className="button button--primary" type="submit" disabled={createMut.isPending || message.length > NOTE_MAX || !notifyValid}>
               {createMut.isPending ? 'Creating...' : 'Create Reminder'}
             </button>
           </div>
@@ -503,9 +532,7 @@ function CreateModal({ hubId, onClose, onSaved }: CreateModalProps) {
   );
 }
 
-/* ================================================================== */
-/*  Edit Modal                                                         */
-/* ================================================================== */
+/* Edit Modal */
 
 function EditModal({ hubId, reminder, onClose, onSaved }: EditModalProps) {
   const queryClient = useQueryClient();
@@ -518,6 +545,7 @@ function EditModal({ hubId, reminder, onClose, onSaved }: EditModalProps) {
   const [title, setTitle] = useState(reminder.title ?? '');
   const [message, setMessage] = useState(reminder.message ?? '');
   const [notifyBefore, setNotifyBefore] = useState<number | null>(reminder.notify_before ?? 1440);
+  const [notifyValid, setNotifyValid] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const invalidateAndClose = () => {
@@ -534,7 +562,6 @@ function EditModal({ hubId, reminder, onClose, onSaved }: EditModalProps) {
     onSuccess: (_, variables) => {
       if (variables.action === 'reopen') {
         invalidateOnly();
-        reminder.status = 'scheduled';
       } else {
         invalidateAndClose();
       }
@@ -562,7 +589,7 @@ function EditModal({ hubId, reminder, onClose, onSaved }: EditModalProps) {
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal hdash__modal" onClick={(e) => e.stopPropagation()}>
         <button className="modal__close" type="button" onClick={onClose}>
-          <XMarkIcon style={{ width: 20, height: 20 }} />
+          <XMarkIcon className="hdash__icon--xl" />
         </button>
 
         <div className="modal__header">
@@ -594,7 +621,7 @@ function EditModal({ hubId, reminder, onClose, onSaved }: EditModalProps) {
               maxLength={100}
             />
           </label>
-          <NotifyPicker value={notifyBefore} onChange={setNotifyBefore} deadlineDate={date} deadlineHour={hour} deadlineMinute={minute} />
+          <NotifyPicker value={notifyBefore} onChange={setNotifyBefore} onValidChange={setNotifyValid} deadlineDate={date} deadlineHour={hour} deadlineMinute={minute} />
           <label className="hdash__form-label">
             <span className="hdash__form-label-text">Note <span className="hdash__form-optional">(optional)</span></span>
             <textarea
@@ -617,7 +644,7 @@ function EditModal({ hubId, reminder, onClose, onSaved }: EditModalProps) {
                 onClick={() => { setError(null); updateMut.mutate({ action: 'complete' }); }}
                 disabled={busy}
               >
-                <CheckCircleIcon style={{ width: 16, height: 16 }} />
+                <CheckCircleIcon className="hdash__icon--md" />
                 Complete
               </button>
             )}
@@ -628,24 +655,24 @@ function EditModal({ hubId, reminder, onClose, onSaved }: EditModalProps) {
                 onClick={() => { setError(null); updateMut.mutate({ action: 'reopen' }); }}
                 disabled={busy}
               >
-                <ArrowPathIcon style={{ width: 16, height: 16 }} />
+                <ArrowPathIcon className="hdash__icon--md" />
                 Reopen
               </button>
             )}
-            <div style={{ flex: 1 }} />
+            <div className="hdash__spacer" />
             <button
               className="button button--danger button--small"
               type="button"
               onClick={() => { setError(null); deleteMut.mutate(); }}
               disabled={busy}
             >
-              <TrashIcon style={{ width: 16, height: 16 }} />
+              <TrashIcon className="hdash__icon--md" />
               Delete
             </button>
             <button
               className="button button--primary button--small"
               type="submit"
-              disabled={busy || message.length > NOTE_MAX || notifyBefore === -1}
+              disabled={busy || message.length > NOTE_MAX || !notifyValid}
             >
               {updateMut.isPending ? 'Saving...' : 'Save'}
             </button>

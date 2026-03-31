@@ -91,7 +91,7 @@ function SortableStepRow({
     transition,
     opacity: isDragging ? 0.6 : 1,
     zIndex: isDragging ? 10 : undefined,
-  } as React.CSSProperties;
+  } satisfies React.CSSProperties;
 
   return (
     <div ref={setNodeRef} style={style} className={`gmodal__step${step.is_complete ? ' gmodal__step--done' : ''}`}>
@@ -282,8 +282,8 @@ export function GuidesPage({ hubId, sources, canEdit }: Props) {
   const canGenerate = canEdit && createSourceIds.length > 0;
 
   const pendingCount = pendingGenerations.size;
-  const slotsForGuides = Math.max(0, GUIDES_PER_PAGE - pendingCount);
-  const totalPages = Math.max(1, Math.ceil(guides.length / Math.max(1, slotsForGuides)));
+  const slotsForGuides = Math.max(1, GUIDES_PER_PAGE - pendingCount);
+  const totalPages = Math.max(1, Math.ceil(guides.length / slotsForGuides));
   const safePage = Math.min(page, totalPages);
   const pagedGuides = guides.slice((safePage - 1) * slotsForGuides, safePage * slotsForGuides);
 
@@ -404,8 +404,8 @@ export function GuidesPage({ hubId, sources, canEdit }: Props) {
   const reorderMutation = useMutation({
     mutationFn: ({ guideId, orderedIds }: { guideId: string; orderedIds: string[] }) =>
       reorderGuideSteps(guideId, orderedIds),
-    onMutate: ({ guideId, orderedIds }) => {
-      queryClient.cancelQueries({ queryKey: ["guides", hubId] });
+    onMutate: async ({ guideId, orderedIds }) => {
+      await queryClient.cancelQueries({ queryKey: ["guides", hubId] });
       const previous = queryClient.getQueryData<GuideEntry[]>(["guides", hubId]);
       if (previous) {
         const next = previous.map((guide) => {
@@ -592,7 +592,7 @@ export function GuidesPage({ hubId, sources, canEdit }: Props) {
                         setOpenMenuId(openMenuId === guide.id ? null : guide.id);
                       }}
                     >
-                      <EllipsisVerticalIcon style={{ width: 18, height: 18 }} />
+                      <EllipsisVerticalIcon className="hdash__icon--lg" />
                     </button>
                     {openMenuId === guide.id && (
                       <div className="hub-card-menu__dropdown">
@@ -644,7 +644,7 @@ export function GuidesPage({ hubId, sources, canEdit }: Props) {
 
         {!isLoading && !error && guides.length === 0 && (
           <div className="hub-card guide-card">
-            <p className="muted" style={{ textAlign: 'center', padding: '24px 0' }}>
+            <p className="muted hdash__empty-hint">
               {filterTab === 'favourites'
                 ? 'No favourite guides yet.'
                 : canEdit
@@ -658,7 +658,7 @@ export function GuidesPage({ hubId, sources, canEdit }: Props) {
       <div className="hubs-pagination">
         <span className="hubs-pagination-info">
           {guides.length > 0
-            ? `Showing ${(safePage - 1) * slotsForGuides + 1}–${Math.min(safePage * slotsForGuides, guides.length)} of ${guides.length} guides`
+            ? `Showing ${(safePage - 1) * slotsForGuides + 1}-${Math.min(safePage * slotsForGuides, guides.length)} of ${guides.length} guides`
             : '\u00A0'}
         </span>
         {totalPages > 1 && (
@@ -781,7 +781,7 @@ export function GuidesPage({ hubId, sources, canEdit }: Props) {
                 disabled={!canGenerate}
               >
                 Draft Guide
-                <ChevronRightIcon style={{ width: 14, height: 14 }} />
+                <ChevronRightIcon className="hdash__icon--sm" />
               </button>
             </div>
           </div>
@@ -873,7 +873,7 @@ export function GuidesPage({ hubId, sources, canEdit }: Props) {
                   <div className="gmodal__progress-bar">
                     <div className="gmodal__progress-fill" style={{ width: `${pct}%` }} />
                   </div>
-                  <span className="gmodal__progress-updated">Last updated {formatRelativeTime(guide.created_at)}</span>
+                  <span className="gmodal__progress-updated">Last updated {formatRelativeTime(guide.updated_at ?? guide.created_at)}</span>
                 </div>
               )}
 
@@ -940,7 +940,7 @@ export function GuidesPage({ hubId, sources, canEdit }: Props) {
       })()}
 
       {activeCitation && (
-        <div className="modal-backdrop" style={{ zIndex: 210 }} onClick={() => setActiveCitation(null)}>
+        <div className="modal-backdrop modal-backdrop--raised" onClick={() => setActiveCitation(null)}>
           <div className="gmodal gmodal--sm" onClick={(e) => e.stopPropagation()}>
             <div className="gmodal__header">
               <strong>Source {activeCitation.source_id.slice(0, 8)}</strong>

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { ChevronLeftIcon, ChevronRightIcon, CalendarIcon } from '@heroicons/react/24/outline';
+import { pad2 } from '../../lib/dateUtils';
 
 const WEEKDAYS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 const MONTH_NAMES = [
@@ -12,10 +13,6 @@ const SHORT_MONTHS = [
   'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
   'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
 ];
-
-function pad2(n: number) {
-  return n.toString().padStart(2, '0');
-}
 
 function clamp(val: number, min: number, max: number) {
   return Math.max(min, Math.min(max, val));
@@ -42,7 +39,7 @@ export function DatePicker({ value, onChange, maxDate }: DatePickerProps) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const activeListRef = useRef<HTMLDivElement>(null);
 
-  const parsedRaw = value ? new Date(value) : new Date();
+  const parsedRaw = value ? new Date(value + 'T00:00:00') : new Date();
   const parsed = isNaN(parsedRaw.getTime()) ? new Date() : parsedRaw;
   const day = parsed.getDate();
   const month = parsed.getMonth();
@@ -104,7 +101,7 @@ export function DatePicker({ value, onChange, maxDate }: DatePickerProps) {
 
   /* ---- Calendar grid ---- */
   const selectedCalDay = (() => {
-    const d = new Date(value);
+    const d = new Date(value + 'T00:00:00');
     if (isNaN(d.getTime())) return null;
     return d.getMonth() === viewMonth && d.getFullYear() === viewYear ? d.getDate() : null;
   })();
@@ -258,7 +255,7 @@ export function DatePicker({ value, onChange, maxDate }: DatePickerProps) {
               const past = d !== null && isCalDayDisabled(d);
               return (
                 <button
-                  key={i}
+                  key={d !== null ? `day-${d}` : `empty-${i}`}
                   type="button"
                   className={[
                     'hdash__datepicker-day',

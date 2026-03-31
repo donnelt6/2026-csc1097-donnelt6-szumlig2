@@ -2,10 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { ClockIcon } from '@heroicons/react/24/outline';
-
-function pad2(n: number) {
-  return n.toString().padStart(2, '0');
-}
+import { pad2 } from '../../lib/dateUtils';
 
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
 const MINUTES = Array.from({ length: 12 }, (_, i) => i * 5);
@@ -35,7 +32,7 @@ export function TimePicker({ hour, minute, onHourChange, onMinuteChange, selecte
 
   let filteredHours = isToday ? HOURS.filter(h => h >= currentHour) : HOURS;
   if (maxHour != null) {
-    const maxH = (maxMinute != null && maxMinute === 0) ? maxHour - 1 : maxHour;
+    const maxH = (maxMinute != null && maxMinute === 0) ? Math.max(0, maxHour - 1) : maxHour;
     filteredHours = filteredHours.filter(h => h <= maxH);
   }
 

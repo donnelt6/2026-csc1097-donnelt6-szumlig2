@@ -44,6 +44,7 @@ export function RemindersPage({ hubId }: { hubId: string }) {
   });
 
   /* Filter reminders for the day modal */
+  const modalDateTs = modal.mode === 'day' ? modal.date.getTime() : 0;
   const dayReminders = useMemo(() => {
     if (modal.mode !== 'day') return [];
     const d = modal.date;
@@ -53,7 +54,7 @@ export function RemindersPage({ hubId }: { hubId: string }) {
         && rd.getMonth() === d.getMonth()
         && rd.getFullYear() === d.getFullYear();
     });
-  }, [modal, reminders]);
+  }, [modal.mode, modalDateTs, reminders]);
 
   const handleDateClick = (date: Date) => {
     setSelectedDate(date);
@@ -64,7 +65,10 @@ export function RemindersPage({ hubId }: { hubId: string }) {
     setModal({ mode: 'edit', reminder });
   };
 
-  const closeModal = () => setModal({ mode: 'closed' });
+  const closeModal = () => {
+    setModal({ mode: 'closed' });
+    setSelectedDate(null);
+  };
 
   return (
     <div className="hdash__layout">

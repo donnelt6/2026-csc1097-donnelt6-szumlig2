@@ -8,6 +8,7 @@ from supabase import Client
 from ..dependencies import CurrentUser, get_current_user, get_supabase_user_client, rate_limit_user_ip
 from ..schemas import FaqCreateRequest, FaqEntry, FaqGenerateRequest, FaqGenerateResponse, FaqUpdateRequest, MembershipRole
 from ..services.store import store
+from .access import require_accepted, require_hub_member
 from .errors import raise_postgrest_error
 
 router = APIRouter(prefix="/faqs", tags=["faqs"])
@@ -28,7 +29,8 @@ def list_faqs(
     client: Client = Depends(get_supabase_user_client),
     current_user: CurrentUser = Depends(get_current_user),
 ) -> list[FaqEntry]:
-    _ = current_user
+    member = require_hub_member(client, str(hub_id), current_user.id)
+    require_accepted(member)
     try:
         return store.list_faqs(client, str(hub_id))
     except APIError as exc:
@@ -122,7 +124,15 @@ def update_faq(
         if not member.accepted_at:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invite not accepted yet.")
         _require_editor(member.role)
-        return store.update_faq(client, str(faq_id), updates)
+        result = store.update_faq(client, str(faq_id), updates)
+        if payload.archived is not None:
+            action = "archived" if payload.archived else "unarchived"
+        elif payload.is_pinned is not None:
+            action = "pinned" if payload.is_pinned else "unpinned"
+        else:
+            action = "updated"
+        store.log_activity(client, entry.hub_id, current_user.id, action, "faq")
+        return result
     except KeyError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except APIError as exc:
@@ -146,6 +156,7 @@ def archive_faq(
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invite not accepted yet.")
         _require_editor(member.role)
         store.archive_faq(client, str(faq_id), current_user.id)
+        store.log_activity(client, entry.hub_id, current_user.id, "deleted", "faq")
     except KeyError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except APIError as exc:

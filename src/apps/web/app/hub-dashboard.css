@@ -1,3 +1,20 @@
+/* ===== Hub Dashboard — Shared Utilities ===== */
+
+.hdash__icon--sm { width: 14px; height: 14px; }
+.hdash__icon--md { width: 16px; height: 16px; }
+.hdash__icon--lg { width: 18px; height: 18px; }
+.hdash__icon--xl { width: 20px; height: 20px; }
+.hdash__icon--md-shrink { width: 16px; height: 16px; flex-shrink: 0; }
+
+.hdash__empty-hint {
+  padding: 24px 0;
+  text-align: center;
+}
+
+.hdash__spacer { flex: 1; }
+
+.modal-backdrop--raised { z-index: 210; }
+
 /* ===== Hub Dashboard — Reminders Page ===== */
 
 /* ---------- Layout ---------- */
@@ -199,8 +216,6 @@
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
   cursor: pointer;
   transition: opacity var(--transition-fast, 0.15s ease);
   border-left: 3px solid transparent;
@@ -217,13 +232,13 @@
 }
 
 .hdash__cal-event--sent {
-  background: rgba(234, 179, 8, 0.15);
-  color: #ca8a04;
-  border-left-color: #ca8a04;
+  background: var(--status-sent-bg);
+  color: var(--status-sent);
+  border-left-color: var(--status-sent);
 }
 
 .hdash__cal-event--completed {
-  background: rgba(52, 211, 153, 0.15);
+  background: color-mix(in srgb, var(--status-complete) 15%, transparent);
   color: var(--status-complete);
   border-left-color: var(--status-complete);
   text-decoration: line-through;
@@ -231,7 +246,7 @@
 }
 
 .hdash__cal-event--cancelled {
-  background: rgba(248, 113, 113, 0.1);
+  background: color-mix(in srgb, var(--status-failed) 10%, transparent);
   color: var(--muted);
   border-left-color: var(--muted);
   text-decoration: line-through;
@@ -239,9 +254,9 @@
 }
 
 .hdash__cal-event--candidate {
-  background: rgba(168, 85, 247, 0.12);
-  color: #a855f7;
-  border-left-color: #a855f7;
+  background: var(--accent-glow);
+  color: var(--accent);
+  border-left-color: var(--accent);
   border-style: dashed;
 }
 
@@ -425,7 +440,7 @@
 }
 
 .hdash__manual-dot--sent {
-  background: #ca8a04;
+  background: var(--status-sent);
 }
 
 .hdash__manual-dot--completed {
@@ -497,7 +512,7 @@
 }
 
 .hdash__status--scheduled { color: var(--accent); }
-.hdash__status--sent { color: #ca8a04; }
+.hdash__status--sent { color: var(--status-sent); }
 .hdash__status--completed { color: var(--status-complete); }
 .hdash__status--cancelled { color: var(--muted); }
 
@@ -673,10 +688,87 @@
 .hdash__form-select {
   cursor: pointer;
   appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%236b7280' d='M3 5l3 3 3-3'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2364748b' d='M3 5l3 3 3-3'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 12px center;
   padding-right: 32px;
+}
+
+[data-theme="light"] .hdash__form-select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2376777d' d='M3 5l3 3 3-3'/%3E%3C/svg%3E");
+}
+
+/* Notify dropdown (custom, replaces native select) */
+
+.hdash__notify-dropdown {
+  position: relative;
+}
+
+.hdash__notify-dropdown-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  background: var(--input-bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 0.875rem;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  transition: border-color var(--transition-fast);
+}
+
+.hdash__notify-dropdown-btn:hover {
+  border-color: var(--border-hover);
+}
+
+.hdash__notify-dropdown-chevron {
+  width: 14px;
+  height: 14px;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.hdash__notify-dropdown-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 20;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 4px;
+  box-shadow: var(--shadow-md);
+  animation: slideDown 0.15s ease;
+}
+
+.hdash__notify-dropdown-item {
+  display: block;
+  width: 100%;
+  padding: 8px 12px;
+  border: none;
+  background: none;
+  color: var(--text);
+  font-size: 0.8125rem;
+  font-family: var(--font-sans);
+  text-align: left;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+
+.hdash__notify-dropdown-item:hover {
+  background: var(--bg-secondary);
+}
+
+.hdash__notify-dropdown-item--active {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+  font-weight: var(--font-semibold);
 }
 
 .hdash__form-textarea {
@@ -1064,6 +1156,10 @@
 
 .hdash__overview-link:hover {
   opacity: 0.75;
+}
+
+.hdash__overview-link--more {
+  margin-top: 4px;
 }
 
 .hdash__overview-link-icon {
@@ -1608,8 +1704,8 @@
 
 .guide-card--create {
   cursor: default;
-  border: 2px dashed rgba(198, 198, 205, 0.3);
-  background: rgba(198, 198, 205, 0.08);
+  border: 2px dashed color-mix(in srgb, var(--muted) 30%, transparent);
+  background: color-mix(in srgb, var(--muted) 8%, transparent);
 }
 
 .guide-card--create:hover {
@@ -1787,7 +1883,7 @@
 }
 
 .gmodal__spinner--accent {
-  border-color: rgba(59, 130, 246, 0.2);
+  border-color: color-mix(in srgb, var(--accent) 20%, transparent);
   border-top-color: var(--accent);
   width: 20px;
   height: 20px;
@@ -1868,7 +1964,7 @@
 .gmodal__icon-btn--danger:hover {
   border-color: var(--danger);
   color: var(--danger);
-  background: rgba(220, 38, 38, 0.08);
+  background: color-mix(in srgb, var(--danger) 8%, transparent);
 }
 
 .gmodal__title {
@@ -2061,7 +2157,6 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  flex-shrink: 0;
 }
 
 .gmodal__step-content {
@@ -2447,7 +2542,7 @@
 }
 
 .faq-card__archiving-overlay .gmodal__spinner {
-  border-color: rgba(0, 0, 0, 0.15);
+  border-color: color-mix(in srgb, var(--text) 15%, transparent);
   border-top-color: var(--text-secondary);
 }
 
@@ -2505,7 +2600,7 @@
 }
 
 .faq-modal__badge--pinned {
-  background: rgba(59, 130, 246, 0.15);
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
   color: var(--accent);
 }
 

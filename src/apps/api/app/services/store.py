@@ -1,8 +1,6 @@
 import json
 import logging
 import math
-
-logger = logging.getLogger(__name__)
 import random
 import re
 import time
@@ -79,6 +77,8 @@ from ..schemas import (
     SessionMessage,
     ActivityEvent,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class ConflictError(RuntimeError):
@@ -2882,7 +2882,7 @@ class SupabaseStore:
         try:
             client.table("activity_events").insert(row).execute()
         except Exception:
-            pass
+            logger.warning("Failed to log activity event: %s/%s", action, resource_type, exc_info=True)
 
     def list_activity(
         self,
