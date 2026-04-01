@@ -1583,17 +1583,21 @@ a {
   position: absolute;
   right: 0;
   top: calc(100% + 12px);
-  min-width: 220px;
-  padding: 12px;
-  border-radius: 14px;
-  background: var(--card);
-  border: 1px solid var(--border);
-  box-shadow: var(--shadow-xl);
+  min-width: 248px;
+  padding: 14px;
+  border-radius: 18px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.92) 0%, rgba(255, 255, 255, 0.84) 100%),
+    var(--card);
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  box-shadow: 0 22px 44px rgba(15, 23, 42, 0.16);
+  backdrop-filter: blur(18px);
   display: none;
-  gap: 4px;
+  gap: 8px;
   opacity: 0;
   transform: translateY(-10px);
   transition: opacity var(--transition-base), transform var(--transition-base);
+  overflow: hidden;
 }
 
 .profile-menu[open] .menu-card {
@@ -1604,49 +1608,67 @@ a {
 }
 
 .menu-user {
-  padding: 6px 8px 10px;
+  padding: 8px 10px 10px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(26, 115, 232, 0.08), rgba(15, 23, 42, 0.03));
 }
 
 .menu-label {
   margin: 0;
   font-size: 0.7rem;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: var(--muted);
+  color: var(--accent);
 }
 
 .menu-email {
   margin: 4px 0 0;
   font-weight: var(--font-semibold);
-  font-size: 0.875rem;
+  font-size: 0.95rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+.menu-user .muted {
+  margin: 6px 0 0;
+  line-height: 1.25;
+}
+
 .menu-divider {
   height: 1px;
-  background: var(--border);
-  margin: 4px 0;
+  background: rgba(15, 23, 42, 0.08);
+  margin: 0;
 }
 
 .menu-item {
-  padding: 12px;
-  border-radius: 10px;
+  appearance: none;
+  -webkit-appearance: none;
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: 12px;
+  font-family: inherit;
   font-weight: var(--font-semibold);
+  font-size: 0.95rem;
+  line-height: 1.2;
   display: flex;
   align-items: center;
+  justify-content: flex-start;
   gap: 12px;
   background: transparent;
   border: none;
-  color: inherit;
+  color: var(--text);
   text-align: left;
   cursor: pointer;
-  transition: all var(--transition-fast);
+  text-decoration: none;
+  transition:
+    background var(--transition-fast),
+    color var(--transition-fast),
+    transform var(--transition-fast);
 }
 
 .menu-item:hover {
-  background: var(--input-bg);
+  background: rgba(26, 115, 232, 0.08);
   transform: translateX(2px);
 }
 
@@ -1655,11 +1677,15 @@ a {
   box-shadow: 0 0 0 2px var(--accent-glow);
 }
 
+<<<<<<< Updated upstream
 .menu-signout {
   color: #f59e0b;
 }
 
 .menu-signout:disabled {
+=======
+.menu-item:disabled {
+>>>>>>> Stashed changes
   opacity: 0.6;
   cursor: wait;
 }
