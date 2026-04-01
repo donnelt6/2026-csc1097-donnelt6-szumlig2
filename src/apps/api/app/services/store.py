@@ -2734,7 +2734,13 @@ class SupabaseStore:
 
     def list_notifications(self, client: Client, user_id: str, reminder_id: Optional[str] = None) -> List[NotificationEvent]:
         select = "id, reminder_id, channel, status, scheduled_for, sent_at, dismissed_at, reminders (id, hub_id, source_id, due_at, message, status, hubs (name))"
-        query = client.table("notifications").select(select).eq("user_id", user_id).is_("dismissed_at", "null")
+        query = (
+            client.table("notifications")
+            .select(select)
+            .eq("user_id", user_id)
+            .is_("dismissed_at", "null")
+            .not_.in_("reminders.status", [ReminderStatus.completed.value, ReminderStatus.cancelled.value])
+        )
         if reminder_id:
             query = query.eq("reminder_id", reminder_id)
         response = query.order("scheduled_for", desc=True).execute()
@@ -2752,8 +2758,6 @@ class SupabaseStore:
                 hub_row = hub_row[0] if hub_row else {}
             reminder_row = {**reminder_row, "hub_name": hub_row.get("name")}
             reminder = ReminderSummary(**reminder_row)
-            if reminder.status in {ReminderStatus.completed, ReminderStatus.cancelled}:
-                continue
             events.append(
                 NotificationEvent(
                     id=row["id"],
@@ -2902,22 +2906,22 @@ class SupabaseStore:
                     response = self.service_client.auth.admin.list_users()
                     users = self._extract_admin_users(response)
                     for user in users:
-                        actor_id = str(getattr(user, "id", "") or "")
-                        if actor_id not in remaining:
+                        user_id = str(getattr(user, "id", "") or "")
+                        if user_id not in remaining:
                             continue
-                        profile_lookup[actor_id] = self._profile_summary_for_user(user, actor_id)
-                        remaining.discard(actor_id)
+                        profile_lookup[user_id] = self._profile_summary_for_user(user, user_id)
+                        remaining.discard(user_id)
                     break
 
                 users = self._extract_admin_users(response)
                 if not users:
                     break
                 for user in users:
-                    actor_id = str(getattr(user, "id", "") or "")
-                    if actor_id not in remaining:
+                    user_id = str(getattr(user, "id", "") or "")
+                    if user_id not in remaining:
                         continue
-                    profile_lookup[actor_id] = self._profile_summary_for_user(user, actor_id)
-                    remaining.discard(actor_id)
+                    profile_lookup[user_id] = self._profile_summary_for_user(user, user_id)
+                    remaining.discard(user_id)
                 if len(users) < per_page:
                     break
                 page += 1
