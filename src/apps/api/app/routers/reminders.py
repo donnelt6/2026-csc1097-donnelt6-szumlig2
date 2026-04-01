@@ -128,7 +128,7 @@ def update_reminder(
         updates["title"] = payload.title
     if payload.message is not None:
         updates["message"] = payload.message
-    if payload.notify_before is not None:
+    if "notify_before" in payload.model_fields_set:
         updates["notify_before"] = payload.notify_before
 
     if not updates:

@@ -10,14 +10,15 @@ import {
   PencilSquareIcon,
   TrashIcon,
   EllipsisVerticalIcon,
-  QuestionMarkCircleIcon,
   StarIcon as StarOutline,
+  SparklesIcon,
+  ChatBubbleLeftIcon,
 } from "@heroicons/react/24/outline";
 import { StarIcon as StarSolid } from "@heroicons/react/24/solid";
-import { archiveFaq, createFaq, generateFaqs, listFaqs, updateFaq } from "../../lib/api";
+import { archiveFaq, askQuestion, createFaq, generateFaqs, listFaqs, updateFaq } from "../../lib/api";
 import { useSearch } from "../../lib/SearchContext";
 import type { Citation, FaqEntry, Source } from "../../lib/types";
-import { formatRelativeTime } from "../../lib/utils";
+
 
 interface Props {
   hubId: string;
@@ -42,9 +43,12 @@ export function FaqsPage({ hubId, sources, canEdit }: Props) {
 
   const { searchQuery } = useSearch();
 
-  const [showAddModal, setShowAddModal] = useState(false);
   const [showGenerateModal, setShowGenerateModal] = useState(false);
   const [showManualModal, setShowManualModal] = useState(false);
+  const [showAskModal, setShowAskModal] = useState(false);
+  const [askInput, setAskInput] = useState("");
+  const [askAnswer, setAskAnswer] = useState<string | null>(null);
+  const [askLoading, setAskLoading] = useState(false);
   const [manualQuestion, setManualQuestion] = useState("");
   const [manualAnswer, setManualAnswer] = useState("");
   const [createSourceIds, setCreateSourceIds] = useState<string[]>([]);
@@ -55,6 +59,13 @@ export function FaqsPage({ hubId, sources, canEdit }: Props) {
   const [drafts, setDrafts] = useState<Record<string, DraftValues>>({});
   const [activeCitation, setActiveCitation] = useState<Citation | null>(null);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!openMenuId) return;
+    const handler = () => setOpenMenuId(null);
+    window.addEventListener('click', handler);
+    return () => window.removeEventListener('click', handler);
+  }, [openMenuId]);
 
   const completeSources = useMemo(() => sources.filter((s) => s.status === 'complete'), [sources]);
 
@@ -74,13 +85,6 @@ export function FaqsPage({ hubId, sources, canEdit }: Props) {
     const t = window.setTimeout(() => setStatusMessage(null), 5000);
     return () => window.clearTimeout(t);
   }, [statusMessage]);
-
-  useEffect(() => {
-    if (!openMenuId) return;
-    const handler = () => setOpenMenuId(null);
-    window.addEventListener('click', handler);
-    return () => window.removeEventListener('click', handler);
-  }, [openMenuId]);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["faqs", hubId],
@@ -119,8 +123,7 @@ export function FaqsPage({ hubId, sources, canEdit }: Props) {
 
   const canGenerate = canEdit && createSourceIds.length > 0;
 
-  const createSlots = canEdit ? 1 : 0;
-  const firstPageLimit = FAQS_PER_PAGE - createSlots;
+  const firstPageLimit = FAQS_PER_PAGE;
   const totalPages = entries.length <= firstPageLimit
     ? 1
     : 1 + Math.ceil((entries.length - firstPageLimit) / FAQS_PER_PAGE);
@@ -281,42 +284,55 @@ export function FaqsPage({ hubId, sources, canEdit }: Props) {
             className={`hubs-tab${filterTab === 'favourites' ? ' hubs-tab--active' : ''}`}
             onClick={() => setFilterTab('favourites')}
           >
-            Favourites{favouriteCount > 0 ? ` (${favouriteCount})` : ''}
+            Pinned{favouriteCount > 0 ? ` (${favouriteCount})` : ''}
           </button>
         </div>
-      </div>
-
-      <div className="hubs-grid hubs-grid--4col">
-        {canEdit && safePage === 1 && (
-          <div
-            className="hub-card hub-card--create"
-            onClick={() => setShowAddModal(true)}
-            role="button"
-            tabIndex={0}
-            onKeyDown={(e) => { if (e.key === 'Enter') setShowAddModal(true); }}
-          >
-            <div className="hub-card-create-icon">
-              <PlusIcon />
-            </div>
-            <h3 className="hub-card-create-title">Add FAQ</h3>
-            <p className="hub-card-create-desc">Write manually or generate from your sources</p>
+        {canEdit && (
+          <div className="faq-action-buttons">
+            <button
+              className="faq-action-btn"
+              type="button"
+              onClick={() => { setAskInput(""); setAskAnswer(null); setShowAskModal(true); }}
+            >
+              <ChatBubbleLeftIcon className="faq-action-btn__icon" />
+              Ask a Question
+            </button>
+            <button
+              className="faq-action-btn"
+              type="button"
+              onClick={() => setShowManualModal(true)}
+            >
+              <PlusIcon className="faq-action-btn__icon" />
+              Create a Question
+            </button>
+            <button
+              className="faq-action-btn faq-action-btn--generate"
+              type="button"
+              onClick={() => openGenerateModal()}
+              disabled={pendingGenerations.size > 0}
+            >
+              <SparklesIcon className="faq-action-btn__icon" />
+              Generate for me
+            </button>
           </div>
         )}
+      </div>
 
+      <div className="faq-grid">
         {isLoading && (
-          <div className="hub-card faq-card faq-card--loading">
+          <div className="faq-grid-card faq-grid-card--loading">
             <p className="muted">Loading FAQs...</p>
           </div>
         )}
         {error && (
-          <div className="hub-card faq-card">
+          <div className="faq-grid-card">
             <p className="muted">Failed to load FAQs.</p>
           </div>
         )}
         {pagedFaqs.map((faq) => (
           <div
             key={faq.id}
-            className={`hub-card faq-card${archivingIds.has(faq.id) ? ' faq-card--archiving' : ''}`}
+            className={`faq-grid-card${archivingIds.has(faq.id) ? ' faq-grid-card--archiving' : ''}`}
             onClick={() => !archivingIds.has(faq.id) && openFaq(faq)}
             role="button"
             tabIndex={0}
@@ -328,23 +344,26 @@ export function FaqsPage({ hubId, sources, canEdit }: Props) {
                 <span>Archiving...</span>
               </div>
             )}
-            <div className="hub-card-top">
-              <div className="faq-card__icon">
-                <QuestionMarkCircleIcon />
-              </div>
-              <div className="hub-card-actions" onClick={(e) => e.stopPropagation()}>
+            <div className="faq-grid-card__question-zone">
+              <h3 className="faq-grid-card__question">{truncate(faq.question, 120)}</h3>
+            </div>
+            <div className="faq-grid-card__body">
+              <p className="faq-grid-card__answer">{cardPreview(faq.answer)}</p>
+              <div className="faq-grid-card__footer" onClick={(e) => e.stopPropagation()}>
+                <span className="faq-grid-card__confidence">{Math.round((faq.confidence || 0) * 100)}%</span>
+              <div className="faq-grid-card__actions">
                 <button
-                  className="hub-favourite-button"
+                  className="faq-grid-card__action-btn"
                   type="button"
-                  title={faq.is_pinned ? 'Unfavourite' : 'Favourite'}
+                  title={faq.is_pinned ? 'Unpin' : 'Pin'}
                   onClick={() => toggleFavourite(faq)}
                 >
-                  {faq.is_pinned ? <StarSolid className="hub-favourite-icon filled" /> : <StarOutline className="hub-favourite-icon" />}
+                  {faq.is_pinned ? <StarSolid className="faq-grid-card__action-icon faq-grid-card__action-icon--pinned" /> : <StarOutline className="faq-grid-card__action-icon" />}
                 </button>
                 {canEdit && (
                   <div className="hub-card-menu">
                     <button
-                      className="hub-menu-button"
+                      className="faq-grid-card__action-btn"
                       type="button"
                       aria-label="FAQ options"
                       onClick={(e) => {
@@ -352,7 +371,7 @@ export function FaqsPage({ hubId, sources, canEdit }: Props) {
                         setOpenMenuId(openMenuId === faq.id ? null : faq.id);
                       }}
                     >
-                      <EllipsisVerticalIcon className="hdash__icon--lg" />
+                      <EllipsisVerticalIcon className="faq-grid-card__action-icon" />
                     </button>
                     {openMenuId === faq.id && (
                       <div className="hub-card-menu__dropdown">
@@ -382,22 +401,15 @@ export function FaqsPage({ hubId, sources, canEdit }: Props) {
                 )}
               </div>
             </div>
-            <h3 className="hub-card-title">{truncate(faq.question, 80)}</h3>
-            <p className="hub-card-description">{cardPreview(faq.answer)}</p>
-            <div className="faq-card__footer">
-              <span className="faq-card__confidence-badge">
-                {Math.round((faq.confidence || 0) * 100)}%
-              </span>
-              <span className="faq-card__date">Created {formatRelativeTime(faq.created_at)}</span>
             </div>
           </div>
         ))}
 
         {!isLoading && !error && entries.length === 0 && (
-          <div className="hub-card faq-card faq-card--empty">
+          <div className="faq-grid-card faq-grid-card--empty">
             <p className="muted">
               {filterTab === 'favourites'
-                ? 'No favourite FAQs yet.'
+                ? 'No pinned FAQs yet.'
                 : canEdit
                   ? 'No FAQs yet. Generate them from your sources.'
                   : 'No FAQs yet.'}
@@ -440,49 +452,6 @@ export function FaqsPage({ hubId, sources, canEdit }: Props) {
           </div>
         )}
       </div>
-
-      {showAddModal && (
-        <div className="modal-backdrop" onClick={() => setShowAddModal(false)}>
-          <div className="gmodal gmodal--sm" onClick={(e) => e.stopPropagation()}>
-            <div className="gmodal__header">
-              <span className="gmodal__badge">NEW FAQ</span>
-              <button className="gmodal__icon-btn" type="button" onClick={() => setShowAddModal(false)}>
-                <XMarkIcon />
-              </button>
-            </div>
-            <h2 className="gmodal__title">Add FAQ</h2>
-            <div className="gmodal__create-form">
-              <button
-                className="faq-add-option"
-                type="button"
-                onClick={() => { setShowAddModal(false); setShowManualModal(true); }}
-              >
-                <PencilSquareIcon className="hdash__icon--xl" />
-                <div className="faq-add-option__text">
-                  <strong>Write manually</strong>
-                  <span>Add your own question and answer</span>
-                </div>
-                <ChevronRightIcon className="hdash__icon--md-shrink" />
-              </button>
-              <button
-                className="faq-add-option"
-                type="button"
-                onClick={() => { setShowAddModal(false); openGenerateModal(); }}
-                disabled={pendingGenerations.size > 0}
-              >
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
-                </svg>
-                <div className="faq-add-option__text">
-                  <strong>Generate from sources</strong>
-                  <span>AI generates FAQs from your uploaded content</span>
-                </div>
-                <ChevronRightIcon className="hdash__icon--md-shrink" />
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {showGenerateModal && (
         <div className="modal-backdrop" onClick={() => setShowGenerateModal(false)}>
@@ -597,6 +566,84 @@ export function FaqsPage({ hubId, sources, canEdit }: Props) {
                 {createMutation.isPending ? "Adding..." : "Add FAQ"}
                 <ChevronRightIcon className="hdash__icon--sm" />
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showAskModal && (
+        <div className="modal-backdrop" onClick={() => { if (!askLoading) setShowAskModal(false); }}>
+          <div className="gmodal gmodal--sm" onClick={(e) => e.stopPropagation()}>
+            <div className="gmodal__header">
+              <span className="gmodal__badge">ASK</span>
+              <button className="gmodal__icon-btn" type="button" onClick={() => { if (!askLoading) setShowAskModal(false); }}>
+                <XMarkIcon />
+              </button>
+            </div>
+            <h2 className="gmodal__title">Ask a Question</h2>
+            <p className="gmodal__subtitle">Ask a question and we&apos;ll search your sources for an answer.</p>
+            <div className="gmodal__create-form">
+              <label className="hdash__form-label">
+                <span className="hdash__form-label-text">Question</span>
+                <textarea
+                  className="hdash__form-input hdash__form-textarea"
+                  value={askInput}
+                  onChange={(e) => setAskInput(e.target.value)}
+                  placeholder="e.g. What is our data retention policy?"
+                  rows={2}
+                  autoFocus
+                  disabled={askLoading}
+                />
+              </label>
+              {!askAnswer && (
+                <button
+                  className="guide-card__draft-btn"
+                  type="button"
+                  onClick={() => {
+                    setAskLoading(true);
+                    setAskAnswer(null);
+                    askQuestion({ hub_id: hubId, scope: 'hub', question: askInput.trim() })
+                      .then((res) => setAskAnswer(res.answer))
+                      .catch((err) => setStatusMessage((err as Error).message))
+                      .finally(() => setAskLoading(false));
+                  }}
+                  disabled={!askInput.trim() || askLoading}
+                >
+                  {askLoading ? "Searching..." : "Search sources"}
+                  <ChevronRightIcon className="hdash__icon--sm" />
+                </button>
+              )}
+              {askAnswer && (
+                <>
+                  <label className="hdash__form-label">
+                    <span className="hdash__form-label-text">Answer</span>
+                    <div className="faq-ask-answer">{askAnswer}</div>
+                  </label>
+                  <div className="faq-ask-actions">
+                    <button
+                      className="guide-card__draft-btn"
+                      type="button"
+                      onClick={() => {
+                        createMutation.mutate(
+                          { hub_id: hubId, question: askInput.trim(), answer: askAnswer },
+                          { onSuccess: () => { setShowAskModal(false); setAskInput(""); setAskAnswer(null); } },
+                        );
+                      }}
+                      disabled={createMutation.isPending}
+                    >
+                      {createMutation.isPending ? "Saving..." : "Save as FAQ"}
+                      <ChevronRightIcon className="hdash__icon--sm" />
+                    </button>
+                    <button
+                      className="gmodal__step-edit-btn"
+                      type="button"
+                      onClick={() => setAskAnswer(null)}
+                    >
+                      Try again
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </div>

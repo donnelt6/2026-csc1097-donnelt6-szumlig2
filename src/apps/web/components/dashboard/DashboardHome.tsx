@@ -382,8 +382,17 @@ export function DashboardHome() {
                   activityItems.slice(0, 5).map((event) => {
                     const Icon = getEventIcon(event);
                     const tone = getEventTone(event);
+                    const tabMap: Record<string, string> = {
+                      reminder: '?tab=dashboard&dashTab=reminders',
+                      faq: '?tab=dashboard&dashTab=faqs',
+                      guide: '?tab=dashboard&dashTab=guides',
+                      source: '?tab=sources',
+                      member: '?tab=members',
+                      chat: '?tab=chat',
+                    };
+                    const suffix = tabMap[event.resource_type] ?? '';
                     return (
-                      <Link key={event.id} href={`/hubs/${event.hub_id}`} className="dash-activity-item">
+                      <Link key={event.id} href={`/hubs/${event.hub_id}${suffix}`} className="dash-activity-item">
                         <div className={`dash-activity-avatar${tone !== 'neutral' ? ` dash-activity-avatar--${tone}` : ''}`}>
                           <Icon className="dash-activity-type-icon" />
                         </div>
@@ -425,7 +434,7 @@ export function DashboardHome() {
                     {closestReminders.map((r) => {
                       const dueDate = new Date(r.due_at);
                       return (
-                        <Link key={r.id} href={`/hubs/${r.hub_id}`} className="dash-reminder-item">
+                        <Link key={r.id} href={`/hubs/${r.hub_id}?tab=dashboard&dashTab=reminders`} className="dash-reminder-item">
                           <div className={`dash-reminder-dot-wrap dash-reminder-dot-wrap--${r.status}`}>
                             <span className="dash-reminder-dot-inner" />
                           </div>

@@ -1683,11 +1683,7 @@ a {
   box-shadow: 0 0 0 2px var(--accent-glow);
 }
 
-.menu-signout {
-  color: var(--brand-warning);
-}
-
-.menu-signout:disabled {
+.menu-item:disabled {
   opacity: 0.6;
   cursor: wait;
 }
@@ -4541,6 +4537,11 @@ textarea {
 .chat__action-btn:hover {
   color: var(--text-secondary);
   background: var(--card-hover);
+}
+
+.chat__action-btn--saved {
+  color: var(--accent);
+  opacity: 0.8;
 }
 
 .chat__action-icon {

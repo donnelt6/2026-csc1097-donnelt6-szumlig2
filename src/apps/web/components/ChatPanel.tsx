@@ -3,11 +3,12 @@
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ClipboardDocumentIcon, FlagIcon, PaperAirplaneIcon, SparklesIcon } from "@heroicons/react/24/outline";
+import { ClipboardDocumentIcon, FlagIcon, PaperAirplaneIcon, SparklesIcon, BookmarkIcon } from "@heroicons/react/24/outline";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
   askQuestion,
+  createFaq,
   flagMessage,
   getChatPromptSuggestion,
   getChatSessionMessages,
@@ -220,6 +221,8 @@ export const ChatPanel = forwardRef<ChatPanelHandle, Props>(function ChatPanel({
   const [flaggingMessageId, setFlaggingMessageId] = useState<string | null>(null);
   const [reportMenuMessageId, setReportMenuMessageId] = useState<string | null>(null);
   const [activeCitation, setActiveCitation] = useState<Citation | null>(null);
+  const [savedFaqIds, setSavedFaqIds] = useState<Set<string>>(new Set());
+  const [savingFaqId, setSavingFaqId] = useState<string | null>(null);
   const [panelError, setPanelError] = useState<string | null>(null);
   const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
 
@@ -962,6 +965,25 @@ export const ChatPanel = forwardRef<ChatPanelHandle, Props>(function ChatPanel({
                           >
                             <ClipboardDocumentIcon className="chat__action-icon" />
                             <span>Copy</span>
+                          </button>
+                          <button
+                            type="button"
+                            className={`chat__action-btn${savedFaqIds.has(message.id) ? ' chat__action-btn--saved' : ''}`}
+                            disabled={savedFaqIds.has(message.id) || savingFaqId === message.id}
+                            onClick={() => {
+                              setSavingFaqId(message.id);
+                              createFaq({ hub_id: hubId, question: message.question, answer: message.response!.answer })
+                                .then(() => {
+                                  setSavedFaqIds((prev) => new Set(prev).add(message.id));
+                                  queryClient.invalidateQueries({ queryKey: ['faqs', hubId] });
+                                })
+                                .catch(() => setPanelError('Failed to save FAQ'))
+                                .finally(() => setSavingFaqId(null));
+                            }}
+                            aria-label="Save as FAQ"
+                          >
+                            <BookmarkIcon className="chat__action-icon" />
+                            <span>{savedFaqIds.has(message.id) ? 'Saved' : savingFaqId === message.id ? 'Saving...' : 'Save as FAQ'}</span>
                           </button>
                           {canFlagResponses && (
                             <>

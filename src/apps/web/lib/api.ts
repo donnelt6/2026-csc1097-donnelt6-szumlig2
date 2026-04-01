@@ -660,7 +660,7 @@ export async function updateReminder(
     timezone?: string;
     title?: string;
     message?: string;
-    notify_before?: number;
+    notify_before?: number | null;
     action?: ReminderUpdateAction;
     snooze_minutes?: number;
   }

@@ -17,6 +17,7 @@ import { acceptInvite, listInvites, listSources, trackHubAccess } from "../../..
 import { useCurrentHub } from "../../../lib/CurrentHubContext";
 import { useHubTab } from "../../../lib/HubTabContext";
 import { useHubDashboardTab } from "../../../lib/HubDashboardTabContext";
+import type { HubDashboardTab } from "../../../lib/HubDashboardTabContext";
 import { useSearch } from "../../../lib/SearchContext";
 import type { HubTab } from "../../../lib/HubTabContext";
 import type { Hub } from "../../../lib/types";
@@ -42,10 +43,17 @@ export default function HubDetail({ params }: { params: { hubId: string } }) {
 
     if (tabParam && VALID_TABS.includes(tabParam)) {
       setActiveTab(tabParam);
+      if (tabParam === 'dashboard') {
+        const dashTabParam = searchParams.get('dashTab') as HubDashboardTab | null;
+        const validDashTabs: HubDashboardTab[] = ['overview', 'guides', 'reminders', 'faqs'];
+        if (dashTabParam && validDashTabs.includes(dashTabParam)) {
+          setActiveDashTab(dashTabParam);
+        }
+      }
     } else if (isNewHub) {
       setActiveTab('chat');
     }
-  }, [params.hubId, searchParams, setActiveTab]);
+  }, [params.hubId, searchParams, setActiveTab, setActiveDashTab]);
 
   // Clear search when switching tabs so stale queries don't carry over
   useEffect(() => {

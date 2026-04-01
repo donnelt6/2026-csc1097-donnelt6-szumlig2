@@ -544,7 +544,7 @@ function EditModal({ hubId, reminder, onClose, onSaved }: EditModalProps) {
   const [minute, setMinute] = useState(initial.minute);
   const [title, setTitle] = useState(reminder.title ?? '');
   const [message, setMessage] = useState(reminder.message ?? '');
-  const [notifyBefore, setNotifyBefore] = useState<number | null>(reminder.notify_before ?? 1440);
+  const [notifyBefore, setNotifyBefore] = useState<number | null>(reminder.notify_before ?? null);
   const [notifyValid, setNotifyValid] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -580,7 +580,7 @@ function EditModal({ hubId, reminder, onClose, onSaved }: EditModalProps) {
     if (!date) { setError('Please select a date.'); return; }
     setError(null);
     const iso = buildIso(date, hour, minute);
-    updateMut.mutate({ due_at: iso, timezone, title: title.trim() || undefined, message: message.trim() || undefined, notify_before: notifyBefore ?? undefined });
+    updateMut.mutate({ due_at: iso, timezone, title: title.trim() || undefined, message: message.trim() || undefined, notify_before: notifyBefore });
   };
 
   const busy = updateMut.isPending || deleteMut.isPending;

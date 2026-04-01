@@ -28,6 +28,7 @@ export function describeEventParts(event: ActivityEvent, currentUserId?: string)
       else if (event.action === 'cancel') { action = `${actorLabel} cancelled reminder`; subject = rLabel; }
       else if (event.action === 'updated') { action = `${actorLabel} updated reminder`; subject = rLabel; }
       else if (event.action === 'deleted') { action = `${actorLabel} deleted reminder`; subject = rLabel; }
+      else if (event.action === 'reopen') { action = `${actorLabel} reopened reminder`; subject = rLabel; }
       else { action = `${actorLabel} created reminder`; subject = rLabel; }
       break;
     }
@@ -51,7 +52,7 @@ export function getEventTone(event: ActivityEvent): 'destructive' | 'positive' |
   const { action, resource_type } = event;
   if (action === 'deleted' || action === 'removed' || action === 'cancel') return 'destructive';
   if (action === 'created' || action === 'joined' || action === 'invited' || action === 'started' || action === 'generated') return 'positive';
-  if (resource_type === 'reminder' && action === 'complete') return 'positive';
+  if (resource_type === 'reminder' && (action === 'complete' || action === 'reopen')) return 'positive';
   return 'neutral';
 }
 
