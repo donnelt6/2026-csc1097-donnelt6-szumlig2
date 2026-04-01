@@ -714,12 +714,14 @@ class Notification(BaseModel):
     status: NotificationStatus
     scheduled_for: datetime
     sent_at: Optional[datetime] = None
+    dismissed_at: Optional[datetime] = None
     provider_id: Optional[str] = None
 
 
 class ReminderSummary(BaseModel):
     id: str
     hub_id: str
+    hub_name: Optional[str] = None
     source_id: Optional[str] = None
     due_at: datetime
     message: Optional[str] = None
@@ -733,6 +735,7 @@ class NotificationEvent(BaseModel):
     status: NotificationStatus
     scheduled_for: datetime
     sent_at: Optional[datetime] = None
+    dismissed_at: Optional[datetime] = None
     reminder: ReminderSummary
 
 

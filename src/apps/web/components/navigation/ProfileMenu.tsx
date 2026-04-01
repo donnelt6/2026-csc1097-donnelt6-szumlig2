@@ -50,8 +50,8 @@ export function ProfileMenu() {
           Settings
         </Link>
         <div className="menu-divider" role="separator" />
-        <button className="menu-item menu-signout" type="button" onClick={onSignOut} disabled={loading}>
-          {loading ? "Signing out..." : "Sign Out"}
+        <button className="menu-item" type="button" onClick={onSignOut} disabled={loading}>
+          {loading ? "Signing out..." : "Sign out"}
         </button>
       </div>
     </details>

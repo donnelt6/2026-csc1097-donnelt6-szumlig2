@@ -2,7 +2,15 @@
 
 from datetime import datetime, timedelta, timezone
 
-from app.schemas import Reminder, ReminderCandidate, ReminderCandidateStatus, ReminderStatus
+from app.schemas import (
+    NotificationEvent,
+    NotificationStatus,
+    Reminder,
+    ReminderCandidate,
+    ReminderCandidateStatus,
+    ReminderStatus,
+    ReminderSummary,
+)
 from app.services import store as store_module
 
 
@@ -76,3 +84,30 @@ def test_accept_candidate_creates_reminder(client, monkeypatch) -> None:
     assert resp.status_code == 200
     data = resp.json()
     assert data["reminder"]["id"] == "rem-2"
+
+
+def test_dismiss_notification_returns_notification(client, monkeypatch) -> None:
+    due_at = datetime.now(timezone.utc) + timedelta(days=1)
+    notification = NotificationEvent(
+        id="44444444-4444-4444-4444-444444444444",
+        reminder_id="55555555-5555-5555-5555-555555555555",
+        channel="in_app",
+        status=NotificationStatus.sent,
+        scheduled_for=due_at,
+        sent_at=due_at,
+        dismissed_at=due_at,
+        reminder=ReminderSummary(
+            id="55555555-5555-5555-5555-555555555555",
+            hub_id="11111111-1111-1111-1111-111111111111",
+            source_id=None,
+            due_at=due_at,
+            message="Submit project",
+            status=ReminderStatus.scheduled,
+        ),
+    )
+    monkeypatch.setattr(store_module.store, "dismiss_notification", lambda _client, user_id, notification_id: notification)
+
+    resp = client.post("/reminders/notifications/44444444-4444-4444-4444-444444444444/dismiss")
+
+    assert resp.status_code == 200
+    assert resp.json()["id"] == notification.id
