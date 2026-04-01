@@ -10,6 +10,7 @@ import {
   listReminderNotifications,
   updateReminder,
 } from "../../lib/api";
+import type { HubMember, NotificationEvent, PendingInvite, Reminder } from "../../lib/types";
 import { renderWithQueryClient } from "../test-utils";
 
 vi.mock("../../lib/api", () => ({
@@ -28,32 +29,8 @@ vi.mock("../../components/auth/AuthProvider", () => ({
 }));
 
 describe("NotificationsMenu", () => {
-  let inviteNotifications: Array<{
-    hub: {
-      id: string;
-      owner_id: string;
-      name: string;
-      created_at: string;
-    };
-    role: string;
-    invited_at: string;
-  }>;
-  let reminderNotificationsState: Array<{
-    id: string;
-    reminder_id: string;
-    channel: "in_app";
-    status: "sent";
-    scheduled_for: string;
-    sent_at: string;
-    reminder: {
-      id: string;
-      hub_id: string;
-      hub_name?: string;
-      due_at: string;
-      message: string;
-      status: "scheduled";
-    };
-  }>;
+  let inviteNotifications: PendingInvite[];
+  let reminderNotificationsState: NotificationEvent[];
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -95,7 +72,7 @@ describe("NotificationsMenu", () => {
       role: "viewer",
       invited_at: "2026-01-02T12:00:00Z",
       accepted_at: "2026-01-03T12:00:00Z",
-    });
+    } satisfies HubMember);
     vi.mocked(dismissInviteNotification).mockImplementation(async (hubId: string) => {
       inviteNotifications = inviteNotifications.filter((invite) => invite.hub.id !== hubId);
     });
@@ -119,7 +96,7 @@ describe("NotificationsMenu", () => {
         status: "completed",
         created_at: "2026-01-03T10:00:00Z",
         completed_at: "2026-01-03T13:00:00Z",
-      };
+      } satisfies Reminder;
     });
   });
 
