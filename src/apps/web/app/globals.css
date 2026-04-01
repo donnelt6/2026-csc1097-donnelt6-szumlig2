@@ -1677,15 +1677,7 @@ a {
   box-shadow: 0 0 0 2px var(--accent-glow);
 }
 
-<<<<<<< Updated upstream
-.menu-signout {
-  color: #f59e0b;
-}
-
-.menu-signout:disabled {
-=======
 .menu-item:disabled {
->>>>>>> Stashed changes
   opacity: 0.6;
   cursor: wait;
 }
