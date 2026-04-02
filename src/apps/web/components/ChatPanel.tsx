@@ -1161,26 +1161,6 @@ export const ChatPanel = forwardRef<ChatPanelHandle, Props>(function ChatPanel({
                             <HandThumbDownIcon className="chat__action-icon" />
                             <span>{currentFeedback === "not_helpful" ? "Not helpful" : "Mark not helpful"}</span>
                           </button>
-                          <button
-                            type="button"
-                            className={`chat__action-btn${currentFeedback === "helpful" ? " chat__action-btn--active" : ""}`}
-                            onClick={() => void handleMessageFeedback(message.response!.message_id, "helpful")}
-                            aria-label="Mark answer helpful"
-                            disabled={feedbackSubmittingId === message.response.message_id}
-                          >
-                            <HandThumbUpIcon className="chat__action-icon" />
-                            <span>{currentFeedback === "helpful" ? "Helpful" : "Mark helpful"}</span>
-                          </button>
-                          <button
-                            type="button"
-                            className={`chat__action-btn${currentFeedback === "not_helpful" ? " chat__action-btn--active" : ""}`}
-                            onClick={() => void handleMessageFeedback(message.response!.message_id, "not_helpful")}
-                            aria-label="Mark answer not helpful"
-                            disabled={feedbackSubmittingId === message.response.message_id}
-                          >
-                            <HandThumbDownIcon className="chat__action-icon" />
-                            <span>{currentFeedback === "not_helpful" ? "Not helpful" : "Mark not helpful"}</span>
-                          </button>
                           {canFlagResponses && (
                             <>
                               {(message.response.flag_status === "resolved" || message.response.flag_status === "dismissed") && (
