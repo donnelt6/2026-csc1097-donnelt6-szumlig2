@@ -1449,7 +1449,6 @@ def test_create_chat_event_rejects_message_session_mismatch(monkeypatch) -> None
 
 
 def test_hub_analytics_summary_uses_total_citations_shown_for_open_rate(monkeypatch) -> None:
-    monkeypatch.setattr(store, "_require_hub_owner_or_admin", lambda user_id, hub_id: None)
     monkeypatch.setattr(
         store,
         "service_client",
@@ -1477,7 +1476,7 @@ def test_hub_analytics_summary_uses_total_citations_shown_for_open_rate(monkeypa
         ),
     )
 
-    summary = store.get_hub_chat_analytics_summary("user-1", "hub-1", days=30)
+    summary = store.get_hub_chat_analytics_summary("hub-1", days=30)
 
     assert summary.citation_open_count == 2
     assert summary.citation_open_rate == 0.4

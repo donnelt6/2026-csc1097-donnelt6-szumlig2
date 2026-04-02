@@ -28,7 +28,7 @@ def test_hub_analytics_summary_success(client, monkeypatch) -> None:
     monkeypatch.setattr(
         store_module.store,
         "get_hub_chat_analytics_summary",
-        lambda user_id, hub_id, days=None: {
+        lambda hub_id, days=None: {
             "window_days": 30,
             "total_questions": 10,
             "total_answers": 10,
@@ -59,7 +59,7 @@ def test_hub_analytics_trends_success(client, monkeypatch) -> None:
     monkeypatch.setattr(
         store_module.store,
         "get_hub_chat_analytics_trends",
-        lambda user_id, hub_id, days=None: {
+        lambda hub_id, days=None: {
             "window_days": 14,
             "points": [
                 {"date": "2026-03-20", "questions": 1, "answers": 1, "helpful": 1, "citation_opens": 0, "citation_flags": 0}

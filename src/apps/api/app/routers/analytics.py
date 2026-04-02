@@ -36,7 +36,7 @@ def get_summary(
         member = require_hub_member(client, str(hub_id), current_user.id)
         require_accepted(member)
         _require_owner_or_admin(member.role)
-        return store.get_hub_chat_analytics_summary(current_user.id, str(hub_id), days=days)
+        return store.get_hub_chat_analytics_summary(str(hub_id), days=days)
     except KeyError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Hub not found.") from exc
     except PermissionError as exc:
@@ -60,7 +60,7 @@ def get_trends(
         member = require_hub_member(client, str(hub_id), current_user.id)
         require_accepted(member)
         _require_owner_or_admin(member.role)
-        return store.get_hub_chat_analytics_trends(current_user.id, str(hub_id), days=days)
+        return store.get_hub_chat_analytics_trends(str(hub_id), days=days)
     except KeyError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Hub not found.") from exc
     except PermissionError as exc:

@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronDownIcon } from "@heroicons/react/24/outline";
 
@@ -51,6 +51,20 @@ export function HubAnalyticsPanel({
   const canViewAnalytics = hubRole === "owner" || hubRole === "admin";
   const [topSourcesMode, setTopSourcesMode] = useState<"opens" | "returns">("opens");
   const [topSourcesMenuOpen, setTopSourcesMenuOpen] = useState(false);
+  const topSourcesMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!topSourcesMenuOpen) {
+      return;
+    }
+    const handlePointerDown = (event: MouseEvent) => {
+      if (topSourcesMenuRef.current && !topSourcesMenuRef.current.contains(event.target as Node)) {
+        setTopSourcesMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => document.removeEventListener("mousedown", handlePointerDown);
+  }, [topSourcesMenuOpen]);
 
   const summaryQuery = useQuery({
     queryKey: ["hub-analytics-summary", hubId],
@@ -150,7 +164,7 @@ export function HubAnalyticsPanel({
         <section className="card hub-analytics__panel">
           <div className="hub-analytics__panel-header">
             <h4>Top cited sources</h4>
-            <div className="hub-analytics__source-filter">
+            <div className="hub-analytics__source-filter" ref={topSourcesMenuRef}>
               <button
                 type="button"
                 className="hub-analytics__source-filter-button"

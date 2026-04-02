@@ -1187,7 +1187,7 @@ class SupabaseStore:
             .in_("message_id", message_ids)
             .execute()
         )
-        return {str(row["message_id"]): str(row.get("rating") or "") for row in (response.data or [])}
+        return {str(row["message_id"]): (row.get("rating") or None) for row in (response.data or [])}
 
     def _get_flag_case_row(self, flag_case_id: str) -> Dict[str, Any]:
         response = (
@@ -1479,34 +1479,6 @@ class SupabaseStore:
         )
         if not member_response.data or not member_response.data[0].get("accepted_at"):
             raise PermissionError("Hub access required.")
-
-    def _require_hub_owner_or_admin(self, user_id: str, hub_id: str) -> None:
-        hub_response = (
-            self.service_client.table("hubs")
-            .select("owner_id")
-            .eq("id", str(hub_id))
-            .limit(1)
-            .execute()
-        )
-        if not hub_response.data:
-            raise KeyError("Hub not found")
-        if str(hub_response.data[0].get("owner_id") or "") == str(user_id):
-            return
-        member_response = (
-            self.service_client.table("hub_members")
-            .select("role,accepted_at")
-            .eq("hub_id", str(hub_id))
-            .eq("user_id", str(user_id))
-            .limit(1)
-            .execute()
-        )
-        if not member_response.data or not member_response.data[0].get("accepted_at"):
-            raise PermissionError("Hub access required.")
-        if str(member_response.data[0].get("role") or "") not in {
-            MembershipRole.owner.value,
-            MembershipRole.admin.value,
-        }:
-            raise PermissionError("Only hub owners and admins can view analytics.")
 
     def _insert_chat_event(
         self,
@@ -2779,12 +2751,10 @@ class SupabaseStore:
 
     def get_hub_chat_analytics_summary(
         self,
-        user_id: str,
         hub_id: str,
         *,
         days: Optional[int] = None,
     ) -> ChatAnalyticsSummary:
-        self._require_hub_owner_or_admin(user_id, hub_id)
         window_days = _clamp_window_days(days or self.analytics_summary_days)
         cutoff = (datetime.now(timezone.utc) - timedelta(days=window_days)).isoformat()
 
@@ -2895,12 +2865,10 @@ class SupabaseStore:
 
     def get_hub_chat_analytics_trends(
         self,
-        user_id: str,
         hub_id: str,
         *,
         days: Optional[int] = None,
     ) -> ChatAnalyticsTrends:
-        self._require_hub_owner_or_admin(user_id, hub_id)
         window_days = _clamp_window_days(days or self.analytics_trend_days)
         cutoff_dt = datetime.now(timezone.utc) - timedelta(days=window_days - 1)
         cutoff = cutoff_dt.isoformat()
@@ -3722,6 +3690,7 @@ class SupabaseStore:
                     break
                 page += 1
         except Exception:
+            logger.exception("Failed to resolve user profiles by id", extra={"user_id_count": len(user_ids)})
             return {}
 
         return profile_lookup
