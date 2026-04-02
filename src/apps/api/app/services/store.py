@@ -2232,6 +2232,18 @@ class SupabaseStore:
         return [FaqEntry(**row) for row in response.data]
 
     def create_faq(self, client: Client, hub_id: str, user_id: str, question: str, answer: str) -> FaqEntry:
+        existing = (
+            client.table("faq_entries")
+            .select("*")
+            .eq("hub_id", hub_id)
+            .eq("question", question)
+            .eq("answer", answer)
+            .is_("archived_at", "null")
+            .limit(1)
+            .execute()
+        )
+        if existing.data:
+            return FaqEntry(**existing.data[0])
         now = datetime.now(timezone.utc).isoformat()
         row = {
             "hub_id": hub_id,

@@ -274,6 +274,7 @@ export const ChatPanel = forwardRef<ChatPanelHandle, Props>(function ChatPanel({
   const canAsk = scope === "global" || !hasSelectableSources || normalizedSelectedSourceIds.length > 0;
   const isComposerLocked = isBootstrapping || isLoadingSession;
   const canSuggestPrompt = !isComposerLocked && (!hasSelectableSources || normalizedSelectedSourceIds.length > 0);
+  const canEditHub = hubRole === 'owner' || hubRole === 'admin' || hubRole === 'editor';
   const canFlagResponses = !!hubRole;
   const shouldStartFreshFromPrompt = initialSessionParam === "new" && !!initialPromptParam;
   const shouldAutoSendPrompt = shouldStartFreshFromPrompt && initialPromptAction === "send";
@@ -966,25 +967,27 @@ export const ChatPanel = forwardRef<ChatPanelHandle, Props>(function ChatPanel({
                             <ClipboardDocumentIcon className="chat__action-icon" />
                             <span>Copy</span>
                           </button>
-                          <button
-                            type="button"
-                            className={`chat__action-btn${savedFaqIds.has(message.id) ? ' chat__action-btn--saved' : ''}`}
-                            disabled={savedFaqIds.has(message.id) || savingFaqId === message.id}
-                            onClick={() => {
-                              setSavingFaqId(message.id);
-                              createFaq({ hub_id: hubId, question: message.question, answer: message.response!.answer })
-                                .then(() => {
-                                  setSavedFaqIds((prev) => new Set(prev).add(message.id));
-                                  queryClient.invalidateQueries({ queryKey: ['faqs', hubId] });
-                                })
-                                .catch(() => setPanelError('Failed to save FAQ'))
-                                .finally(() => setSavingFaqId(null));
-                            }}
-                            aria-label="Save as FAQ"
-                          >
-                            <BookmarkIcon className="chat__action-icon" />
-                            <span>{savedFaqIds.has(message.id) ? 'Saved' : savingFaqId === message.id ? 'Saving...' : 'Save as FAQ'}</span>
-                          </button>
+                          {canEditHub && (
+                            <button
+                              type="button"
+                              className={`chat__action-btn${savedFaqIds.has(message.id) ? ' chat__action-btn--saved' : ''}`}
+                              disabled={savedFaqIds.has(message.id) || savingFaqId === message.id}
+                              onClick={() => {
+                                setSavingFaqId(message.id);
+                                createFaq({ hub_id: hubId, question: message.question, answer: message.response!.answer })
+                                  .then(() => {
+                                    setSavedFaqIds((prev) => new Set(prev).add(message.id));
+                                    queryClient.invalidateQueries({ queryKey: ['faqs', hubId] });
+                                  })
+                                  .catch(() => setPanelError('Failed to save FAQ'))
+                                  .finally(() => setSavingFaqId(null));
+                              }}
+                              aria-label="Save as FAQ"
+                            >
+                              <BookmarkIcon className="chat__action-icon" />
+                              <span>{savedFaqIds.has(message.id) ? 'Saved' : savingFaqId === message.id ? 'Saving...' : 'Save as FAQ'}</span>
+                            </button>
+                          )}
                           {canFlagResponses && (
                             <>
                               {(message.response.flag_status === "resolved" || message.response.flag_status === "dismissed") && (

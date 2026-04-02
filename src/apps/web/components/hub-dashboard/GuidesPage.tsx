@@ -582,44 +582,46 @@ export function GuidesPage({ hubId, sources, canEdit }: Props) {
                   >
                     {guide.is_favourited ? <StarSolid className="hub-favourite-icon filled" /> : <StarOutline className="hub-favourite-icon" />}
                   </button>
-                  <div className="hub-card-menu">
-                    <button
-                      className="hub-menu-button"
-                      type="button"
-                      aria-label="Guide options"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setOpenMenuId(openMenuId === guide.id ? null : guide.id);
-                      }}
-                    >
-                      <EllipsisVerticalIcon className="hdash__icon--lg" />
-                    </button>
-                    {openMenuId === guide.id && (
-                      <div className="hub-card-menu__dropdown">
-                        <button
-                          className="hub-card-menu__item"
-                          type="button"
-                          onClick={() => {
-                            openGuide(guide);
-                            setEditingTitleId(guide.id);
-                            setTitleDraft(guide.title);
-                            setOpenMenuId(null);
-                          }}
-                        >
-                          Edit
-                          <PencilSquareIcon className="hub-card-menu__item-icon" />
-                        </button>
-                        <button
-                          className="hub-card-menu__item hub-card-menu__item--danger"
-                          type="button"
-                          onClick={() => handleArchive(guide)}
-                        >
-                          Archive
-                          <TrashIcon className="hub-card-menu__item-icon" />
-                        </button>
-                      </div>
-                    )}
-                  </div>
+                  {canEdit && (
+                    <div className="hub-card-menu">
+                      <button
+                        className="hub-menu-button"
+                        type="button"
+                        aria-label="Guide options"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setOpenMenuId(openMenuId === guide.id ? null : guide.id);
+                        }}
+                      >
+                        <EllipsisVerticalIcon className="hdash__icon--lg" />
+                      </button>
+                      {openMenuId === guide.id && (
+                        <div className="hub-card-menu__dropdown">
+                          <button
+                            className="hub-card-menu__item"
+                            type="button"
+                            onClick={() => {
+                              openGuide(guide);
+                              setEditingTitleId(guide.id);
+                              setTitleDraft(guide.title);
+                              setOpenMenuId(null);
+                            }}
+                          >
+                            Edit
+                            <PencilSquareIcon className="hub-card-menu__item-icon" />
+                          </button>
+                          <button
+                            className="hub-card-menu__item hub-card-menu__item--danger"
+                            type="button"
+                            onClick={() => handleArchive(guide)}
+                          >
+                            Archive
+                            <TrashIcon className="hub-card-menu__item-icon" />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
               <h3 className="hub-card-title">{guide.title}</h3>
