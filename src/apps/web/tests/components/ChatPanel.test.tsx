@@ -1,4 +1,4 @@
-import { screen, waitFor } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ChatPanel } from "../../components/ChatPanel";
@@ -321,12 +321,14 @@ describe("ChatPanel", () => {
     await waitFor(() => expect(screen.getByText("New Chat")).toBeInTheDocument());
     await user.type(screen.getByLabelText("Ask a question"), "How do I submit assignments?");
     await user.click(screen.getByRole("button", { name: "Send message" }));
-    await waitFor(() => expect(screen.getByText("Use Moodle.")).toBeInTheDocument());
+    const answer = await screen.findByText("Use Moodle.");
+    const answerPair = answer.closest(".chat__pair");
+    expect(answerPair).toBeTruthy();
 
-    await user.click(screen.getByRole("button", { name: "Mark answer helpful" }));
+    await user.click(within(answerPair as HTMLElement).getByRole("button", { name: "Mark answer helpful" }));
 
     await waitFor(() => expect(submitChatFeedback).toHaveBeenCalledWith("message-1", { rating: "helpful" }));
-    expect(screen.getByText("Helpful")).toBeInTheDocument();
+    expect(within(answerPair as HTMLElement).getByText("Helpful")).toBeInTheDocument();
   });
 
   it("tracks citation opens and lets the user flag a citation", async () => {
