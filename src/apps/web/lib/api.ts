@@ -4,9 +4,17 @@ import type {
   AssignableMembershipRole,
   ChatSessionDetail,
   ChatPromptSuggestion,
+  ChatFeedbackResponse,
+  ChatEventResponse,
+  ChatEventType,
+  ChatAnalyticsSummary,
+  ChatAnalyticsTrends,
   ChatSearchResult,
   ChatSessionSummary,
   ChatResponse,
+  ChatFeedbackRating,
+  CitationFeedbackEventType,
+  CitationFeedbackResponse,
   FlagCase,
   FlagCaseStatus,
   FlagMessageResponse,
@@ -311,6 +319,61 @@ export async function askQuestion(data: {
     body: JSON.stringify(data),
   });
   return handle<ChatResponse>(res);
+}
+
+export async function submitChatFeedback(
+  messageId: string,
+  data: { rating: ChatFeedbackRating; reason?: string }
+): Promise<ChatFeedbackResponse> {
+  const res = await authedFetch(`${API_BASE}/chat/messages/${messageId}/feedback`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  return handle<ChatFeedbackResponse>(res);
+}
+
+export async function submitCitationFeedback(
+  messageId: string,
+  data: { source_id: string; chunk_index?: number; event_type: CitationFeedbackEventType; note?: string }
+): Promise<CitationFeedbackResponse> {
+  const res = await authedFetch(`${API_BASE}/chat/messages/${messageId}/citations/feedback`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  return handle<CitationFeedbackResponse>(res);
+}
+
+export async function createChatEvent(data: {
+  hub_id: string;
+  session_id?: string | null;
+  message_id?: string | null;
+  event_type: ChatEventType;
+  metadata?: Record<string, unknown>;
+}): Promise<ChatEventResponse> {
+  const res = await authedFetch(`${API_BASE}/chat/events`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  return handle<ChatEventResponse>(res);
+}
+
+export async function getHubAnalyticsSummary(hubId: string, days?: number): Promise<ChatAnalyticsSummary> {
+  const search = new URLSearchParams();
+  if (days) search.set("days", String(days));
+  const suffix = search.toString() ? `?${search.toString()}` : "";
+  const res = await authedFetch(`${API_BASE}/hubs/${hubId}/analytics/summary${suffix}`, { cache: "no-store" });
+  return handle<ChatAnalyticsSummary>(res);
+}
+
+export async function getHubAnalyticsTrends(hubId: string, days?: number): Promise<ChatAnalyticsTrends> {
+  const search = new URLSearchParams();
+  if (days) search.set("days", String(days));
+  const suffix = search.toString() ? `?${search.toString()}` : "";
+  const res = await authedFetch(`${API_BASE}/hubs/${hubId}/analytics/trends${suffix}`, { cache: "no-store" });
+  return handle<ChatAnalyticsTrends>(res);
 }
 
 export async function listActivity(hubId?: string, limit = 50): Promise<ActivityEvent[]> {

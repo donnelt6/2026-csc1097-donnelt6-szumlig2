@@ -23,6 +23,8 @@ class Settings(BaseSettings):
     retrieval_candidate_pool: int = 18
     retrieval_mmr_lambda: float = 0.75
     retrieval_same_source_penalty: float = 0.10
+    chat_rerank_relative_cutoff: float = 0.82
+    chat_diversity_confidence_gap: float = 0.08
     rate_limit_chat_per_minute: int = 20
     rate_limit_sources_per_minute: int = 30
     rate_limit_read_per_minute: int = 120
@@ -40,6 +42,11 @@ class Settings(BaseSettings):
     guide_context_chunks_per_source: int = 5
     guide_max_citations: int = 3
     guide_min_similarity: float = 0.3
+    analytics_summary_days: int = 30
+    analytics_trend_days: int = 14
+    langfuse_public_key: str = ""
+    langfuse_secret_key: str = ""
+    langfuse_host: str = "https://cloud.langfuse.com"
     cors_allowed_origins: List[str] = Field(default_factory=list)
 
     class Config:

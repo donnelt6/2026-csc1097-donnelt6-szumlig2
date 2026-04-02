@@ -1,4 +1,4 @@
-import { screen, waitFor } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ChatPanel } from "../../components/ChatPanel";
@@ -8,6 +8,8 @@ import {
   getChatPromptSuggestion,
   getChatSessionMessages,
   listChatSessions,
+  submitChatFeedback,
+  submitCitationFeedback,
 } from "../../lib/api";
 import type { Source } from "../../lib/types";
 import { renderWithQueryClient } from "../test-utils";
@@ -36,11 +38,14 @@ vi.mock("../../components/auth/AuthProvider", () => ({
 
 vi.mock("../../lib/api", () => ({
   askQuestion: vi.fn(),
+  createChatEvent: vi.fn(),
   deleteChatSession: vi.fn(),
   flagMessage: vi.fn(),
   getChatPromptSuggestion: vi.fn(),
   getChatSessionMessages: vi.fn(),
   listChatSessions: vi.fn(),
+  submitChatFeedback: vi.fn(),
+  submitCitationFeedback: vi.fn(),
 }));
 
 const sources: Source[] = [
@@ -291,6 +296,94 @@ describe("ChatPanel", () => {
 
     const message = await screen.findByText("How do I submit assignments?");
     await waitFor(() => expect(message.closest(".chat__message--highlighted")).toBeInTheDocument());
+  });
+
+  it("submits helpful feedback for an assistant message", async () => {
+    vi.mocked(listChatSessions).mockResolvedValue([]);
+    vi.mocked(askQuestion).mockResolvedValue({
+      answer: "Use Moodle.",
+      citations: [],
+      message_id: "message-1",
+      session_id: "session-1",
+      session_title: "Assignment Help",
+      flag_status: "none",
+      feedback_rating: null,
+    });
+    vi.mocked(submitChatFeedback).mockResolvedValue({
+      message_id: "message-1",
+      rating: "helpful",
+      updated_at: "2026-01-02T12:00:00Z",
+    });
+
+    renderWithQueryClient(<ChatPanel hubId="hub-1" sources={sources} />);
+
+    const user = userEvent.setup();
+    await waitFor(() => expect(screen.getByText("New Chat")).toBeInTheDocument());
+    await user.type(screen.getByLabelText("Ask a question"), "How do I submit assignments?");
+    await user.click(screen.getByRole("button", { name: "Send message" }));
+    const answer = await screen.findByText("Use Moodle.");
+    const answerPair = answer.closest(".chat__pair");
+    expect(answerPair).toBeTruthy();
+
+    await user.click(within(answerPair as HTMLElement).getByRole("button", { name: "Mark answer helpful" }));
+
+    await waitFor(() => expect(submitChatFeedback).toHaveBeenCalledWith("message-1", { rating: "helpful" }));
+    expect(within(answerPair as HTMLElement).getByText("Helpful")).toBeInTheDocument();
+  });
+
+  it("tracks citation opens and lets the user flag a citation", async () => {
+    vi.mocked(listChatSessions).mockResolvedValue([]);
+    vi.mocked(askQuestion).mockResolvedValue({
+      answer: "Orientation starts in September. [1]",
+      citations: [{ source_id: "src-1", snippet: "Orientation starts on September 12.", chunk_index: 0 }],
+      message_id: "message-2",
+      session_id: "session-2",
+      session_title: "Orientation",
+      flag_status: "none",
+      feedback_rating: null,
+    });
+    vi.mocked(submitCitationFeedback)
+      .mockResolvedValueOnce({
+        message_id: "message-2",
+        source_id: "src-1",
+        chunk_index: 0,
+        event_type: "opened",
+        created_at: "2026-01-02T12:00:00Z",
+      })
+      .mockResolvedValueOnce({
+        message_id: "message-2",
+        source_id: "src-1",
+        chunk_index: 0,
+        event_type: "flagged_incorrect",
+        created_at: "2026-01-02T12:00:05Z",
+      });
+
+    renderWithQueryClient(<ChatPanel hubId="hub-1" sources={sources} />);
+
+    const user = userEvent.setup();
+    await waitFor(() => expect(screen.getByText("New Chat")).toBeInTheDocument());
+    await user.type(screen.getByLabelText("Ask a question"), "When does orientation start?");
+    await user.click(screen.getByRole("button", { name: "Send message" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Assignments.pdf" })).toBeInTheDocument());
+
+    await user.click(screen.getByRole("button", { name: "Assignments.pdf" }));
+    await waitFor(() =>
+      expect(submitCitationFeedback).toHaveBeenCalledWith("message-2", {
+        source_id: "src-1",
+        chunk_index: 0,
+        event_type: "opened",
+      })
+    );
+
+    await user.click(screen.getByRole("button", { name: "Flag citation" }));
+    await waitFor(() =>
+      expect(submitCitationFeedback).toHaveBeenCalledWith("message-2", {
+        source_id: "src-1",
+        chunk_index: 0,
+        event_type: "flagged_incorrect",
+      })
+    );
+    expect(screen.getByText("Citation flagged")).toBeInTheDocument();
   });
 
   it("blocks composer input and submission while the chat is bootstrapping", async () => {

@@ -66,21 +66,6 @@ cd 2026-csc1097-donnelt6-szumlig2/src/apps/web
 npm run dev
 ```
 
-## Supabase schema setup
-Run the SQL migration in Supabase SQL Editor:
-`2026-csc1097-donnelt6-szumlig2/src/apps/api/migrations/001_init.sql`
-`2026-csc1097-donnelt6-szumlig2/src/apps/api/migrations/002_match_source_chunks.sql`
-`2026-csc1097-donnelt6-szumlig2/src/apps/api/migrations/003_auth_roles.sql`
-`2026-csc1097-donnelt6-szumlig2/src/apps/api/migrations/004_fix_hub_members_rls.sql`
-`2026-csc1097-donnelt6-szumlig2/src/apps/api/migrations/005_fix_hub_members_rls_functions.sql`
-`2026-csc1097-donnelt6-szumlig2/src/apps/api/migrations/006_reminders.sql`
-`2026-csc1097-donnelt6-szumlig2/src/apps/api/migrations/007_reminders_in_app_only.sql`
-`2026-csc1097-donnelt6-szumlig2/src/apps/api/migrations/008_hub_counts.sql`
-`2026-csc1097-donnelt6-szumlig2/src/apps/api/migrations/009_hub_last_accessed.sql`
-`2026-csc1097-donnelt6-szumlig2/src/apps/api/migrations/010_hub_favourite.sql`
-`2026-csc1097-donnelt6-szumlig2/src/apps/api/migrations/011_match_source_chunks_sources.sql`
-`2026-csc1097-donnelt6-szumlig2/src/apps/api/migrations/012_faq_entries.sql`
-`2026-csc1097-donnelt6-szumlig2/src/apps/api/migrations/013_guides.sql`
 
 ## Auth note
 Sign in via `/auth` using Supabase email/password auth. The web app stores the Supabase session and sends `Authorization: Bearer <JWT>` on API requests. The API enforces RLS with the user token and only uses the service role key for storage/admin tasks (ingestion, member lookups).
@@ -93,6 +78,14 @@ Password recovery is Supabase-native:
 
 ## Chat note
 Chat supports hub-only context or hub + web search when `global` scope is selected. Users can also select which completed sources to include when answering a question. Streaming is not implemented yet; it is planned as a future improvement.
+
+## RAG evals and analytics
+- Offline chat evals live in `apps/api/evals/`.
+- Run `python evals/run_eval.py --dataset evals/dataset.jsonl` from `apps/api` to write a JSON report under `eval-results/`.
+- Optional extras:
+- `pip install -e .[evals]` for Ragas answer-level metrics
+- `pip install -e .[observability]` for Langfuse trace export
+- Hub owners/admins now get chat analytics based on question, answer, citation, copy, and feedback events.
 
 ## Rate limits (API)
 Defaults (configurable in `apps/api/.env`):

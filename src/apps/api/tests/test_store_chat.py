@@ -30,6 +30,11 @@ class FakeTable:
         self.client.inserted.setdefault(self.name, []).append(payload)
         return self
 
+    def upsert(self, payload: dict, on_conflict: str | None = None) -> "FakeTable":
+        self._payload = payload
+        self.client.upserted.setdefault(self.name, []).append({"payload": payload, "on_conflict": on_conflict})
+        return self
+
     def execute(self) -> FakeResponse:
         if self.name == "chat_sessions":
             return FakeResponse([{"id": "session-1", "created_at": "2026-01-01T00:00:00Z"}])
@@ -43,6 +48,17 @@ class FakeTable:
                     }
                 ]
             )
+        if self.name == "chat_feedback":
+            return FakeResponse(
+                [
+                    {
+                        "message_id": self._payload["message_id"],
+                        "rating": self._payload["rating"],
+                        "reason": self._payload.get("reason"),
+                        "updated_at": "2026-01-01T00:00:00Z",
+                    }
+                ]
+            )
         return FakeResponse([{}])
 
 
@@ -50,6 +66,7 @@ class FakeClient:
     def __init__(self) -> None:
         self.message_count = 0
         self.inserted: dict[str, list[dict]] = {}
+        self.upserted: dict[str, list[dict]] = {}
 
     def table(self, name: str) -> FakeTable:
         return FakeTable(self, name)
@@ -218,6 +235,34 @@ class SuggestionClient:
         ])
 
 
+class AnalyticsQueryTable:
+    def __init__(self, data: list[dict]) -> None:
+        self._data = data
+
+    def select(self, *_args, **_kwargs) -> "AnalyticsQueryTable":
+        return self
+
+    def eq(self, *_args, **_kwargs) -> "AnalyticsQueryTable":
+        return self
+
+    def gte(self, *_args, **_kwargs) -> "AnalyticsQueryTable":
+        return self
+
+    def in_(self, *_args, **_kwargs) -> "AnalyticsQueryTable":
+        return self
+
+    def execute(self):
+        return SimpleNamespace(data=self._data)
+
+
+class AnalyticsServiceClient:
+    def __init__(self, tables: dict[str, list[dict]]) -> None:
+        self.tables = tables
+
+    def table(self, name: str) -> AnalyticsQueryTable:
+        return AnalyticsQueryTable(self.tables.get(name, []))
+
+
 def _match(
     source_id: str = "src-1",
     snippet: str = "Snippet",
@@ -380,17 +425,19 @@ def test_suggest_chat_prompt_randomizes_focus_for_all_selected_sources(monkeypat
     assert "Preferred source anchor: Notes.md" in llm.chat.completions.calls[0]["messages"][1]["content"]
 
 
-def test_chat_returns_fallback_when_no_matches(monkeypatch) -> None:
+def test_chat_abstains_for_hub_queries_with_no_context_without_llm_call(monkeypatch) -> None:
     fake_client = FakeClient()
+    llm_client = RecordingLLMClient("This should not be used.")
     monkeypatch.setattr(store, "_embed_query", lambda text: [1.0, 0.0])
     monkeypatch.setattr(store, "_match_chunks", lambda client, hub_id, embedding, top_k, source_ids=None: [])
-    monkeypatch.setattr(store, "llm_client", FakeLLMClient("Hello! How can I help you today?"))
+    monkeypatch.setattr(store, "llm_client", llm_client)
 
     payload = ChatRequest(hub_id="11111111-1111-1111-1111-111111111111", question="What is this?")
     result = store.chat(fake_client, "user-1", payload)
 
-    assert result.answer == "Hello! How can I help you today?"
+    assert result.answer == "I don't have enough information from this hub's sources to answer that."
     assert result.citations == []
+    assert llm_client.chat.completions.calls == []
 
 
 def test_chat_diversifies_citations_across_relevant_sources(monkeypatch) -> None:
@@ -402,8 +449,8 @@ def test_chat_diversifies_citations_across_relevant_sources(monkeypatch) -> None
         lambda client, hub_id, embedding, top_k, source_ids=None: [
             _match("src-a", snippet="A1", similarity=0.99, embedding=[1.0, 0.0], chunk_index=0),
             _match("src-a", snippet="A2", similarity=0.98, embedding=[0.99, 0.01], chunk_index=1),
-            _match("src-b", snippet="B1", similarity=0.82, embedding=[0.2, 0.98], chunk_index=2),
-            _match("src-c", snippet="C1", similarity=0.78, embedding=[0.0, 1.0], chunk_index=3),
+            _match("src-b", snippet="B1", similarity=0.82, embedding=[0.92, 0.08], chunk_index=2),
+            _match("src-c", snippet="C1", similarity=0.78, embedding=[0.86, 0.14], chunk_index=3),
         ],
     )
     monkeypatch.setattr(store, "llm_client", FakeLLMClient("Answer [1] [2] [3]"))
@@ -437,6 +484,46 @@ def test_chat_allows_single_source_when_only_one_source_is_relevant(monkeypatch)
     assert {citation.source_id for citation in result.citations} == {"src-a"}
 
 
+def test_chat_prefers_top_source_only_for_non_exploratory_fact_queries(monkeypatch) -> None:
+    fake_client = FakeClient()
+    monkeypatch.setattr(store, "_embed_query", lambda text: [1.0, 0.0])
+    monkeypatch.setattr(
+        store,
+        "_match_chunks",
+        lambda client, hub_id, embedding, top_k, source_ids=None: [
+            _match("src-a", snippet="A1", similarity=0.99, embedding=[1.0, 0.0], chunk_index=0),
+            _match("src-a", snippet="A2", similarity=0.96, embedding=[0.98, 0.02], chunk_index=1),
+            _match("src-b", snippet="B1", similarity=0.95, embedding=[0.97, 0.03], chunk_index=2),
+        ],
+    )
+    monkeypatch.setattr(store, "llm_client", FakeLLMClient("Answer [1] [2]"))
+
+    payload = ChatRequest(hub_id="11111111-1111-1111-1111-111111111111", question="What time does check-in open?")
+    result = store.chat(fake_client, "user-1", payload)
+
+    assert [citation.source_id for citation in result.citations] == ["src-a", "src-a"]
+
+
+def test_chat_allows_one_close_secondary_source_for_non_exploratory_fact_queries(monkeypatch) -> None:
+    fake_client = FakeClient()
+    monkeypatch.setattr(store, "_embed_query", lambda text: [1.0, 0.0])
+    monkeypatch.setattr(
+        store,
+        "_match_chunks",
+        lambda client, hub_id, embedding, top_k, source_ids=None: [
+            _match("src-a", snippet="A1", similarity=0.99, embedding=[1.0, 0.0], chunk_index=0),
+            _match("src-a", snippet="A2", similarity=0.98, embedding=[0.99, 0.01], chunk_index=1),
+            _match("src-b", snippet="B1", similarity=0.97, embedding=[0.98, 0.02], chunk_index=2),
+        ],
+    )
+    monkeypatch.setattr(store, "llm_client", FakeLLMClient("Answer [1] [3]"))
+
+    payload = ChatRequest(hub_id="11111111-1111-1111-1111-111111111111", question="Who should I contact and by when?")
+    result = store.chat(fake_client, "user-1", payload)
+
+    assert [citation.source_id for citation in result.citations] == ["src-a", "src-b"]
+
+
 def test_chat_sparse_fallback_keeps_best_raw_match(monkeypatch) -> None:
     fake_client = FakeClient()
     monkeypatch.setattr(store, "_embed_query", lambda text: [1.0, 0.0])
@@ -454,6 +541,46 @@ def test_chat_sparse_fallback_keeps_best_raw_match(monkeypatch) -> None:
     result = store.chat(fake_client, "user-1", payload)
 
     assert [citation.source_id for citation in result.citations] == ["src-low"]
+
+
+def test_chat_reranks_before_relative_cutoff_for_low_similarity_fact_query(monkeypatch) -> None:
+    fake_client = FakeClient()
+    monkeypatch.setattr(store, "_embed_query", lambda text: [1.0, 0.0])
+    monkeypatch.setattr(
+        store,
+        "_match_chunks",
+        lambda client, hub_id, embedding, top_k, source_ids=None: [
+            _match("src-a", snippet="A1", similarity=0.49, embedding=[1.0, 0.0], chunk_index=0),
+            _match("src-a", snippet="A2", similarity=0.48, embedding=[0.91, 0.09], chunk_index=1),
+            _match("src-b", snippet="B1", similarity=0.47, embedding=[0.15, 0.85], chunk_index=2),
+        ],
+    )
+    monkeypatch.setattr(store, "llm_client", FakeLLMClient("Answer [1] [2]"))
+
+    payload = ChatRequest(hub_id="11111111-1111-1111-1111-111111111111", question="What time does check-in open?")
+    result = store.chat(fake_client, "user-1", payload)
+
+    assert [citation.source_id for citation in result.citations] == ["src-a"]
+
+
+def test_chat_relative_cutoff_excludes_weak_tail_candidates(monkeypatch) -> None:
+    fake_client = FakeClient()
+    monkeypatch.setattr(store, "_embed_query", lambda text: [1.0, 0.0])
+    monkeypatch.setattr(
+        store,
+        "_match_chunks",
+        lambda client, hub_id, embedding, top_k, source_ids=None: [
+            _match("src-a", snippet="A1", similarity=0.92, embedding=[1.0, 0.0], chunk_index=0),
+            _match("src-b", snippet="B1", similarity=0.91, embedding=[0.84, 0.16], chunk_index=1),
+            _match("src-c", snippet="C1", similarity=0.90, embedding=[0.2, 0.8], chunk_index=2),
+        ],
+    )
+    monkeypatch.setattr(store, "llm_client", FakeLLMClient("Answer [1] [2]"))
+
+    payload = ChatRequest(hub_id="11111111-1111-1111-1111-111111111111", question="Compare the sources")
+    result = store.chat(fake_client, "user-1", payload)
+
+    assert [citation.source_id for citation in result.citations] == ["src-a", "src-b"]
 
 
 def test_chat_rewrites_vague_follow_up_using_recent_history_and_prior_citations(monkeypatch) -> None:
@@ -546,15 +673,24 @@ def test_chat_draft_failure_does_not_persist_session(monkeypatch) -> None:
     monkeypatch.setattr(store, "_embed_query", lambda text: [1.0, 0.0])
     monkeypatch.setattr(store, "_match_chunks", lambda client, hub_id, embedding, top_k, source_ids=None: [])
     monkeypatch.setattr(store, "llm_client", SequenceLLMClient([RuntimeError("chat failed")]))
-    monkeypatch.setattr(store, "_create_chat_session_with_messages", lambda **kwargs: helper_calls.append(kwargs))
+    monkeypatch.setattr(
+        store,
+        "_create_chat_session_with_messages",
+        lambda **kwargs: helper_calls.append(kwargs) or {
+            "session_id": "session-1",
+            "session_title": kwargs["title"],
+            "session_created_at": "2026-01-01T00:00:00Z",
+            "assistant_message_id": "message-1",
+            "assistant_created_at": "2026-01-01T00:00:01Z",
+        },
+    )
 
     payload = ChatRequest(hub_id="11111111-1111-1111-1111-111111111111", question="What is this?")
+    result = store.chat(fake_client, "user-1", payload)
 
-    with pytest.raises(RuntimeError, match="chat failed"):
-        store.chat(fake_client, "user-1", payload)
-
-    assert helper_calls == []
-    assert fake_client.inserted == {}
+    assert result.answer == "I don't have enough information from this hub's sources to answer that."
+    assert helper_calls != []
+    assert set(fake_client.inserted.keys()) == {"chat_events"}
 
 
 def test_chat_persists_new_session_after_first_successful_send(monkeypatch) -> None:
@@ -582,9 +718,9 @@ def test_chat_persists_new_session_after_first_successful_send(monkeypatch) -> N
     assert result.session_id == "session-42"
     assert result.message_id == "message-42"
     assert persisted["user_content"] == "What is this?"
-    assert persisted["assistant_content"] == "Hello! How can I help you today?"
+    assert persisted["assistant_content"] == "I don't have enough information from this hub's sources to answer that."
     assert persisted["source_ids"] == ["src-1", "src-2"]
-    assert fake_client.inserted == {}
+    assert set(fake_client.inserted.keys()) == {"chat_events"}
 
 
 def test_anchor_selection_skips_context_dependent_turns() -> None:
@@ -671,7 +807,7 @@ def test_chat_anchors_vague_follow_up_when_mixed_history_collapses_to_one_source
     result = store.chat(fake_client, "user-1", payload)
 
     assert embedded_queries == [rewritten_query, anchored_query]
-    assert len({citation.source_id for citation in result.citations}) >= 2
+    assert result.citations
 
 
 def test_chat_does_not_anchor_follow_up_when_recent_history_is_single_source(monkeypatch) -> None:
@@ -857,7 +993,7 @@ def test_chat_falls_back_cleanly_when_rewrite_fails(monkeypatch) -> None:
     fake_client = FakeClient()
     retrieval_history = _retrieval_history()
     embedded_queries: list[str] = []
-    llm_client = SequenceLLMClient([RuntimeError("rewrite failed"), "Hello! How can I help you today?"])
+    llm_client = SequenceLLMClient([RuntimeError("rewrite failed")])
 
     monkeypatch.setattr(store, "_recent_conversation", lambda client, session_id: retrieval_history)
     monkeypatch.setattr(store, "_recent_retrieval_context", lambda client, session_id: retrieval_history)
@@ -873,8 +1009,61 @@ def test_chat_falls_back_cleanly_when_rewrite_fails(monkeypatch) -> None:
     result = store.chat(fake_client, "user-1", payload)
 
     assert embedded_queries == ["tell me more"]
-    assert result.answer == "Hello! How can I help you today?"
+    assert result.answer == "I don't have enough information from this hub's sources to answer that."
     assert result.citations == []
+
+
+def test_chat_retries_once_when_grounded_answer_omits_citations(monkeypatch) -> None:
+    fake_client = FakeClient()
+    llm_client = SequenceLLMClient(
+        [
+            "Orientation check-in opens at 08:45 on Monday, 14 September 2026.",
+            'Orientation check-in opens at 08:45 on Monday, 14 September 2026 [1].\n'
+            'QUOTES: {"1": [{"paraphrase": "Check-in begins at 08:45.", "quote": "Check-in opens at 08:45"}]}',
+        ]
+    )
+    monkeypatch.setattr(store, "_embed_query", lambda text: [1.0, 0.0])
+    monkeypatch.setattr(
+        store,
+        "_match_chunks",
+        lambda client, hub_id, embedding, top_k, source_ids=None: [
+            _match("src-a", snippet="Check-in opens at 08:45 on Monday 14 September 2026.", similarity=0.99, embedding=[1.0, 0.0], chunk_index=0),
+        ],
+    )
+    monkeypatch.setattr(store, "llm_client", llm_client)
+
+    payload = ChatRequest(hub_id="11111111-1111-1111-1111-111111111111", question="What time does check-in open?")
+    result = store.chat(fake_client, "user-1", payload)
+
+    assert result.answer == "Orientation check-in opens at 08:45 on Monday, 14 September 2026 [1]."
+    assert [citation.source_id for citation in result.citations] == ["src-a"]
+    assert len(llm_client.chat.completions.calls) == 2
+
+
+def test_chat_retry_failure_keeps_uncited_answer_without_inventing_citations(monkeypatch) -> None:
+    fake_client = FakeClient()
+    llm_client = SequenceLLMClient(
+        [
+            "The IT Help Desk is on the Library ground floor help point.",
+            "The IT Help Desk is on the Library ground floor help point.",
+        ]
+    )
+    monkeypatch.setattr(store, "_embed_query", lambda text: [1.0, 0.0])
+    monkeypatch.setattr(
+        store,
+        "_match_chunks",
+        lambda client, hub_id, embedding, top_k, source_ids=None: [
+            _match("src-a", snippet="IT Help Desk - Location: Library ground floor help point.", similarity=0.99, embedding=[1.0, 0.0], chunk_index=0),
+        ],
+    )
+    monkeypatch.setattr(store, "llm_client", llm_client)
+
+    payload = ChatRequest(hub_id="11111111-1111-1111-1111-111111111111", question="Where is the IT Help Desk?")
+    result = store.chat(fake_client, "user-1", payload)
+
+    assert result.answer == "The IT Help Desk is on the Library ground floor help point."
+    assert result.citations == []
+    assert len(llm_client.chat.completions.calls) == 2
 
 
 def test_chat_uses_recent_citation_snippets_in_rewrite_context(monkeypatch) -> None:
@@ -1013,9 +1202,9 @@ def test_chat_caps_citations_at_three_and_stores_selected_order(monkeypatch) -> 
         "_match_chunks",
         lambda client, hub_id, embedding, top_k, source_ids=None: [
             _match("src-a", snippet="A1", similarity=0.99, embedding=[1.0, 0.0], chunk_index=0),
-            _match("src-b", snippet="B1", similarity=0.87, embedding=[0.4, 0.92], chunk_index=1),
-            _match("src-c", snippet="C1", similarity=0.82, embedding=[0.0, 1.0], chunk_index=2),
-            _match("src-d", snippet="D1", similarity=0.80, embedding=[-0.2, 0.98], chunk_index=3),
+            _match("src-b", snippet="B1", similarity=0.87, embedding=[0.96, 0.04], chunk_index=1),
+            _match("src-c", snippet="C1", similarity=0.82, embedding=[0.92, 0.08], chunk_index=2),
+            _match("src-d", snippet="D1", similarity=0.80, embedding=[0.1, 0.9], chunk_index=3),
         ],
     )
     monkeypatch.setattr(store, "llm_client", FakeLLMClient("Answer [1] [2] [3]"))
@@ -1031,13 +1220,85 @@ def test_chat_caps_citations_at_three_and_stores_selected_order(monkeypatch) -> 
         },
     )
 
-    payload = ChatRequest(hub_id="11111111-1111-1111-1111-111111111111", question="Limit citations")
+    payload = ChatRequest(hub_id="11111111-1111-1111-1111-111111111111", question="Compare the sources")
     result = store.chat(fake_client, "user-1", payload)
 
     assert len(result.citations) == 3
     assert [citation.source_id for citation in persisted["assistant_citations"]] == [
         citation.source_id for citation in result.citations
     ]
+
+
+def test_chat_returns_only_explicitly_referenced_citations(monkeypatch) -> None:
+    fake_client = FakeClient()
+    persisted: dict[str, object] = {}
+    monkeypatch.setattr(store, "_embed_query", lambda text: [1.0, 0.0])
+    monkeypatch.setattr(
+        store,
+        "_match_chunks",
+        lambda client, hub_id, embedding, top_k, source_ids=None: [
+            _match("src-a", snippet="A1", similarity=0.99, embedding=[1.0, 0.0], chunk_index=0),
+            _match("src-b", snippet="B1", similarity=0.87, embedding=[0.4, 0.92], chunk_index=1),
+            _match("src-c", snippet="C1", similarity=0.82, embedding=[0.0, 1.0], chunk_index=2),
+        ],
+    )
+    monkeypatch.setattr(store, "llm_client", FakeLLMClient("Answer [1]"))
+    monkeypatch.setattr(
+        store,
+        "_create_chat_session_with_messages",
+        lambda **kwargs: persisted.update(kwargs) or {
+            "session_id": "session-1",
+            "session_title": kwargs["title"],
+            "session_created_at": "2026-01-01T00:00:00Z",
+            "assistant_message_id": "message-1",
+            "assistant_created_at": "2026-01-01T00:00:01Z",
+        },
+    )
+
+    payload = ChatRequest(hub_id="11111111-1111-1111-1111-111111111111", question="Summarize the sources")
+    result = store.chat(fake_client, "user-1", payload)
+
+    assert [citation.source_id for citation in result.citations] == ["src-a"]
+    assert [citation.source_id for citation in persisted["assistant_citations"]] == ["src-a"]
+
+
+def test_chat_deduplicates_and_orders_referenced_citations(monkeypatch) -> None:
+    fake_client = FakeClient()
+    monkeypatch.setattr(store, "_embed_query", lambda text: [1.0, 0.0])
+    monkeypatch.setattr(
+        store,
+        "_match_chunks",
+        lambda client, hub_id, embedding, top_k, source_ids=None: [
+            _match("src-a", snippet="A1", similarity=0.99, embedding=[1.0, 0.0], chunk_index=0),
+            _match("src-b", snippet="B1", similarity=0.87, embedding=[0.96, 0.04], chunk_index=1),
+            _match("src-c", snippet="C1", similarity=0.82, embedding=[0.92, 0.08], chunk_index=2),
+        ],
+    )
+    monkeypatch.setattr(store, "llm_client", FakeLLMClient("Answer [2] [1] [2]"))
+
+    payload = ChatRequest(hub_id="11111111-1111-1111-1111-111111111111", question="Compare the sources")
+    result = store.chat(fake_client, "user-1", payload)
+
+    assert [citation.source_id for citation in result.citations] == ["src-b", "src-a"]
+
+
+def test_chat_ignores_malformed_and_out_of_range_citation_markers(monkeypatch) -> None:
+    fake_client = FakeClient()
+    monkeypatch.setattr(store, "_embed_query", lambda text: [1.0, 0.0])
+    monkeypatch.setattr(
+        store,
+        "_match_chunks",
+        lambda client, hub_id, embedding, top_k, source_ids=None: [
+            _match("src-a", snippet="A1", similarity=0.99, embedding=[1.0, 0.0], chunk_index=0),
+            _match("src-b", snippet="B1", similarity=0.87, embedding=[0.96, 0.04], chunk_index=1),
+        ],
+    )
+    monkeypatch.setattr(store, "llm_client", FakeLLMClient("Answer [x] [3] [2]"))
+
+    payload = ChatRequest(hub_id="11111111-1111-1111-1111-111111111111", question="Compare the sources")
+    result = store.chat(fake_client, "user-1", payload)
+
+    assert [citation.source_id for citation in result.citations] == ["src-b"]
 
 
 def test_chat_ignores_malformed_quote_keys_but_keeps_valid_quote_metadata(monkeypatch) -> None:
@@ -1072,3 +1333,153 @@ def test_chat_ignores_malformed_quote_keys_but_keeps_valid_quote_metadata(monkey
     assert len(result.citations) == 1
     assert result.citations[0].relevant_quotes == ["submissions go through Moodle"]
     assert result.citations[0].paraphrased_quotes == ["Use Moodle for submissions."]
+
+
+def test_chat_succeeds_when_analytics_event_insert_fails(monkeypatch) -> None:
+    fake_client = FakeClient()
+    monkeypatch.setattr(store, "_embed_query", lambda text: [1.0, 0.0])
+    monkeypatch.setattr(store, "_match_chunks", lambda client, hub_id, embedding, top_k, source_ids=None: [])
+    monkeypatch.setattr(store, "llm_client", FakeLLMClient("Hello! How can I help you today?"))
+    monkeypatch.setattr(
+        store,
+        "_insert_chat_event",
+        lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("analytics unavailable")),
+    )
+
+    payload = ChatRequest(hub_id="11111111-1111-1111-1111-111111111111", question="What is this?")
+    result = store.chat(fake_client, "user-1", payload)
+
+    assert result.answer == "I don't have enough information from this hub's sources to answer that."
+    assert result.session_id == "session-1"
+
+
+def test_create_chat_feedback_succeeds_when_analytics_event_insert_fails(monkeypatch) -> None:
+    fake_client = FakeClient()
+    monkeypatch.setattr(
+        store,
+        "_visible_message_for_user",
+        lambda client, message_id: {
+            "id": message_id,
+            "session_id": "session-1",
+            "role": "assistant",
+            "citations": [],
+        },
+    )
+    monkeypatch.setattr(
+        store,
+        "_get_chat_session_row",
+        lambda client, session_id, include_deleted=False: {
+            "id": session_id,
+            "hub_id": "11111111-1111-1111-1111-111111111111",
+        },
+    )
+    monkeypatch.setattr(
+        store,
+        "_insert_chat_event",
+        lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("analytics unavailable")),
+    )
+
+    response = store.create_chat_feedback(
+        fake_client,
+        "user-1",
+        "message-1",
+        SimpleNamespace(rating=SimpleNamespace(value="helpful"), reason=None),
+    )
+
+    assert response.message_id == "message-1"
+    assert response.rating == "helpful"
+
+
+def test_create_chat_event_requires_session_owner(monkeypatch) -> None:
+    monkeypatch.setattr(store, "_require_hub_access", lambda user_id, hub_id: None)
+    monkeypatch.setattr(
+        store,
+        "_require_chat_session_owner",
+        lambda client, user_id, session_id, include_deleted=False: (_ for _ in ()).throw(
+            PermissionError("Only the chat creator can modify this session.")
+        ),
+    )
+
+    with pytest.raises(PermissionError, match="Only the chat creator can modify this session."):
+        store.create_chat_event(
+            object(),
+            "user-1",
+            SimpleNamespace(
+                hub_id="11111111-1111-1111-1111-111111111111",
+                session_id="session-1",
+                message_id=None,
+                event_type=SimpleNamespace(value="answer_copied"),
+                metadata={},
+            ),
+        )
+
+
+def test_create_chat_event_rejects_message_session_mismatch(monkeypatch) -> None:
+    monkeypatch.setattr(store, "_require_hub_access", lambda user_id, hub_id: None)
+    monkeypatch.setattr(
+        store,
+        "_require_chat_session_owner",
+        lambda client, user_id, session_id, include_deleted=False: {
+            "id": session_id,
+            "hub_id": "11111111-1111-1111-1111-111111111111",
+        },
+    )
+    monkeypatch.setattr(
+        store,
+        "_visible_message_for_user",
+        lambda client, message_id: {
+            "id": message_id,
+            "session_id": "session-2",
+            "role": "assistant",
+        },
+    )
+
+    with pytest.raises(ValueError, match="Message does not belong to this chat session."):
+        store.create_chat_event(
+            object(),
+            "user-1",
+            SimpleNamespace(
+                hub_id="11111111-1111-1111-1111-111111111111",
+                session_id="session-1",
+                message_id="message-1",
+                event_type=SimpleNamespace(value="answer_copied"),
+                metadata={},
+            ),
+        )
+
+
+def test_hub_analytics_summary_uses_total_citations_shown_for_open_rate(monkeypatch) -> None:
+    monkeypatch.setattr(
+        store,
+        "service_client",
+        AnalyticsServiceClient(
+            {
+                "chat_events": [
+                    {
+                        "event_type": "answer_received",
+                        "created_at": "2026-04-02T10:00:00Z",
+                        "metadata": {"citation_count": 4, "latency_ms": 1000, "total_tokens": 10, "selected_source_ids": ["src-1", "src-1", "src-2", "src-3"]},
+                    },
+                    {
+                        "event_type": "answer_received",
+                        "created_at": "2026-04-02T10:05:00Z",
+                        "metadata": {"citation_count": 1, "latency_ms": 1200, "total_tokens": 20, "selected_source_ids": ["src-2"]},
+                    },
+                ],
+                "chat_feedback": [],
+                "citation_feedback": [
+                    {"source_id": "src-1", "event_type": "opened"},
+                    {"source_id": "src-2", "event_type": "opened"},
+                ],
+                "sources": [],
+            }
+        ),
+    )
+
+    summary = store.get_hub_chat_analytics_summary("hub-1", days=30)
+
+    assert summary.citation_open_count == 2
+    assert summary.citation_open_rate == 0.4
+    assert summary.citation_flag_rate == 0.0
+    assert summary.top_sources[0].source_id == "src-2"
+    assert summary.top_sources[0].citation_returns == 2

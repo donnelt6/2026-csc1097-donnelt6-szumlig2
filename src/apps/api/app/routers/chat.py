@@ -8,7 +8,22 @@ from postgrest.exceptions import APIError
 from supabase import Client
 
 from ..dependencies import CurrentUser, get_current_user, get_supabase_user_client, rate_limit_user_ip
-from ..schemas import ChatPromptSuggestionResponse, ChatRequest, ChatResponse, ChatSearchResult, ChatSessionDetail, ChatSessionRenameRequest, ChatSessionSummary, HistoryMessage
+from ..schemas import (
+    ChatEventCreate,
+    ChatEventResponse,
+    ChatFeedbackRequest,
+    ChatFeedbackResponse,
+    ChatPromptSuggestionResponse,
+    ChatRequest,
+    ChatResponse,
+    ChatSearchResult,
+    ChatSessionDetail,
+    ChatSessionRenameRequest,
+    ChatSessionSummary,
+    CitationFeedbackRequest,
+    CitationFeedbackResponse,
+    HistoryMessage,
+)
 from ..services.store import store
 from .access import require_accepted, require_hub_member
 from .errors import raise_postgrest_error
@@ -48,6 +63,72 @@ def ask(
     if is_new_session:
         store.log_activity(client, str(payload.hub_id), current_user.id, "started", "chat", response.session_id, {"title": response.session_title})
     return response
+
+
+@router.post(
+    "/messages/{message_id}/feedback",
+    response_model=ChatFeedbackResponse,
+    dependencies=[Depends(rate_limit_user_ip("chat:write", "rate_limit_write_per_minute"))],
+)
+def submit_message_feedback(
+    message_id: UUID,
+    payload: ChatFeedbackRequest,
+    client: Client = Depends(get_supabase_user_client),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> ChatFeedbackResponse:
+    try:
+        return store.create_chat_feedback(client, current_user.id, str(message_id), payload)
+    except KeyError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Message not found.") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except APIError as exc:
+        raise_postgrest_error(exc)
+
+
+@router.post(
+    "/messages/{message_id}/citations/feedback",
+    response_model=CitationFeedbackResponse,
+    dependencies=[Depends(rate_limit_user_ip("chat:write", "rate_limit_write_per_minute"))],
+)
+def submit_citation_feedback(
+    message_id: UUID,
+    payload: CitationFeedbackRequest,
+    client: Client = Depends(get_supabase_user_client),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> CitationFeedbackResponse:
+    try:
+        return store.create_citation_feedback(client, current_user.id, str(message_id), payload)
+    except KeyError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Message not found.") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except APIError as exc:
+        raise_postgrest_error(exc)
+
+
+@router.post(
+    "/events",
+    response_model=ChatEventResponse,
+    dependencies=[Depends(rate_limit_user_ip("chat:write", "rate_limit_write_per_minute"))],
+)
+def create_chat_event(
+    payload: ChatEventCreate,
+    client: Client = Depends(get_supabase_user_client),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> ChatEventResponse:
+    try:
+        member = require_hub_member(client, str(payload.hub_id), current_user.id)
+        require_accepted(member)
+        return store.create_chat_event(client, current_user.id, payload)
+    except KeyError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Hub not found.") from exc
+    except PermissionError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except APIError as exc:
+        raise_postgrest_error(exc)
 
 
 @router.get(

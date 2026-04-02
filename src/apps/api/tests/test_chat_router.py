@@ -4,7 +4,19 @@ from datetime import datetime
 
 from app.dependencies import get_rate_limiter
 from app.main import app
-from app.schemas import ChatResponse, ChatSearchResult, ChatSessionDetail, ChatSessionSummary, Citation, HubMember, MembershipRole, SessionMessage
+from app.schemas import (
+    ChatEventType,
+    ChatResponse,
+    ChatSearchResult,
+    ChatSessionDetail,
+    ChatSessionSummary,
+    ChatFeedbackRating,
+    Citation,
+    CitationFeedbackEventType,
+    HubMember,
+    MembershipRole,
+    SessionMessage,
+)
 from app.services import rate_limit as rate_limit_module
 from app.services import store as store_module
 
@@ -93,6 +105,73 @@ def test_chat_prompt_suggestion_success(client, monkeypatch) -> None:
 
     assert resp.status_code == 200
     assert resp.json() == {"prompt": "What deadlines matter most here?"}
+
+
+def test_submit_chat_feedback(client, monkeypatch) -> None:
+    monkeypatch.setattr(
+        store_module.store,
+        "create_chat_feedback",
+        lambda _client, user_id, message_id, payload: {
+            "message_id": message_id,
+            "rating": payload.rating,
+            "reason": payload.reason,
+            "updated_at": "2026-01-01T00:00:00Z",
+        },
+    )
+
+    resp = client.post(
+        "/chat/messages/11111111-1111-1111-1111-111111111111/feedback",
+        json={"rating": ChatFeedbackRating.helpful.value},
+    )
+
+    assert resp.status_code == 200
+    assert resp.json()["rating"] == ChatFeedbackRating.helpful.value
+
+
+def test_submit_citation_feedback(client, monkeypatch) -> None:
+    monkeypatch.setattr(
+        store_module.store,
+        "create_citation_feedback",
+        lambda _client, user_id, message_id, payload: {
+            "message_id": message_id,
+            "source_id": payload.source_id,
+            "chunk_index": payload.chunk_index,
+            "event_type": payload.event_type,
+            "created_at": "2026-01-01T00:00:00Z",
+        },
+    )
+
+    resp = client.post(
+        "/chat/messages/11111111-1111-1111-1111-111111111111/citations/feedback",
+        json={"source_id": "src-1", "chunk_index": 0, "event_type": CitationFeedbackEventType.opened.value},
+    )
+
+    assert resp.status_code == 200
+    assert resp.json()["event_type"] == CitationFeedbackEventType.opened.value
+
+
+def test_create_chat_event(client, monkeypatch) -> None:
+    monkeypatch.setattr(store_module.store, "get_member_role", lambda _client, hub_id, user_id: _member(accepted=True))
+    monkeypatch.setattr(
+        store_module.store,
+        "create_chat_event",
+        lambda _client, user_id, payload: {
+            "event_type": payload.event_type,
+            "created_at": "2026-01-01T00:00:00Z",
+        },
+    )
+
+    resp = client.post(
+        "/chat/events",
+        json={
+            "hub_id": "11111111-1111-1111-1111-111111111111",
+            "event_type": ChatEventType.answer_copied.value,
+            "metadata": {"answer_length": 42},
+        },
+    )
+
+    assert resp.status_code == 200
+    assert resp.json()["event_type"] == ChatEventType.answer_copied.value
 
 
 def test_chat_accepts_source_ids(client, monkeypatch) -> None:
