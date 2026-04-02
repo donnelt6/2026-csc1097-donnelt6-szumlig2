@@ -3,18 +3,38 @@
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ClipboardDocumentIcon, FlagIcon, PaperAirplaneIcon, SparklesIcon, BookmarkIcon } from "@heroicons/react/24/outline";
+import {
+  ClipboardDocumentIcon,
+  FlagIcon,
+  HandThumbDownIcon,
+  HandThumbUpIcon,
+  BookmarkIcon,
+  PaperAirplaneIcon,
+  SparklesIcon,
+} from "@heroicons/react/24/outline";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
   askQuestion,
   createFaq,
+  createChatEvent,
   flagMessage,
   getChatPromptSuggestion,
   getChatSessionMessages,
   listChatSessions,
+  submitChatFeedback,
+  submitCitationFeedback,
 } from "../lib/api";
-import type { ChatResponse, Citation, ChatSessionSummary, FlagReason, MembershipRole, SessionMessage, Source } from "../lib/types";
+import type {
+  ChatFeedbackRating,
+  ChatResponse,
+  Citation,
+  ChatSessionSummary,
+  FlagReason,
+  MembershipRole,
+  SessionMessage,
+  Source,
+} from "../lib/types";
 import { SourceSelector } from "./SourceSelector";
 import { useAuth } from "./auth/AuthProvider";
 import { ProfileAvatar } from "./profile/ProfileAvatar";
@@ -100,6 +120,11 @@ interface ChatControlState {
 
 interface DraftState extends ChatControlState {
   messages: MessagePair[];
+}
+
+interface ActiveCitationState {
+  citation: Citation;
+  messageId: string;
 }
 
 export interface ChatPanelHandle {
@@ -220,11 +245,15 @@ export const ChatPanel = forwardRef<ChatPanelHandle, Props>(function ChatPanel({
   const [promptSuggestionError, setPromptSuggestionError] = useState<string | null>(null);
   const [flaggingMessageId, setFlaggingMessageId] = useState<string | null>(null);
   const [reportMenuMessageId, setReportMenuMessageId] = useState<string | null>(null);
-  const [activeCitation, setActiveCitation] = useState<Citation | null>(null);
+  const [activeCitation, setActiveCitation] = useState<ActiveCitationState | null>(null);
   const [savedFaqIds, setSavedFaqIds] = useState<Set<string>>(new Set());
   const [savingFaqId, setSavingFaqId] = useState<string | null>(null);
   const [panelError, setPanelError] = useState<string | null>(null);
   const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
+  const [feedbackByMessageId, setFeedbackByMessageId] = useState<Record<string, ChatFeedbackRating>>({});
+  const [feedbackSubmittingId, setFeedbackSubmittingId] = useState<string | null>(null);
+  const [citationFeedbackPending, setCitationFeedbackPending] = useState(false);
+  const [citationFeedbackStatus, setCitationFeedbackStatus] = useState<string | null>(null);
 
   const { data: sessionList = [], refetch: refetchSessionList } = useQuery({
     queryKey: sessionQueryKey,
@@ -329,6 +358,20 @@ export const ChatPanel = forwardRef<ChatPanelHandle, Props>(function ChatPanel({
   }, [selectedSourceIds, onSourceSelectionChange]);
 
   useEffect(() => {
+    setFeedbackByMessageId((current) => {
+      const next = { ...current };
+      for (const message of messages) {
+        const messageId = message.response?.message_id;
+        const feedbackRating = message.response?.feedback_rating;
+        if (messageId && feedbackRating) {
+          next[messageId] = feedbackRating;
+        }
+      }
+      return next;
+    });
+  }, [messages]);
+
+  useEffect(() => {
     if (activeSessionId !== null) {
       return;
     }
@@ -345,6 +388,7 @@ export const ChatPanel = forwardRef<ChatPanelHandle, Props>(function ChatPanel({
     const handleKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         setActiveCitation(null);
+        setCitationFeedbackStatus(null);
       }
     };
     document.addEventListener("keydown", handleKey);
@@ -594,15 +638,31 @@ export const ChatPanel = forwardRef<ChatPanelHandle, Props>(function ChatPanel({
     setScope(nextScope);
   }
 
+  function logSourceSelectionChange(nextSelectedSourceIds: string[]) {
+    void Promise.resolve(
+      createChatEvent({
+        hub_id: hubId,
+        session_id: activeSessionId,
+        event_type: "source_filter_changed",
+        metadata: {
+          selected_source_ids: nextSelectedSourceIds,
+          scope,
+        },
+      })
+    ).catch(() => {});
+  }
+
   function handleToggleSource(sourceId: string) {
     if (!completeSourceIds.includes(sourceId)) {
       return;
     }
-    setSelectedSourceIds((current) =>
-      current.includes(sourceId)
+    setSelectedSourceIds((current) => {
+      const next = current.includes(sourceId)
         ? current.filter((id) => id !== sourceId)
-        : [...current, sourceId]
-    );
+        : [...current, sourceId];
+      logSourceSelectionChange(next);
+      return next;
+    });
   }
 
   function handleSelectAllSources(scope?: string[]) {
@@ -610,19 +670,102 @@ export const ChatPanel = forwardRef<ChatPanelHandle, Props>(function ChatPanel({
       setSelectedSourceIds((prev) => {
         const set = new Set(prev);
         for (const id of scope) set.add(id);
-        return [...set];
+        const next = [...set];
+        logSourceSelectionChange(next);
+        return next;
       });
     } else {
-      setSelectedSourceIds([...completeSourceIds]);
+      const next = [...completeSourceIds];
+      logSourceSelectionChange(next);
+      setSelectedSourceIds(next);
     }
   }
 
   function handleClearSourceSelection(scope?: string[]) {
     if (scope) {
       const remove = new Set(scope);
-      setSelectedSourceIds((prev) => prev.filter((id) => !remove.has(id)));
+      setSelectedSourceIds((prev) => {
+        const next = prev.filter((id) => !remove.has(id));
+        logSourceSelectionChange(next);
+        return next;
+      });
     } else {
+      logSourceSelectionChange([]);
       setSelectedSourceIds([]);
+    }
+  }
+
+  async function handleMessageFeedback(messageId: string, rating: ChatFeedbackRating) {
+    if (feedbackSubmittingId) {
+      return;
+    }
+    setFeedbackSubmittingId(messageId);
+    try {
+      const response = await submitChatFeedback(messageId, { rating });
+      setFeedbackByMessageId((current) => ({
+        ...current,
+        [messageId]: response.rating,
+      }));
+      setMessages((current) =>
+        current.map((message) =>
+          message.response?.message_id === messageId && message.response
+            ? {
+                ...message,
+                response: {
+                  ...message.response,
+                  feedback_rating: response.rating,
+                },
+              }
+            : message
+        )
+      );
+    } catch (error) {
+      setPanelError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setFeedbackSubmittingId(null);
+    }
+  }
+
+  async function handleCopyAnswer(messageId: string, sessionId: string | null, answer: string) {
+    await navigator.clipboard.writeText(answer);
+    void Promise.resolve(
+      createChatEvent({
+        hub_id: hubId,
+        session_id: sessionId,
+        message_id: messageId,
+        event_type: "answer_copied",
+        metadata: { answer_length: answer.length },
+      })
+    ).catch(() => {});
+  }
+
+  function openCitation(messageId: string, citation: Citation) {
+    setCitationFeedbackStatus(null);
+    setActiveCitation({ citation, messageId });
+    void submitCitationFeedback(messageId, {
+      source_id: citation.source_id,
+      chunk_index: citation.chunk_index,
+      event_type: "opened",
+    }).catch(() => {});
+  }
+
+  async function handleFlagCitation() {
+    if (!activeCitation || citationFeedbackPending) {
+      return;
+    }
+    setCitationFeedbackPending(true);
+    setCitationFeedbackStatus(null);
+    try {
+      await submitCitationFeedback(activeCitation.messageId, {
+        source_id: activeCitation.citation.source_id,
+        chunk_index: activeCitation.citation.chunk_index,
+        event_type: "flagged_incorrect",
+      });
+      setCitationFeedbackStatus("Citation flagged");
+    } catch (error) {
+      setCitationFeedbackStatus(error instanceof Error ? error.message : String(error));
+    } finally {
+      setCitationFeedbackPending(false);
     }
   }
 
@@ -930,6 +1073,10 @@ export const ChatPanel = forwardRef<ChatPanelHandle, Props>(function ChatPanel({
                     )}
                     {message.response && (
                       <>
+                        {(() => {
+                          const currentFeedback = feedbackByMessageId[message.response.message_id] ?? message.response.feedback_rating ?? null;
+                          return (
+                            <>
                         <div className="chat__answer">
                           <ReactMarkdown remarkPlugins={[remarkGfm]}>
                             {message.response.answer}
@@ -949,7 +1096,7 @@ export const ChatPanel = forwardRef<ChatPanelHandle, Props>(function ChatPanel({
                                   key={`${citation.source_id}-${citation.chunk_index ?? index}`}
                                   className="chat__citation-chip"
                                   type="button"
-                                  onClick={() => setActiveCitation(citation)}
+                                  onClick={() => openCitation(message.response!.message_id, citation)}
                                 >
                                   {getSourceName(citation.source_id)}
                                 </button>
@@ -961,7 +1108,13 @@ export const ChatPanel = forwardRef<ChatPanelHandle, Props>(function ChatPanel({
                           <button
                             type="button"
                             className="chat__action-btn"
-                            onClick={() => navigator.clipboard.writeText(message.response!.answer)}
+                            onClick={() =>
+                              void handleCopyAnswer(
+                                message.response!.message_id,
+                                message.response!.session_id || activeSessionId,
+                                message.response!.answer,
+                              )
+                            }
                             aria-label="Copy result"
                           >
                             <ClipboardDocumentIcon className="chat__action-icon" />
@@ -988,6 +1141,46 @@ export const ChatPanel = forwardRef<ChatPanelHandle, Props>(function ChatPanel({
                               <span>{savedFaqIds.has(message.id) ? 'Saved' : savingFaqId === message.id ? 'Saving...' : 'Save as FAQ'}</span>
                             </button>
                           )}
+                          <button
+                            type="button"
+                            className={`chat__action-btn${currentFeedback === "helpful" ? " chat__action-btn--active" : ""}`}
+                            onClick={() => void handleMessageFeedback(message.response!.message_id, "helpful")}
+                            aria-label="Mark answer helpful"
+                            disabled={feedbackSubmittingId === message.response.message_id}
+                          >
+                            <HandThumbUpIcon className="chat__action-icon" />
+                            <span>{currentFeedback === "helpful" ? "Helpful" : "Mark helpful"}</span>
+                          </button>
+                          <button
+                            type="button"
+                            className={`chat__action-btn${currentFeedback === "not_helpful" ? " chat__action-btn--active" : ""}`}
+                            onClick={() => void handleMessageFeedback(message.response!.message_id, "not_helpful")}
+                            aria-label="Mark answer not helpful"
+                            disabled={feedbackSubmittingId === message.response.message_id}
+                          >
+                            <HandThumbDownIcon className="chat__action-icon" />
+                            <span>{currentFeedback === "not_helpful" ? "Not helpful" : "Mark not helpful"}</span>
+                          </button>
+                          <button
+                            type="button"
+                            className={`chat__action-btn${currentFeedback === "helpful" ? " chat__action-btn--active" : ""}`}
+                            onClick={() => void handleMessageFeedback(message.response!.message_id, "helpful")}
+                            aria-label="Mark answer helpful"
+                            disabled={feedbackSubmittingId === message.response.message_id}
+                          >
+                            <HandThumbUpIcon className="chat__action-icon" />
+                            <span>{currentFeedback === "helpful" ? "Helpful" : "Mark helpful"}</span>
+                          </button>
+                          <button
+                            type="button"
+                            className={`chat__action-btn${currentFeedback === "not_helpful" ? " chat__action-btn--active" : ""}`}
+                            onClick={() => void handleMessageFeedback(message.response!.message_id, "not_helpful")}
+                            aria-label="Mark answer not helpful"
+                            disabled={feedbackSubmittingId === message.response.message_id}
+                          >
+                            <HandThumbDownIcon className="chat__action-icon" />
+                            <span>{currentFeedback === "not_helpful" ? "Not helpful" : "Mark not helpful"}</span>
+                          </button>
                           {canFlagResponses && (
                             <>
                               {(message.response.flag_status === "resolved" || message.response.flag_status === "dismissed") && (
@@ -1045,6 +1238,9 @@ export const ChatPanel = forwardRef<ChatPanelHandle, Props>(function ChatPanel({
                             </>
                           )}
                         </div>
+                            </>
+                          );
+                        })()}
                       </>
                     )}
                   </div>
@@ -1118,8 +1314,11 @@ export const ChatPanel = forwardRef<ChatPanelHandle, Props>(function ChatPanel({
         <div
           role="dialog"
           aria-modal="true"
-          aria-label={`Source: ${getSourceName(activeCitation.source_id)}`}
-          onClick={() => setActiveCitation(null)}
+          aria-label={`Source: ${getSourceName(activeCitation.citation.source_id)}`}
+          onClick={() => {
+            setActiveCitation(null);
+            setCitationFeedbackStatus(null);
+          }}
           className="chat__modal-overlay"
         >
           <div
@@ -1127,22 +1326,37 @@ export const ChatPanel = forwardRef<ChatPanelHandle, Props>(function ChatPanel({
             onClick={(event) => event.stopPropagation()}
           >
             <div className="chat__modal-header">
-              <strong>{getSourceName(activeCitation.source_id)}</strong>
+              <strong>{getSourceName(activeCitation.citation.source_id)}</strong>
               <button
                 ref={modalCloseRef}
                 className="button"
                 type="button"
-                onClick={() => setActiveCitation(null)}
+                onClick={() => {
+                  setActiveCitation(null);
+                  setCitationFeedbackStatus(null);
+                }}
               >
                 Close
               </button>
             </div>
             <div className="chat__modal-body">
               <SourceExcerpt
-                snippet={activeCitation.snippet}
-                relevantQuotes={activeCitation.relevant_quotes}
-                paraphrasedQuotes={activeCitation.paraphrased_quotes}
+                snippet={activeCitation.citation.snippet}
+                relevantQuotes={activeCitation.citation.relevant_quotes}
+                paraphrasedQuotes={activeCitation.citation.paraphrased_quotes}
               />
+              <div className="chat__modal-actions">
+                <button
+                  type="button"
+                  className="chat__action-btn"
+                  onClick={() => void handleFlagCitation()}
+                  disabled={citationFeedbackPending}
+                >
+                  <FlagIcon className="chat__action-icon" />
+                  <span>{citationFeedbackPending ? "Flagging..." : "Flag citation"}</span>
+                </button>
+                {citationFeedbackStatus && <p className="muted chat__modal-status">{citationFeedbackStatus}</p>}
+              </div>
             </div>
           </div>
         </div>
@@ -1178,6 +1392,7 @@ function convertSessionMessagesToPairs(messages: SessionMessage[]): MessagePair[
       session_title: "",
       active_flag_id: message.active_flag_id,
       flag_status: message.flag_status,
+      feedback_rating: message.feedback_rating,
     };
   }
   return pairs;

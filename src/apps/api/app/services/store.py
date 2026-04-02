@@ -5,7 +5,8 @@ import random
 import re
 import time
 import uuid
-from datetime import datetime, timezone
+from collections import defaultdict
+from datetime import datetime, timedelta, timezone
 from pathlib import PurePath
 from urllib.parse import parse_qs, urlparse, urlunparse
 from typing import Any, Dict, List, Optional, Tuple
@@ -18,13 +19,26 @@ from supabase import Client, create_client
 from ..core.config import get_settings
 from ..schemas import (
     ApplyRevisionRequest,
+    AnalyticsTopSource,
     AssignableMembershipRole,
+    ChatAnalyticsSummary,
+    ChatAnalyticsTrendPoint,
+    ChatAnalyticsTrends,
+    ChatEventCreate,
+    ChatEventResponse,
+    ChatEventType,
+    ChatFeedbackRequest,
+    ChatFeedbackResponse,
+    ChatFeedbackRating,
     ChatRequest,
     ChatResponse,
     ChatSearchResult,
     ChatSessionDetail,
     ChatSessionSummary,
     Citation,
+    CitationFeedbackEventType,
+    CitationFeedbackRequest,
+    CitationFeedbackResponse,
     CreateRevisionRequest,
     DEFAULT_HUB_COLOR_KEY,
     DEFAULT_HUB_ICON_KEY,
@@ -77,6 +91,9 @@ from ..schemas import (
     SessionMessage,
     ActivityEvent,
 )
+from .tracing import ChatTraceRecorder
+
+logger = logging.getLogger(__name__)
 
 logger = logging.getLogger(__name__)
 
@@ -109,6 +126,8 @@ class SupabaseStore:
         self.retrieval_candidate_pool = max(settings.top_k, settings.retrieval_candidate_pool)
         self.retrieval_mmr_lambda = settings.retrieval_mmr_lambda
         self.retrieval_same_source_penalty = settings.retrieval_same_source_penalty
+        self.chat_rerank_relative_cutoff = settings.chat_rerank_relative_cutoff
+        self.chat_diversity_confidence_gap = settings.chat_diversity_confidence_gap
         self.faq_default_count = settings.faq_default_count
         self.faq_context_chunks_per_source = settings.faq_context_chunks_per_source
         self.faq_max_citations = settings.faq_max_citations
@@ -117,6 +136,8 @@ class SupabaseStore:
         self.guide_context_chunks_per_source = settings.guide_context_chunks_per_source
         self.guide_max_citations = settings.guide_max_citations
         self.guide_min_similarity = settings.guide_min_similarity
+        self.analytics_summary_days = settings.analytics_summary_days
+        self.analytics_trend_days = settings.analytics_trend_days
         self.service_client: Client = create_client(settings.supabase_url, settings.supabase_service_role_key)
         self.llm_client = OpenAI(api_key=settings.openai_api_key)
 
@@ -1117,6 +1138,7 @@ class SupabaseStore:
         self,
         message: Dict[str, Any],
         flag_metadata: Optional[Dict[str, Dict[str, Any]]] = None,
+        feedback_metadata: Optional[Dict[str, Optional[str]]] = None,
     ) -> SessionMessage:
         message_id = str(message["id"])
         metadata = (flag_metadata or {}).get(message_id, {})
@@ -1128,6 +1150,7 @@ class SupabaseStore:
             created_at=message["created_at"],
             active_flag_id=metadata.get("active_flag_id"),
             flag_status=metadata.get("flag_status", MessageFlagStatus.none.value),
+            feedback_rating=(feedback_metadata or {}).get(message_id),
         )
 
     def _visible_message_for_user(self, client: Client, message_id: str) -> Dict[str, Any]:
@@ -1153,6 +1176,18 @@ class SupabaseStore:
         if not response.data:
             raise KeyError("Message not found")
         return response.data[0]
+
+    def _message_feedback_map_for_user(self, message_ids: List[str], user_id: str) -> Dict[str, Optional[str]]:
+        if not message_ids:
+            return {}
+        response = (
+            self.service_client.table("chat_feedback")
+            .select("message_id,rating")
+            .eq("user_id", str(user_id))
+            .in_("message_id", message_ids)
+            .execute()
+        )
+        return {str(row["message_id"]): str(row.get("rating") or "") for row in (response.data or [])}
 
     def _get_flag_case_row(self, flag_case_id: str) -> Dict[str, Any]:
         response = (
@@ -1399,10 +1434,12 @@ class SupabaseStore:
         complete_source_ids = self._complete_source_ids_for_hub(client, hub_id)
         session = self._serialize_chat_session(row, complete_source_ids)
         messages = self._list_session_messages(client, session_id)
-        flag_metadata = self._message_flag_metadata([str(message["id"]) for message in messages if message.get("role") == "assistant"])
+        assistant_message_ids = [str(message["id"]) for message in messages if message.get("role") == "assistant"]
+        flag_metadata = self._message_flag_metadata(assistant_message_ids)
+        feedback_metadata = self._message_feedback_map_for_user(assistant_message_ids, user_id)
         return ChatSessionDetail(
             session=session,
-            messages=[self._serialize_session_message(message, flag_metadata) for message in messages],
+            messages=[self._serialize_session_message(message, flag_metadata, feedback_metadata) for message in messages],
         )
 
     def rename_chat_session(self, client: Client, user_id: str, session_id: str, title: str) -> None:
@@ -1442,6 +1479,126 @@ class SupabaseStore:
         )
         if not member_response.data or not member_response.data[0].get("accepted_at"):
             raise PermissionError("Hub access required.")
+
+    def _require_hub_owner_or_admin(self, user_id: str, hub_id: str) -> None:
+        hub_response = (
+            self.service_client.table("hubs")
+            .select("owner_id")
+            .eq("id", str(hub_id))
+            .limit(1)
+            .execute()
+        )
+        if not hub_response.data:
+            raise KeyError("Hub not found")
+        if str(hub_response.data[0].get("owner_id") or "") == str(user_id):
+            return
+        member_response = (
+            self.service_client.table("hub_members")
+            .select("role,accepted_at")
+            .eq("hub_id", str(hub_id))
+            .eq("user_id", str(user_id))
+            .limit(1)
+            .execute()
+        )
+        if not member_response.data or not member_response.data[0].get("accepted_at"):
+            raise PermissionError("Hub access required.")
+        if str(member_response.data[0].get("role") or "") not in {
+            MembershipRole.owner.value,
+            MembershipRole.admin.value,
+        }:
+            raise PermissionError("Only hub owners and admins can view analytics.")
+
+    def _insert_chat_event(
+        self,
+        client: Client,
+        *,
+        hub_id: str,
+        user_id: str,
+        event_type: str,
+        session_id: Optional[str] = None,
+        message_id: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        response = (
+            client.table("chat_events")
+            .insert(
+                {
+                    "hub_id": str(hub_id),
+                    "session_id": str(session_id) if session_id else None,
+                    "message_id": str(message_id) if message_id else None,
+                    "user_id": str(user_id),
+                    "event_type": str(event_type),
+                    "metadata": metadata or {},
+                }
+            )
+            .execute()
+        )
+        return (response.data or [{}])[0]
+
+    def _insert_chat_event_best_effort(self, client: Client, **kwargs: Any) -> Optional[Dict[str, Any]]:
+        try:
+            return self._insert_chat_event(client, **kwargs)
+        except Exception:
+            logger.exception(
+                "chat.analytics_event_insert_failed",
+                extra={
+                    "hub_id": kwargs.get("hub_id"),
+                    "session_id": kwargs.get("session_id"),
+                    "message_id": kwargs.get("message_id"),
+                    "user_id": kwargs.get("user_id"),
+                    "event_type": kwargs.get("event_type"),
+                },
+            )
+            return None
+
+    def create_chat_event(self, client: Client, user_id: str, payload: ChatEventCreate) -> ChatEventResponse:
+        self._require_hub_access(user_id, str(payload.hub_id))
+        if payload.session_id is not None:
+            session_row = self._require_chat_session_owner(
+                client,
+                user_id,
+                str(payload.session_id),
+                include_deleted=True,
+            )
+            if str(session_row.get("hub_id") or "") != str(payload.hub_id):
+                raise ValueError("Chat session does not belong to this hub.")
+        if payload.message_id is not None:
+            message_row = self._visible_message_for_user(client, str(payload.message_id))
+            session_row = self._require_chat_session_owner(
+                client,
+                user_id,
+                str(message_row["session_id"]),
+                include_deleted=True,
+            )
+            if str(session_row.get("hub_id") or "") != str(payload.hub_id):
+                raise ValueError("Message does not belong to this hub.")
+            if payload.session_id is not None and str(message_row["session_id"]) != str(payload.session_id):
+                raise ValueError("Message does not belong to this chat session.")
+        inserted = self._insert_chat_event(
+            client,
+            hub_id=str(payload.hub_id),
+            user_id=user_id,
+            event_type=payload.event_type.value,
+            session_id=str(payload.session_id) if payload.session_id else None,
+            message_id=str(payload.message_id) if payload.message_id else None,
+            metadata=payload.metadata,
+        )
+        return ChatEventResponse(
+            event_type=ChatEventType(inserted.get("event_type") or payload.event_type.value),
+            created_at=inserted.get("created_at") or datetime.now(timezone.utc),
+        )
+
+    def _source_name_map(self, source_ids: List[str]) -> Dict[str, str]:
+        normalized_ids = [source_id for source_id in source_ids if _is_uuid_like(source_id)]
+        if not normalized_ids:
+            return {}
+        response = (
+            self.service_client.table("sources")
+            .select("id,original_name")
+            .in_("id", normalized_ids)
+            .execute()
+        )
+        return {str(row["id"]): str(row.get("original_name") or row["id"]) for row in (response.data or [])}
 
     def flag_message(
         self,
@@ -1746,10 +1903,58 @@ class SupabaseStore:
         min_similarity: float,
         max_citations: int,
         fallback_mode: str,
+        question_text: str = "",
     ) -> List[Dict[str, Any]]:
+        if fallback_mode == "chat":
+            exploratory_query = _is_exploratory_chat_question(question_text) or _is_vague_follow_up(question_text)
+            reranked_matches = self._rerank_matches(
+                raw_matches,
+                query_embedding,
+                len(raw_matches),
+                diversify=self._should_diversify_chat_matches(raw_matches, query_embedding, question_text),
+            )
+            if reranked_matches:
+                top_similarity = float(reranked_matches[0].get("_query_similarity") or 0)
+                cutoff = top_similarity * self.chat_rerank_relative_cutoff
+                filtered_matches = [
+                    match
+                    for match in reranked_matches
+                    if float(match.get("_query_similarity") or 0) >= cutoff
+                    and float(match.get("similarity") or 0) >= min_similarity
+                ]
+                if filtered_matches:
+                    if not exploratory_query:
+                        top_source_id = str(filtered_matches[0].get("source_id") or "").strip()
+                        if top_source_id:
+                            primary_matches = [
+                                match
+                                for match in filtered_matches
+                                if str(match.get("source_id") or "").strip() == top_source_id
+                            ]
+                            max_secondary_gap = min(self.chat_diversity_confidence_gap, 0.03)
+                            secondary_match = next(
+                                (
+                                    match
+                                    for match in filtered_matches
+                                    if str(match.get("source_id") or "").strip() != top_source_id
+                                    and (top_similarity - float(match.get("_query_similarity") or 0)) <= max_secondary_gap
+                                ),
+                                None,
+                            )
+                            primary_limit = max_citations - 1 if secondary_match and max_citations > 1 else max_citations
+                            selected_matches = primary_matches[:primary_limit] if primary_matches else filtered_matches[:1]
+                            if secondary_match and len(selected_matches) < max_citations:
+                                selected_matches.append(secondary_match)
+                            filtered_matches = selected_matches
+                    return self._strip_rerank_metadata(filtered_matches[:max_citations])
+                return self._strip_rerank_metadata(reranked_matches[:1])
+            if raw_matches:
+                return raw_matches[:1]
+            return []
+
         filtered_matches = [match for match in raw_matches if float(match.get("similarity") or 0) >= min_similarity]
         if filtered_matches:
-            return self._rerank_matches(filtered_matches, query_embedding, max_citations)
+            return self._strip_rerank_metadata(self._rerank_matches(filtered_matches, query_embedding, max_citations))
         if fallback_mode == "chat" and raw_matches:
             return raw_matches[:1]
         if fallback_mode == "guide" and raw_matches:
@@ -1761,6 +1966,7 @@ class SupabaseStore:
         matches: List[Dict[str, Any]],
         query_embedding: List[float],
         max_citations: int,
+        diversify: bool = True,
     ) -> List[Dict[str, Any]]:
         normalized_query = _normalize_vector(query_embedding)
         candidates: List[Dict[str, Any]] = []
@@ -1783,7 +1989,7 @@ class SupabaseStore:
             if str(candidate.get("source_id") or "").strip()
         }
 
-        if len(distinct_sources) >= 2:
+        if diversify and len(distinct_sources) >= 2:
             while len(selected) < max_citations and remaining:
                 selected_sources = {
                     str(candidate.get("source_id") or "").strip()
@@ -1812,18 +2018,38 @@ class SupabaseStore:
                     selected,
                     duplicate_penalty=self.retrieval_same_source_penalty,
                 ),
-            )
+                )
             selected.append(next_candidate)
             remaining.remove(next_candidate)
 
+        return selected
+
+    def _strip_rerank_metadata(self, matches: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         cleaned: List[Dict[str, Any]] = []
-        for candidate in selected:
+        for candidate in matches:
             row = dict(candidate)
             row.pop("_rank", None)
             row.pop("_normalized_embedding", None)
             row.pop("_query_similarity", None)
             cleaned.append(row)
         return cleaned
+
+    def _should_diversify_chat_matches(
+        self,
+        raw_matches: List[Dict[str, Any]],
+        query_embedding: List[float],
+        question_text: str,
+    ) -> bool:
+        if _is_exploratory_chat_question(question_text) or _is_vague_follow_up(question_text):
+            return True
+        candidates = self._rerank_matches(raw_matches, query_embedding, min(2, len(raw_matches)), diversify=False)
+        if len(candidates) < 2:
+            return False
+        top_similarity = float(candidates[0].get("_query_similarity") or 0)
+        second_similarity = float(candidates[1].get("_query_similarity") or 0)
+        if str(candidates[0].get("source_id") or "").strip() != str(candidates[1].get("source_id") or "").strip():
+            return (top_similarity - second_similarity) < self.chat_diversity_confidence_gap
+        return False
 
     def _mmr_score(
         self,
@@ -1952,6 +2178,7 @@ class SupabaseStore:
             self.min_similarity,
             self.max_citations,
             fallback_mode="chat",
+            question_text=query_text,
         )
 
         citations: List[Citation] = []
@@ -1974,31 +2201,85 @@ class SupabaseStore:
         retrieval_source_ids: Optional[List[str]],
         history_messages: List[Dict[str, str]],
         retrieval_history: List[Dict[str, Any]],
-    ) -> tuple[str, List[Citation], Optional[Dict[str, Any]]]:
+        trace: Optional[ChatTraceRecorder] = None,
+    ) -> tuple[str, List[Citation], Optional[Dict[str, Any]], Dict[str, Any]]:
         retrieval_query = question
         rewrite_attempted = False
+        rewrite_used = False
+        anchored_fallback_used = False
         is_vague_follow_up = _is_vague_follow_up(question)
-        if self.chat_rewrite_enabled and retrieval_history and is_vague_follow_up:
+        final_retrieval_query = retrieval_query
+        if trace:
+            with trace.step(
+                "query_rewrite",
+                question=question,
+                is_vague_follow_up=is_vague_follow_up,
+                retrieval_history_count=len(retrieval_history),
+            ) as step:
+                if self.chat_rewrite_enabled and retrieval_history and is_vague_follow_up:
+                    retrieval_query = self._rewrite_query_for_retrieval(question, retrieval_history)
+                    rewrite_attempted = True
+                    rewrite_used = retrieval_query != question
+                final_retrieval_query = retrieval_query
+                step.output = {
+                    "retrieval_query": retrieval_query,
+                    "rewrite_attempted": rewrite_attempted,
+                    "rewrite_used": rewrite_used,
+                }
+        elif self.chat_rewrite_enabled and retrieval_history and is_vague_follow_up:
             retrieval_query = self._rewrite_query_for_retrieval(question, retrieval_history)
             rewrite_attempted = True
+            rewrite_used = retrieval_query != question
+            final_retrieval_query = retrieval_query
 
-        raw_matches, citations, context_blocks = self._retrieve_chat_context(
-            client,
-            hub_id,
-            retrieval_query,
-            retrieval_source_ids,
-        )
+        if trace:
+            with trace.step("retrieve_context", query=retrieval_query, source_ids=retrieval_source_ids or []) as step:
+                raw_matches, citations, context_blocks = self._retrieve_chat_context(
+                    client,
+                    hub_id,
+                    retrieval_query,
+                    retrieval_source_ids,
+                )
+                step.output = {
+                    "raw_match_count": len(raw_matches),
+                    "selected_citation_count": len(citations),
+                    "selected_source_ids": [citation.source_id for citation in citations],
+                }
+        else:
+            raw_matches, citations, context_blocks = self._retrieve_chat_context(
+                client,
+                hub_id,
+                retrieval_query,
+                retrieval_source_ids,
+            )
 
         if self.chat_rewrite_enabled and retrieval_history and not raw_matches and not rewrite_attempted:
             rewritten_query = self._rewrite_query_for_retrieval(question, retrieval_history)
             rewrite_attempted = True
             if rewritten_query != retrieval_query:
-                raw_matches, citations, context_blocks = self._retrieve_chat_context(
-                    client,
-                    hub_id,
-                    rewritten_query,
-                    retrieval_source_ids,
-                )
+                rewrite_used = True
+                if trace:
+                    with trace.step("rewrite_fallback", query=rewritten_query) as step:
+                        raw_matches, citations, context_blocks = self._retrieve_chat_context(
+                            client,
+                            hub_id,
+                            rewritten_query,
+                            retrieval_source_ids,
+                        )
+                        final_retrieval_query = rewritten_query
+                        step.output = {
+                            "raw_match_count": len(raw_matches),
+                            "selected_citation_count": len(citations),
+                            "selected_source_ids": [citation.source_id for citation in citations],
+                        }
+                else:
+                    raw_matches, citations, context_blocks = self._retrieve_chat_context(
+                        client,
+                        hub_id,
+                        rewritten_query,
+                        retrieval_source_ids,
+                    )
+                    final_retrieval_query = rewritten_query
 
         if (
             self.chat_rewrite_enabled
@@ -2012,90 +2293,164 @@ class SupabaseStore:
                 anchored_suffix = retrieval_query if retrieval_query != question else question
                 anchored_query = _build_anchored_retrieval_query(anchor_turn, anchored_suffix)
                 if anchored_query != retrieval_query:
-                    fallback_raw_matches, fallback_citations, fallback_context_blocks = self._retrieve_chat_context(
-                        client,
-                        hub_id,
-                        anchored_query,
-                        retrieval_source_ids,
-                    )
+                    if trace:
+                        with trace.step("anchored_retrieval", query=anchored_query, anchor_turn=anchor_turn) as step:
+                            fallback_raw_matches, fallback_citations, fallback_context_blocks = self._retrieve_chat_context(
+                                client,
+                                hub_id,
+                                anchored_query,
+                                retrieval_source_ids,
+                            )
+                            step.output = {
+                                "raw_match_count": len(fallback_raw_matches),
+                                "selected_citation_count": len(fallback_citations),
+                                "selected_source_ids": [citation.source_id for citation in fallback_citations],
+                            }
+                    else:
+                        fallback_raw_matches, fallback_citations, fallback_context_blocks = self._retrieve_chat_context(
+                            client,
+                            hub_id,
+                            anchored_query,
+                            retrieval_source_ids,
+                        )
                     fallback_distinct_sources = _count_distinct_citation_sources(fallback_citations)
                     current_distinct_sources = _count_distinct_citation_sources(citations)
                     if fallback_distinct_sources > current_distinct_sources:
                         raw_matches = fallback_raw_matches
                         citations = fallback_citations
                         context_blocks = fallback_context_blocks
+                        anchored_fallback_used = True
+                        final_retrieval_query = anchored_query
+
+        generation_metadata = {
+            "retrieval_query": final_retrieval_query,
+            "rewrite_attempted": rewrite_attempted,
+            "rewrite_used": rewrite_used,
+            "anchored_fallback_used": anchored_fallback_used,
+            "raw_match_count": len(raw_matches),
+            "selected_citation_count": len(citations),
+            "selected_source_ids": [citation.source_id for citation in citations],
+            "zero_hit": not bool(raw_matches),
+            "used_web_search": scope == HubScope.global_scope,
+            "no_context_available": not bool(context_blocks),
+        }
 
         if scope == HubScope.global_scope:
-            answer, web_citations, usage = self._answer_with_web_search(question, context_blocks)
+            if trace:
+                with trace.step("answer_generation", scope=scope.value, context_block_count=len(context_blocks)) as step:
+                    answer, web_citations, usage = self._answer_with_web_search(question, context_blocks)
+                    step.output = {
+                        "citation_count": len(citations) + len(web_citations),
+                        "total_tokens": _total_tokens_from_usage(usage),
+                    }
+            else:
+                answer, web_citations, usage = self._answer_with_web_search(question, context_blocks)
             all_citations = citations + web_citations
             if not _answer_has_citation(answer, len(all_citations)):
                 all_citations = []
-            return answer, all_citations, usage
+            generation_metadata["answer_has_citations"] = bool(all_citations)
+            return answer, all_citations, usage, generation_metadata
 
-        system_prompt = (
-            "You are Caddie, an onboarding assistant. Answer using the provided context only. "
-            "If the context is insufficient, say you don't have enough information. "
-            "Cite sources inline using [n] that matches the context list, and only include citations when you are "
-            "directly using the cited content. "
-            "If the user sends small talk or a greeting, respond politely and ask how you can help.\n\n"
-            "After your answer, on a new line, output QUOTES: followed by a JSON object.\n"
-            "For each citation number you used, provide an array of objects with two fields:\n"
-            '- "paraphrase": a short, clean summary of the point you are making (one sentence).\n'
-            '- "quote": copy a passage from the context that supports the point. '
-            "Copy it as closely as possible from the source text, even if messy or repetitive. "
-            "It does not need to be exact but should contain enough key words to locate the region.\n"
-            "Include all distinct pieces of information you used, not just one. Example:\n"
-            'QUOTES: {"1": [{"paraphrase": "clean summary of point", "quote": "approximate passage from context 1"}], '
-            '"3": [{"paraphrase": "another clean summary", "quote": "approximate passage from context 3"}]}'
-        )
+        system_prompt = _hub_answer_system_prompt()
         user_prompt = f"Question: {question}\n\nContext:\n" + "\n".join(context_blocks)
 
         if not context_blocks:
-            system_prompt = (
-                "You are Caddie, a helpful assistant. The user is chatting or asking something that is not tied to the "
-                "hub's sources. Respond naturally and helpfully. Do not cite sources."
-            )
-            completion = self.llm_client.chat.completions.create(
-                model=self.chat_model,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    *history_messages,
-                    {"role": "user", "content": question},
-                ],
-                temperature=0.2,
-            )
-            answer = completion.choices[0].message.content or ""
-            usage = completion.usage.model_dump() if completion.usage else None
-            return answer, [], usage
+            answer = "I don't have enough information from this hub's sources to answer that."
+            usage = None
+            if trace:
+                with trace.step("answer_generation", scope=scope.value, context_block_count=0) as step:
+                    step.output = {"total_tokens": 0, "abstained": True}
+            generation_metadata["answer_has_citations"] = False
+            return answer, [], usage, generation_metadata
 
-        completion = self.llm_client.chat.completions.create(
-            model=self.chat_model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                *history_messages,
-                {"role": "user", "content": user_prompt},
-            ],
-            temperature=0.2,
+        raw_answer, usage = self._complete_chat_answer(
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            history_messages=history_messages,
+            scope=scope,
+            context_block_count=len(context_blocks),
+            trace=trace,
+            step_name="answer_generation",
         )
-        raw_answer = completion.choices[0].message.content or ""
-        usage = completion.usage.model_dump() if completion.usage else None
+        answer, final_citations = self._extract_grounded_chat_citations(raw_answer, citations)
+        retried_for_citations = False
+        if context_blocks and not final_citations and _looks_like_grounded_answer(answer):
+            repair_prompt = _hub_answer_repair_prompt()
+            repair_answer, repair_usage = self._complete_chat_answer(
+                system_prompt=repair_prompt,
+                user_prompt=user_prompt,
+                history_messages=history_messages,
+                scope=scope,
+                context_block_count=len(context_blocks),
+                trace=trace,
+                step_name="answer_generation_retry",
+            )
+            repaired_text, repaired_citations = self._extract_grounded_chat_citations(repair_answer, citations)
+            retried_for_citations = True
+            if repaired_citations:
+                answer = repaired_text
+                final_citations = repaired_citations
+                usage = repair_usage
+        generation_metadata["answer_has_citations"] = bool(final_citations)
+        generation_metadata["retried_for_citations"] = retried_for_citations
+        return answer, final_citations, usage, generation_metadata
 
+    def _extract_grounded_chat_citations(
+        self,
+        raw_answer: str,
+        citations: List[Citation],
+    ) -> tuple[str, List[Citation]]:
         answer, quotes = _extract_quotes(raw_answer)
+        hydrated_citations = [citation.model_copy(deep=True) for citation in citations]
         for idx_str, pairs in quotes.items():
             try:
                 citation_idx = int(str(idx_str).strip()) - 1
             except (TypeError, ValueError):
                 continue
-            if 0 <= citation_idx < len(citations):
-                snippet = citations[citation_idx].snippet
+            if 0 <= citation_idx < len(hydrated_citations):
+                snippet = hydrated_citations[citation_idx].snippet
                 verified = _match_quote_pairs_to_snippet(pairs, snippet)
                 if verified:
-                    citations[citation_idx].relevant_quotes = [v[0] for v in verified]
-                    citations[citation_idx].paraphrased_quotes = [v[1] for v in verified]
+                    hydrated_citations[citation_idx].relevant_quotes = [v[0] for v in verified]
+                    hydrated_citations[citation_idx].paraphrased_quotes = [v[1] for v in verified]
+        referenced_indices = _referenced_citation_indices(answer, len(hydrated_citations))
+        final_citations = [hydrated_citations[idx - 1] for idx in referenced_indices]
+        return answer, final_citations
 
-        has_citations = _answer_has_citation(answer, len(context_blocks)) or bool(quotes)
-        final_citations = citations if has_citations else []
-        return answer, final_citations, usage
+    def _complete_chat_answer(
+        self,
+        *,
+        system_prompt: str,
+        user_prompt: str,
+        history_messages: List[Dict[str, str]],
+        scope: HubScope,
+        context_block_count: int,
+        trace: Optional[ChatTraceRecorder],
+        step_name: str,
+    ) -> tuple[str, Optional[Dict[str, Any]]]:
+        if trace:
+            with trace.step(step_name, scope=scope.value, context_block_count=context_block_count) as step:
+                completion = self.llm_client.chat.completions.create(
+                    model=self.chat_model,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        *history_messages,
+                        {"role": "user", "content": user_prompt},
+                    ],
+                    temperature=0.2,
+                )
+                step.output = {"total_tokens": _total_tokens_from_usage(completion.usage.model_dump() if completion.usage else None)}
+        else:
+            completion = self.llm_client.chat.completions.create(
+                model=self.chat_model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    *history_messages,
+                    {"role": "user", "content": user_prompt},
+                ],
+                temperature=0.2,
+            )
+        return completion.choices[0].message.content or "", (completion.usage.model_dump() if completion.usage else None)
 
     def chat(self, client: Client, user_id: str, payload: ChatRequest) -> ChatResponse:
         hub_id = str(payload.hub_id)
@@ -2105,9 +2460,11 @@ class SupabaseStore:
             hub_id,
             requested_source_ids,
         )
+        started_at = time.perf_counter()
 
         existing_session_id: Optional[str] = None
         session_title: str
+        user_message_id: Optional[str] = None
         if payload.session_id is not None:
             existing_session_id = str(payload.session_id)
             session_row = self._get_chat_session_row(client, existing_session_id)
@@ -2116,17 +2473,32 @@ class SupabaseStore:
             session_title = str(session_row.get("title") or "New Chat")
             history_messages = self._recent_conversation(client, existing_session_id)
             retrieval_history = self._recent_retrieval_context(client, existing_session_id)
-            client.table("messages").insert(
+            user_message_row = client.table("messages").insert(
                 {"session_id": existing_session_id, "role": "user", "content": payload.question}
             ).execute()
+            user_message_id = str(user_message_row.data[0]["id"])
         else:
             session_title = self._generate_chat_session_title(payload.question)
             history_messages = []
             retrieval_history = []
+        trace = ChatTraceRecorder(
+            user_id=user_id,
+            hub_id=hub_id,
+            session_id=existing_session_id,
+            question=payload.question,
+        )
+        trace.annotate(
+            scope=payload.scope.value,
+            requested_source_ids=requested_source_ids,
+            persisted_source_ids=persisted_source_ids,
+            retrieval_source_ids=retrieval_source_ids,
+            existing_session_id=existing_session_id,
+        )
         def finalize_response(
             answer: str,
             response_citations: List[Citation],
             usage: Optional[Dict[str, Any]],
+            generation_metadata: Dict[str, Any],
         ) -> ChatResponse:
             if existing_session_id is None:
                 persisted = self._create_chat_session_with_messages(
@@ -2140,13 +2512,52 @@ class SupabaseStore:
                     assistant_citations=response_citations,
                     assistant_token_usage=usage,
                 )
+                latency_ms = round((time.perf_counter() - started_at) * 1000, 2)
+                session_id = str(persisted["session_id"])
+                assistant_message_id = str(persisted["assistant_message_id"])
+                self._insert_chat_event_best_effort(
+                    client,
+                    hub_id=hub_id,
+                    session_id=session_id,
+                    user_id=user_id,
+                    event_type=ChatEventType.question_asked.value,
+                    metadata={
+                        "scope": payload.scope.value,
+                        "source_ids": persisted_source_ids,
+                        "question_length": len(payload.question),
+                    },
+                )
+                self._insert_chat_event_best_effort(
+                    client,
+                    hub_id=hub_id,
+                    session_id=session_id,
+                    message_id=assistant_message_id,
+                    user_id=user_id,
+                    event_type=ChatEventType.answer_received.value,
+                    metadata={
+                        "latency_ms": latency_ms,
+                        "citation_count": len(response_citations),
+                        "total_tokens": _total_tokens_from_usage(usage),
+                        **generation_metadata,
+                    },
+                )
+                trace.annotate(
+                    session_id=session_id,
+                    assistant_message_id=assistant_message_id,
+                    latency_ms=latency_ms,
+                    total_tokens=_total_tokens_from_usage(usage),
+                    citation_count=len(response_citations),
+                    **generation_metadata,
+                )
+                trace.flush(output={"answer_preview": answer[:500]})
                 return ChatResponse(
                     answer=answer,
                     citations=response_citations,
-                    message_id=str(persisted["assistant_message_id"]),
-                    session_id=str(persisted["session_id"]),
+                    message_id=assistant_message_id,
+                    session_id=session_id,
                     session_title=str(persisted.get("session_title") or session_title or "New Chat"),
                     flag_status=MessageFlagStatus.none.value,
+                    feedback_rating=None,
                 )
 
             assistant_row = (
@@ -2169,6 +2580,43 @@ class SupabaseStore:
                 source_ids=persisted_source_ids,
                 last_message_at=assistant_created_at,
             )
+            latency_ms = round((time.perf_counter() - started_at) * 1000, 2)
+            self._insert_chat_event_best_effort(
+                client,
+                hub_id=hub_id,
+                session_id=existing_session_id,
+                message_id=user_message_id,
+                user_id=user_id,
+                event_type=ChatEventType.question_asked.value,
+                metadata={
+                    "scope": payload.scope.value,
+                    "source_ids": persisted_source_ids,
+                    "question_length": len(payload.question),
+                },
+            )
+            self._insert_chat_event_best_effort(
+                client,
+                hub_id=hub_id,
+                session_id=existing_session_id,
+                message_id=str(assistant_row.data[0]["id"]),
+                user_id=user_id,
+                event_type=ChatEventType.answer_received.value,
+                metadata={
+                    "latency_ms": latency_ms,
+                    "citation_count": len(response_citations),
+                    "total_tokens": _total_tokens_from_usage(usage),
+                    **generation_metadata,
+                },
+            )
+            trace.annotate(
+                session_id=existing_session_id,
+                assistant_message_id=str(assistant_row.data[0]["id"]),
+                latency_ms=latency_ms,
+                total_tokens=_total_tokens_from_usage(usage),
+                citation_count=len(response_citations),
+                **generation_metadata,
+            )
+            trace.flush(output={"answer_preview": answer[:500]})
             return ChatResponse(
                 answer=answer,
                 citations=response_citations,
@@ -2176,9 +2624,10 @@ class SupabaseStore:
                 session_id=existing_session_id,
                 session_title=session_title,
                 flag_status=MessageFlagStatus.none.value,
+                feedback_rating=None,
             )
 
-        answer, citations, usage = self._generate_chat_answer(
+        answer, citations, usage, generation_metadata = self._generate_chat_answer(
             client,
             hub_id=hub_id,
             question=payload.question,
@@ -2186,8 +2635,9 @@ class SupabaseStore:
             retrieval_source_ids=retrieval_source_ids,
             history_messages=history_messages,
             retrieval_history=retrieval_history,
+            trace=trace,
         )
-        return finalize_response(answer, citations, usage)
+        return finalize_response(answer, citations, usage, generation_metadata)
 
     def chat_history(self, client: Client, user_id: str, hub_id: str) -> List[HistoryMessage]:
         response = (
@@ -2219,6 +2669,296 @@ class SupabaseStore:
             )
             for m in rows
         ]
+
+    def create_chat_feedback(
+        self,
+        client: Client,
+        user_id: str,
+        message_id: str,
+        payload: ChatFeedbackRequest,
+    ) -> ChatFeedbackResponse:
+        message_row = self._visible_message_for_user(client, message_id)
+        if str(message_row.get("role") or "") != "assistant":
+            raise ValueError("Feedback can only be submitted for assistant messages.")
+        session_row = self._get_chat_session_row(self.service_client, str(message_row["session_id"]), include_deleted=True)
+        response = (
+            client.table("chat_feedback")
+            .upsert(
+                {
+                    "hub_id": str(session_row["hub_id"]),
+                    "session_id": str(message_row["session_id"]),
+                    "message_id": str(message_id),
+                    "user_id": str(user_id),
+                    "rating": payload.rating.value,
+                    "reason": payload.reason,
+                },
+                on_conflict="message_id,user_id",
+            )
+            .execute()
+        )
+        row = (response.data or [{}])[0]
+        self._insert_chat_event_best_effort(
+            client,
+            hub_id=str(session_row["hub_id"]),
+            session_id=str(message_row["session_id"]),
+            message_id=str(message_id),
+            user_id=user_id,
+            event_type=ChatEventType.answer_feedback_submitted.value,
+            metadata={"rating": payload.rating.value},
+        )
+        return ChatFeedbackResponse(
+            message_id=str(message_id),
+            rating=ChatFeedbackRating(str(row.get("rating") or payload.rating.value)),
+            reason=row.get("reason") if isinstance(row, dict) else payload.reason,
+            updated_at=row.get("updated_at") or datetime.now(timezone.utc),
+        )
+
+    def create_citation_feedback(
+        self,
+        client: Client,
+        user_id: str,
+        message_id: str,
+        payload: CitationFeedbackRequest,
+    ) -> CitationFeedbackResponse:
+        message_row = self._visible_message_for_user(client, message_id)
+        if str(message_row.get("role") or "") != "assistant":
+            raise ValueError("Citation feedback can only be submitted for assistant messages.")
+        citations = [Citation(**citation) for citation in (message_row.get("citations") or [])]
+        matched_citation = next(
+            (
+                citation
+                for citation in citations
+                if citation.source_id == payload.source_id
+                and (payload.chunk_index is None or citation.chunk_index == payload.chunk_index)
+            ),
+            None,
+        )
+        if matched_citation is None:
+            raise ValueError("Citation not found for this message.")
+        session_row = self._get_chat_session_row(self.service_client, str(message_row["session_id"]), include_deleted=True)
+        response = (
+            client.table("citation_feedback")
+            .insert(
+                {
+                    "hub_id": str(session_row["hub_id"]),
+                    "session_id": str(message_row["session_id"]),
+                    "message_id": str(message_id),
+                    "user_id": str(user_id),
+                    "source_id": payload.source_id,
+                    "chunk_index": payload.chunk_index,
+                    "event_type": payload.event_type.value,
+                    "note": payload.note,
+                }
+            )
+            .execute()
+        )
+        row = (response.data or [{}])[0]
+        self._insert_chat_event_best_effort(
+            client,
+            hub_id=str(session_row["hub_id"]),
+            session_id=str(message_row["session_id"]),
+            message_id=str(message_id),
+            user_id=user_id,
+            event_type=(
+                ChatEventType.citation_opened.value
+                if payload.event_type == CitationFeedbackEventType.opened
+                else ChatEventType.citation_flagged.value
+            ),
+            metadata={
+                "source_id": payload.source_id,
+                "chunk_index": payload.chunk_index,
+            },
+        )
+        return CitationFeedbackResponse(
+            message_id=str(message_id),
+            source_id=str(row.get("source_id") or payload.source_id),
+            chunk_index=row.get("chunk_index", payload.chunk_index),
+            event_type=CitationFeedbackEventType(str(row.get("event_type") or payload.event_type.value)),
+            created_at=row.get("created_at") or datetime.now(timezone.utc),
+        )
+
+    def get_hub_chat_analytics_summary(
+        self,
+        user_id: str,
+        hub_id: str,
+        *,
+        days: Optional[int] = None,
+    ) -> ChatAnalyticsSummary:
+        self._require_hub_owner_or_admin(user_id, hub_id)
+        window_days = _clamp_window_days(days or self.analytics_summary_days)
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=window_days)).isoformat()
+
+        event_rows = (
+            self.service_client.table("chat_events")
+            .select("event_type,metadata,created_at")
+            .eq("hub_id", str(hub_id))
+            .gte("created_at", cutoff)
+            .execute()
+        ).data or []
+        feedback_rows = (
+            self.service_client.table("chat_feedback")
+            .select("rating,updated_at")
+            .eq("hub_id", str(hub_id))
+            .gte("updated_at", cutoff)
+            .execute()
+        ).data or []
+        citation_rows = (
+            self.service_client.table("citation_feedback")
+            .select("source_id,event_type")
+            .eq("hub_id", str(hub_id))
+            .gte("created_at", cutoff)
+            .execute()
+        ).data or []
+
+        answer_events = [row for row in event_rows if row.get("event_type") == ChatEventType.answer_received.value]
+        total_questions = sum(1 for row in event_rows if row.get("event_type") == ChatEventType.question_asked.value)
+        total_answers = len(answer_events)
+        helpful_count = sum(1 for row in feedback_rows if row.get("rating") == ChatFeedbackRating.helpful.value)
+        not_helpful_count = sum(1 for row in feedback_rows if row.get("rating") == ChatFeedbackRating.not_helpful.value)
+        feedback_total = helpful_count + not_helpful_count
+        helpful_rate = round((helpful_count / feedback_total), 3) if feedback_total else 0.0
+        average_citations_per_answer = round(
+            sum(_safe_int((row.get("metadata") or {}).get("citation_count")) for row in answer_events) / total_answers,
+            2,
+        ) if total_answers else 0.0
+        citation_open_count = sum(1 for row in citation_rows if row.get("event_type") == CitationFeedbackEventType.opened.value)
+        citation_flag_count = sum(1 for row in citation_rows if row.get("event_type") == CitationFeedbackEventType.flagged_incorrect.value)
+        total_citations_shown = sum(_safe_int((row.get("metadata") or {}).get("citation_count")) for row in answer_events)
+        citation_open_rate = round((citation_open_count / total_citations_shown), 3) if total_citations_shown else 0.0
+        citation_flag_rate = round((citation_flag_count / total_citations_shown), 3) if total_citations_shown else 0.0
+        average_latency_ms = round(
+            sum(_safe_float((row.get("metadata") or {}).get("latency_ms")) for row in answer_events) / total_answers,
+            2,
+        ) if total_answers else 0.0
+        total_tokens = sum(_safe_int((row.get("metadata") or {}).get("total_tokens")) for row in answer_events)
+        rewrite_usage_rate = round(
+            sum(1 for row in answer_events if (row.get("metadata") or {}).get("rewrite_used")) / total_answers,
+            3,
+        ) if total_answers else 0.0
+        zero_hit_rate = round(
+            sum(1 for row in answer_events if (row.get("metadata") or {}).get("zero_hit")) / total_answers,
+            3,
+        ) if total_answers else 0.0
+
+        source_counts: Dict[str, Dict[str, int]] = defaultdict(lambda: {"returns": 0, "opens": 0, "flags": 0})
+        for row in answer_events:
+            source_ids = (row.get("metadata") or {}).get("selected_source_ids") or []
+            if not isinstance(source_ids, list):
+                continue
+            for source_id in source_ids:
+                normalized_source_id = str(source_id or "")
+                if normalized_source_id:
+                    source_counts[normalized_source_id]["returns"] += 1
+        for row in citation_rows:
+            source_id = str(row.get("source_id") or "")
+            if not source_id:
+                continue
+            if row.get("event_type") == CitationFeedbackEventType.opened.value:
+                source_counts[source_id]["opens"] += 1
+            elif row.get("event_type") == CitationFeedbackEventType.flagged_incorrect.value:
+                source_counts[source_id]["flags"] += 1
+
+        ranked_sources = sorted(
+            source_counts.items(),
+            key=lambda item: (max(item[1]["returns"], item[1]["opens"]), item[1]["opens"], item[1]["flags"], item[0]),
+            reverse=True,
+        )[:10]
+        source_name_map = self._source_name_map([source_id for source_id, _counts in ranked_sources])
+
+        return ChatAnalyticsSummary(
+            window_days=window_days,
+            total_questions=total_questions,
+            total_answers=total_answers,
+            helpful_count=helpful_count,
+            not_helpful_count=not_helpful_count,
+            helpful_rate=helpful_rate,
+            average_citations_per_answer=average_citations_per_answer,
+            citation_open_count=citation_open_count,
+            citation_open_rate=citation_open_rate,
+            citation_flag_count=citation_flag_count,
+            citation_flag_rate=citation_flag_rate,
+            average_latency_ms=average_latency_ms,
+            total_tokens=total_tokens,
+            rewrite_usage_rate=rewrite_usage_rate,
+            zero_hit_rate=zero_hit_rate,
+            top_sources=[
+                AnalyticsTopSource(
+                    source_id=source_id,
+                    source_name=source_name_map.get(source_id),
+                    citation_returns=counts["returns"],
+                    citation_opens=counts["opens"],
+                    citation_flags=counts["flags"],
+                )
+                for source_id, counts in ranked_sources
+            ],
+        )
+
+    def get_hub_chat_analytics_trends(
+        self,
+        user_id: str,
+        hub_id: str,
+        *,
+        days: Optional[int] = None,
+    ) -> ChatAnalyticsTrends:
+        self._require_hub_owner_or_admin(user_id, hub_id)
+        window_days = _clamp_window_days(days or self.analytics_trend_days)
+        cutoff_dt = datetime.now(timezone.utc) - timedelta(days=window_days - 1)
+        cutoff = cutoff_dt.isoformat()
+
+        event_rows = (
+            self.service_client.table("chat_events")
+            .select("event_type,created_at")
+            .eq("hub_id", str(hub_id))
+            .gte("created_at", cutoff)
+            .execute()
+        ).data or []
+        feedback_rows = (
+            self.service_client.table("chat_feedback")
+            .select("rating,updated_at")
+            .eq("hub_id", str(hub_id))
+            .gte("updated_at", cutoff)
+            .execute()
+        ).data or []
+        citation_rows = (
+            self.service_client.table("citation_feedback")
+            .select("event_type,created_at")
+            .eq("hub_id", str(hub_id))
+            .gte("created_at", cutoff)
+            .execute()
+        ).data or []
+
+        points: Dict[str, ChatAnalyticsTrendPoint] = {}
+        for offset in range(window_days):
+            day = (cutoff_dt + timedelta(days=offset)).date().isoformat()
+            points[day] = ChatAnalyticsTrendPoint(date=day)
+
+        for row in event_rows:
+            day = _iso_day(row.get("created_at"))
+            if day not in points:
+                continue
+            if row.get("event_type") == ChatEventType.question_asked.value:
+                points[day].questions += 1
+            elif row.get("event_type") == ChatEventType.answer_received.value:
+                points[day].answers += 1
+
+        for row in feedback_rows:
+            day = _iso_day(row.get("updated_at"))
+            if day in points and row.get("rating") == ChatFeedbackRating.helpful.value:
+                points[day].helpful += 1
+
+        for row in citation_rows:
+            day = _iso_day(row.get("created_at"))
+            if day not in points:
+                continue
+            if row.get("event_type") == CitationFeedbackEventType.opened.value:
+                points[day].citation_opens += 1
+            elif row.get("event_type") == CitationFeedbackEventType.flagged_incorrect.value:
+                points[day].citation_flags += 1
+
+        return ChatAnalyticsTrends(
+            window_days=window_days,
+            points=[points[day] for day in sorted(points.keys())],
+        )
 
     def list_faqs(self, client: Client, hub_id: str) -> List[FaqEntry]:
         response = (
@@ -3291,6 +4031,8 @@ def _extract_youtube_video_id(url: str) -> Optional[str]:
     return None
 
 
+
+
 def _normalize_youtube_id(value: str) -> Optional[str]:
     if not value:
         return None
@@ -3669,6 +4411,58 @@ def _answer_has_citation(answer: str, max_index: int) -> bool:
     return False
 
 
+def _looks_like_grounded_answer(answer: str) -> bool:
+    cleaned = re.sub(r"\s+", " ", (answer or "")).strip()
+    if not cleaned:
+        return False
+    lowered = cleaned.lower()
+    abstention_markers = [
+        "don't have enough information",
+        "do not have enough information",
+        "not enough information",
+        "insufficient information",
+        "cannot determine",
+        "can't determine",
+    ]
+    return not any(marker in lowered for marker in abstention_markers)
+
+
+def _referenced_citation_indices(answer: str, max_index: int) -> List[int]:
+    if not answer or max_index <= 0:
+        return []
+    indices: List[int] = []
+    seen: set[int] = set()
+    for match in re.findall(r"\[(\d+)\]", answer):
+        try:
+            idx = int(match)
+        except ValueError:
+            continue
+        if 1 <= idx <= max_index and idx not in seen:
+            seen.add(idx)
+            indices.append(idx)
+    return indices
+
+
+def _is_exploratory_chat_question(question: str) -> bool:
+    normalized = re.sub(r"\s+", " ", (question or "").strip().lower())
+    if not normalized:
+        return False
+    exploratory_markers = [
+        "compare",
+        "difference",
+        "differences",
+        "across",
+        "versus",
+        "vs",
+        "overview",
+        "summarize",
+        "summary",
+        "options",
+        "pros and cons",
+    ]
+    return any(marker in normalized for marker in exploratory_markers)
+
+
 def _is_vague_follow_up(question: str) -> bool:
     normalized = re.sub(r"\s+", " ", (question or "").strip().lower())
     if not normalized:
@@ -3762,6 +4556,36 @@ def _normalize_retrieval_query(original_question: str, rewritten_query: str) -> 
     if not candidate or candidate.lower() in {"n/a", "none"}:
         return original_question
     return candidate
+
+
+def _hub_answer_system_prompt() -> str:
+    return (
+        "You are Caddie, an onboarding assistant. Answer using the provided context only. "
+        "Do not infer or invent unstated dates, names, deadlines, policies, contacts, locations, or requirements. "
+        "If the context is insufficient, say you don't have enough information. "
+        "Every factual claim supported by the context must include an inline citation like [n] that matches the context list. "
+        "Do not give an uncited factual answer. "
+        "If the user sends small talk or a greeting, respond politely and ask how you can help.\n\n"
+        "After your answer, on a new line, output QUOTES: followed by a JSON object.\n"
+        "For each citation number you used, provide an array of objects with two fields:\n"
+        '- "paraphrase": a short, clean summary of the point you are making (one sentence).\n'
+        '- "quote": copy a passage from the context that supports the point. '
+        "Copy it as closely as possible from the source text, even if messy or repetitive. "
+        "It does not need to be exact but should contain enough key words to locate the region.\n"
+        "Include all distinct pieces of information you used, not just one. Example:\n"
+        'QUOTES: {"1": [{"paraphrase": "clean summary of point", "quote": "approximate passage from context 1"}], '
+        '"3": [{"paraphrase": "another clean summary", "quote": "approximate passage from context 3"}]}'
+    )
+
+
+def _hub_answer_repair_prompt() -> str:
+    return (
+        "You are revising an onboarding answer to ensure strict grounding. "
+        "Use the provided context only. Do not infer unstated facts. "
+        "Every factual claim must include an inline citation like [n]. "
+        "If you cannot support a claim with the provided context, say you don't have enough information instead of answering it. "
+        "Return a corrected answer with citations, then on a new line output QUOTES: JSON in the same format as requested."
+    )
 
 
 def _preview_text(value: Any, limit: int = 140) -> str:
@@ -3878,6 +4702,50 @@ def _is_missing_hub_optional_column_error(exc: APIError) -> bool:
     if "column" not in message or "does not exist" not in message:
         return False
     return "icon_key" in message or "archived_at" in message
+
+
+def _safe_int(value: Any) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _safe_float(value: Any) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _iso_day(value: Any) -> str:
+    if isinstance(value, datetime):
+        return value.date().isoformat()
+    try:
+        return datetime.fromisoformat(str(value).replace("Z", "+00:00")).date().isoformat()
+    except ValueError:
+        return datetime.now(timezone.utc).date().isoformat()
+
+
+def _clamp_window_days(value: int) -> int:
+    return max(1, min(int(value), 90))
+
+
+def _is_uuid_like(value: str) -> bool:
+    try:
+        uuid.UUID(str(value))
+        return True
+    except (TypeError, ValueError, AttributeError):
+        return False
+
+
+def _total_tokens_from_usage(usage: Optional[Dict[str, Any]]) -> int:
+    if not usage:
+        return 0
+    total = usage.get("total_tokens")
+    if total is not None:
+        return _safe_int(total)
+    return _safe_int(usage.get("input_tokens")) + _safe_int(usage.get("output_tokens"))
 
 
 def _extract_response_text(response: Any) -> str:

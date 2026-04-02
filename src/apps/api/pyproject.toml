@@ -22,5 +22,13 @@ dependencies = [
     "python-multipart>=0.0.9"
 ]
 
+[project.optional-dependencies]
+observability = [
+    "langfuse>=2.59.0",
+]
+evals = [
+    "ragas>=0.2.0",
+]
+
 [tool.setuptools.packages.find]
 where = ["."]

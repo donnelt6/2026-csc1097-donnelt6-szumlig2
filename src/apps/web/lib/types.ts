@@ -5,6 +5,16 @@ export type FlagCaseStatus = "open" | "in_review" | "resolved" | "dismissed";
 export type MessageFlagStatus = "none" | FlagCaseStatus;
 export type FlagReason = "incorrect" | "unsupported" | "harmful" | "outdated" | "other";
 export type MessageRevisionType = "original" | "regenerated" | "manual_edit";
+export type ChatFeedbackRating = "helpful" | "not_helpful";
+export type CitationFeedbackEventType = "opened" | "flagged_incorrect";
+export type ChatEventType =
+  | "question_asked"
+  | "answer_received"
+  | "answer_copied"
+  | "answer_feedback_submitted"
+  | "citation_opened"
+  | "citation_flagged"
+  | "source_filter_changed";
 
 export interface Hub {
   id: string;
@@ -77,6 +87,7 @@ export interface ChatResponse {
   session_title: string;
   active_flag_id?: string | null;
   flag_status: MessageFlagStatus;
+  feedback_rating?: ChatFeedbackRating | null;
 }
 
 export interface ChatPromptSuggestion {
@@ -118,6 +129,68 @@ export interface SessionMessage {
   created_at: string;
   active_flag_id?: string | null;
   flag_status: MessageFlagStatus;
+  feedback_rating?: ChatFeedbackRating | null;
+}
+
+export interface ChatFeedbackResponse {
+  message_id: string;
+  rating: ChatFeedbackRating;
+  reason?: string | null;
+  updated_at: string;
+}
+
+export interface CitationFeedbackResponse {
+  message_id: string;
+  source_id: string;
+  chunk_index?: number | null;
+  event_type: CitationFeedbackEventType;
+  created_at: string;
+}
+
+export interface ChatEventResponse {
+  event_type: ChatEventType;
+  created_at: string;
+}
+
+export interface AnalyticsTopSource {
+  source_id: string;
+  source_name?: string | null;
+  citation_returns: number;
+  citation_opens: number;
+  citation_flags: number;
+}
+
+export interface ChatAnalyticsSummary {
+  window_days: number;
+  total_questions: number;
+  total_answers: number;
+  helpful_count: number;
+  not_helpful_count: number;
+  helpful_rate: number;
+  average_citations_per_answer: number;
+  citation_open_count: number;
+  citation_open_rate: number;
+  citation_flag_count: number;
+  citation_flag_rate: number;
+  average_latency_ms: number;
+  total_tokens: number;
+  rewrite_usage_rate: number;
+  zero_hit_rate: number;
+  top_sources: AnalyticsTopSource[];
+}
+
+export interface ChatAnalyticsTrendPoint {
+  date: string;
+  questions: number;
+  answers: number;
+  helpful: number;
+  citation_opens: number;
+  citation_flags: number;
+}
+
+export interface ChatAnalyticsTrends {
+  window_days: number;
+  points: ChatAnalyticsTrendPoint[];
 }
 
 export interface ChatSessionDetail {

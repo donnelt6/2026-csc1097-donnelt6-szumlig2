@@ -340,6 +340,7 @@ class ChatResponse(BaseModel):
     session_title: str
     active_flag_id: Optional[str] = None
     flag_status: str = "none"
+    feedback_rating: Optional[str] = None
 
 
 class HistoryMessage(BaseModel):
@@ -369,6 +370,7 @@ class SessionMessage(BaseModel):
     created_at: datetime = Field(default_factory=datetime.utcnow)
     active_flag_id: Optional[str] = None
     flag_status: str = "none"
+    feedback_rating: Optional[str] = None
 
 
 class ChatSessionDetail(BaseModel):
@@ -419,6 +421,107 @@ class MessageRevisionType(str, Enum):
 class FlagMessageRequest(StrictModel):
     reason: FlagReason
     notes: Optional[str] = Field(default=None, max_length=1000)
+
+
+class ChatFeedbackRating(str, Enum):
+    helpful = "helpful"
+    not_helpful = "not_helpful"
+
+
+class CitationFeedbackEventType(str, Enum):
+    opened = "opened"
+    flagged_incorrect = "flagged_incorrect"
+
+
+class ChatEventType(str, Enum):
+    question_asked = "question_asked"
+    answer_received = "answer_received"
+    answer_copied = "answer_copied"
+    answer_feedback_submitted = "answer_feedback_submitted"
+    citation_opened = "citation_opened"
+    citation_flagged = "citation_flagged"
+    source_filter_changed = "source_filter_changed"
+
+
+class ChatFeedbackRequest(StrictModel):
+    rating: ChatFeedbackRating
+    reason: Optional[str] = Field(default=None, max_length=500)
+
+
+class ChatFeedbackResponse(BaseModel):
+    message_id: str
+    rating: ChatFeedbackRating
+    reason: Optional[str] = None
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class CitationFeedbackRequest(StrictModel):
+    source_id: str = Field(..., min_length=1, max_length=255)
+    chunk_index: Optional[int] = Field(default=None, ge=0)
+    event_type: CitationFeedbackEventType
+    note: Optional[str] = Field(default=None, max_length=500)
+
+
+class CitationFeedbackResponse(BaseModel):
+    message_id: str
+    source_id: str
+    chunk_index: Optional[int] = None
+    event_type: CitationFeedbackEventType
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class ChatEventCreate(StrictModel):
+    hub_id: UUID
+    session_id: Optional[UUID] = None
+    message_id: Optional[UUID] = None
+    event_type: ChatEventType
+    metadata: dict = Field(default_factory=dict)
+
+
+class ChatEventResponse(BaseModel):
+    event_type: ChatEventType
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class AnalyticsTopSource(BaseModel):
+    source_id: str
+    source_name: Optional[str] = None
+    citation_returns: int = 0
+    citation_opens: int = 0
+    citation_flags: int = 0
+
+
+class ChatAnalyticsSummary(BaseModel):
+    window_days: int
+    total_questions: int = 0
+    total_answers: int = 0
+    helpful_count: int = 0
+    not_helpful_count: int = 0
+    helpful_rate: float = 0.0
+    average_citations_per_answer: float = 0.0
+    citation_open_count: int = 0
+    citation_open_rate: float = 0.0
+    citation_flag_count: int = 0
+    citation_flag_rate: float = 0.0
+    average_latency_ms: float = 0.0
+    total_tokens: int = 0
+    rewrite_usage_rate: float = 0.0
+    zero_hit_rate: float = 0.0
+    top_sources: List[AnalyticsTopSource] = Field(default_factory=list)
+
+
+class ChatAnalyticsTrendPoint(BaseModel):
+    date: str
+    questions: int = 0
+    answers: int = 0
+    helpful: int = 0
+    citation_opens: int = 0
+    citation_flags: int = 0
+
+
+class ChatAnalyticsTrends(BaseModel):
+    window_days: int
+    points: List[ChatAnalyticsTrendPoint] = Field(default_factory=list)
 
 
 class FlagCase(BaseModel):
