@@ -84,8 +84,17 @@ export function DashboardActivity() {
                 {groups.get(group)!.map((event) => {
                   const Icon = getEventIcon(event);
                   const tone = getEventTone(event);
+                  const tabMap: Record<string, string> = {
+                    reminder: '?tab=dashboard&dashTab=reminders',
+                    faq: '?tab=dashboard&dashTab=faqs',
+                    guide: '?tab=dashboard&dashTab=guides',
+                    source: '?tab=sources',
+                    member: '?tab=members',
+                    chat: '?tab=chat',
+                  };
+                  const suffix = tabMap[event.resource_type] ?? '';
                   return (
-                    <Link key={event.id} href={`/hubs/${event.hub_id}`} className="dash-activity-item">
+                    <Link key={event.id} href={`/hubs/${event.hub_id}${suffix}`} className="dash-activity-item">
                       <div className={`dash-activity-avatar${tone !== 'neutral' ? ` dash-activity-avatar--${tone}` : ''}`}>
                         <Icon className="dash-activity-type-icon" />
                       </div>

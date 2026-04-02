@@ -394,6 +394,19 @@ export async function listFaqs(hubId: string): Promise<FaqEntry[]> {
   return handle<FaqEntry[]>(res);
 }
 
+export async function createFaq(data: {
+  hub_id: string;
+  question: string;
+  answer: string;
+}): Promise<FaqEntry> {
+  const res = await authedFetch(`${API_BASE}/faqs`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  return handle(res);
+}
+
 export async function generateFaqs(data: {
   hub_id: string;
   source_ids: string[];
@@ -458,6 +471,7 @@ export async function updateGuide(
     title?: string;
     topic?: string;
     summary?: string;
+    is_favourited?: boolean;
     archived?: boolean;
   }
 ): Promise<GuideEntry> {
@@ -627,7 +641,9 @@ export async function createReminder(data: {
   source_id?: string;
   due_at: string;
   timezone: string;
+  title?: string;
   message?: string;
+  notify_before?: number;
 }): Promise<Reminder> {
   const res = await authedFetch(`${API_BASE}/reminders`, {
     method: "POST",
@@ -642,7 +658,9 @@ export async function updateReminder(
   data: {
     due_at?: string;
     timezone?: string;
+    title?: string;
     message?: string;
+    notify_before?: number | null;
     action?: ReminderUpdateAction;
     snooze_minutes?: number;
   }

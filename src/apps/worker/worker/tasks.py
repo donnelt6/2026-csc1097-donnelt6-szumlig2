@@ -2048,8 +2048,14 @@ def _dispatch_for_reminder(
         return 0
     scheduled_for = due_at
     if kind == "lead":
-        lead_hours = int(policy.get("lead_hours") or settings.reminder_lead_hours)
-        scheduled_for = due_at - timedelta(hours=lead_hours)
+        if "notify_before" in reminder and reminder["notify_before"] is None:
+            return 0  # User explicitly chose no notification
+        notify_before = reminder.get("notify_before")
+        if notify_before is not None:
+            scheduled_for = due_at - timedelta(minutes=notify_before)
+        else:
+            lead_hours = int(policy.get("lead_hours") or settings.reminder_lead_hours)
+            scheduled_for = due_at - timedelta(hours=lead_hours)
     sent = 0
     for channel in channels:
         if _create_notification_if_needed(

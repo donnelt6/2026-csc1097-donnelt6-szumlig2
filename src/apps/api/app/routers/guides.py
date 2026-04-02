@@ -92,6 +92,8 @@ def update_guide(
         updates["topic"] = payload.topic
     if payload.summary is not None:
         updates["summary"] = payload.summary
+    if payload.is_favourited is not None:
+        updates["is_favourited"] = payload.is_favourited
     if payload.archived is not None:
         updates["archived_at"] = datetime.now(timezone.utc).isoformat() if payload.archived else None
 

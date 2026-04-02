@@ -1,4 +1,5 @@
 import json
+import logging
 import math
 import random
 import re
@@ -76,6 +77,8 @@ from ..schemas import (
     SessionMessage,
     ActivityEvent,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class ConflictError(RuntimeError):
@@ -2223,11 +2226,37 @@ class SupabaseStore:
             .select("*")
             .eq("hub_id", str(hub_id))
             .is_("archived_at", "null")
-            .order("is_pinned", desc=True)
             .order("created_at", desc=True)
             .execute()
         )
         return [FaqEntry(**row) for row in response.data]
+
+    def create_faq(self, client: Client, hub_id: str, user_id: str, question: str, answer: str) -> FaqEntry:
+        existing = (
+            client.table("faq_entries")
+            .select("*")
+            .eq("hub_id", hub_id)
+            .eq("question", question)
+            .eq("answer", answer)
+            .is_("archived_at", "null")
+            .limit(1)
+            .execute()
+        )
+        if existing.data:
+            return FaqEntry(**existing.data[0])
+        now = datetime.now(timezone.utc).isoformat()
+        row = {
+            "hub_id": hub_id,
+            "question": question,
+            "answer": answer,
+            "citations": [],
+            "source_ids": [],
+            "confidence": 1.0,
+            "created_at": now,
+            "created_by": user_id,
+        }
+        response = client.table("faq_entries").insert(row).execute()
+        return FaqEntry(**response.data[0])
 
     def get_faq(self, client: Client, faq_id: str) -> FaqEntry:
         response = client.table("faq_entries").select("*").eq("id", str(faq_id)).limit(1).execute()
@@ -2241,8 +2270,22 @@ class SupabaseStore:
         if not source_ids:
             raise ValueError("Select at least one source to generate FAQs.")
 
+        existing = (
+            client.table("faq_entries")
+            .select("question")
+            .eq("hub_id", hub_id)
+            .is_("archived_at", "null")
+            .execute()
+        )
+        existing_questions = [q["question"] for q in existing.data]
+
+        faq_limit = 55
+        remaining = faq_limit - len(existing_questions)
+        if remaining <= 0:
+            raise ValueError(f"This hub already has {len(existing_questions)} FAQs (limit {faq_limit}).")
+
         count = payload.count or self.faq_default_count
-        count = max(1, min(int(count), 20))
+        count = max(1, min(int(count), 20, remaining))
 
         context_chunks: List[dict] = []
         for source_id in source_ids:
@@ -2261,7 +2304,21 @@ class SupabaseStore:
                 f"Source {chunk.get('source_id')} [chunk {chunk.get('chunk_index')}]: {snippet}"
             )
 
-        questions = self._generate_faq_questions(context_blocks, count)
+        questions = self._generate_faq_questions(context_blocks, count, existing_questions)
+        logger.info("FAQ generation: LLM returned %d questions: %s", len(questions), questions)
+        if not questions:
+            return []
+
+        existing_normalised = {
+            re.sub(r"[^a-z0-9\s]", "", q.lower()).strip()
+            for q in existing_questions
+        }
+        before_dedup = len(questions)
+        questions = [
+            q for q in questions
+            if re.sub(r"[^a-z0-9\s]", "", q.lower()).strip() not in existing_normalised
+        ]
+        logger.info("FAQ generation: %d/%d survived dedup filter", len(questions), before_dedup)
         if not questions:
             return []
 
@@ -2316,15 +2373,6 @@ class SupabaseStore:
 
         if not entries_payload:
             return []
-
-        (
-            client.table("faq_entries")
-            .update({"archived_at": now, "updated_at": now, "updated_by": user_id})
-            .eq("hub_id", hub_id)
-            .is_("archived_at", "null")
-            .eq("is_pinned", False)
-            .execute()
-        )
 
         response = client.table("faq_entries").insert(entries_payload).execute()
         return [FaqEntry(**row) for row in response.data]
@@ -2667,7 +2715,9 @@ class SupabaseStore:
                     "source_id": str(payload.source_id) if payload.source_id else None,
                     "due_at": payload.due_at.isoformat(),
                     "timezone": payload.timezone,
+                    "title": payload.title,
                     "message": payload.message,
+                    "notify_before": payload.notify_before,
                     "status": ReminderStatus.scheduled.value,
                 }
             )
@@ -2677,6 +2727,12 @@ class SupabaseStore:
 
     def update_reminder(self, client: Client, reminder_id: str, payload: dict) -> Reminder:
         response = client.table("reminders").update(payload).eq("id", reminder_id).execute()
+        if not response.data:
+            raise KeyError("Reminder not found")
+        return Reminder(**response.data[0])
+
+    def get_reminder(self, client: Client, reminder_id: str) -> Reminder:
+        response = client.table("reminders").select("*").eq("id", reminder_id).execute()
         if not response.data:
             raise KeyError("Reminder not found")
         return Reminder(**response.data[0])
@@ -2838,7 +2894,7 @@ class SupabaseStore:
         try:
             client.table("activity_events").insert(row).execute()
         except Exception:
-            pass
+            logger.warning("Failed to log activity event: %s/%s", action, resource_type, exc_info=True)
 
     def list_activity(
         self,
@@ -3059,15 +3115,23 @@ class SupabaseStore:
         )
         return response.data or []
 
-    def _generate_faq_questions(self, context_blocks: List[str], count: int) -> List[str]:
+    def _generate_faq_questions(self, context_blocks: List[str], count: int, existing_questions: Optional[List[str]] = None) -> List[str]:
         system_prompt = (
             "You are Caddie, an onboarding assistant. Generate distinct FAQ questions "
             "grounded strictly in the provided context. Return a JSON array of strings only."
         )
         context = "\n".join(context_blocks)
+        existing_block = ""
+        if existing_questions:
+            existing_list = "\n".join(f"- {q}" for q in existing_questions)
+            existing_block = (
+                f"\n\nExisting FAQs (do NOT repeat, rephrase, or ask similar questions):\n{existing_list}\n"
+                "Focus on NEW topics, details, or angles not yet covered above."
+            )
         user_prompt = (
-            f"Context:\n{context}\n\n"
-            f"Generate {count} concise FAQ questions that an onboarding user would ask."
+            f"Context:\n{context}{existing_block}\n\n"
+            f"Generate exactly {count} concise FAQ questions that an onboarding user would ask. "
+            f"You MUST return {count} questions. Cover different topics from the context."
         )
         completion = self.llm_client.chat.completions.create(
             model=self.chat_model,
@@ -3075,7 +3139,7 @@ class SupabaseStore:
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
             ],
-            temperature=0.2,
+            temperature=0.4,
         )
         raw = completion.choices[0].message.content or ""
         return _parse_questions_from_text(raw, count)

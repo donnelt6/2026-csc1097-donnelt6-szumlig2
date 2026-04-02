@@ -20,6 +20,7 @@ from ..schemas import (
     ReminderUpdateAction,
 )
 from ..services.store import store
+from .access import require_accepted, require_hub_member
 from .errors import raise_postgrest_error
 
 router = APIRouter(prefix="/reminders", tags=["reminders"])
@@ -75,9 +76,10 @@ def create_reminder(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Reminder due time must be in the future.")
     try:
         reminder = store.create_reminder(client, current_user.id, payload)
+        store.log_activity(client, reminder.hub_id, current_user.id, "created", "reminder", reminder.id, {"title": reminder.title, "message": reminder.message})
     except APIError as exc:
         raise_postgrest_error(exc)
-    store.log_activity(client, reminder.hub_id, current_user.id, "created", "reminder", reminder.id, {"message": reminder.message})
+        return  # unreachable — keeps type checker happy
     return reminder
 
 
@@ -102,6 +104,9 @@ def update_reminder(
         updates["completed_at"] = now.isoformat()
     elif payload.action == ReminderUpdateAction.cancel:
         updates["status"] = ReminderStatus.cancelled.value
+    elif payload.action == ReminderUpdateAction.reopen:
+        updates["status"] = ReminderStatus.scheduled.value
+        updates["completed_at"] = None
     elif payload.action == ReminderUpdateAction.snooze:
         if payload.snooze_minutes is None:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="snooze_minutes is required.")
@@ -119,20 +124,30 @@ def update_reminder(
         updates["due_at"] = due_at.isoformat()
     if payload.timezone is not None:
         updates["timezone"] = payload.timezone
+    if payload.title is not None:
+        updates["title"] = payload.title
     if payload.message is not None:
         updates["message"] = payload.message
+    if "notify_before" in payload.model_fields_set:
+        updates["notify_before"] = payload.notify_before
 
     if not updates:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No updates provided.")
 
     try:
+        existing = store.get_reminder(client, str(reminder_id))
+        if existing.user_id != current_user.id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not your reminder.")
         reminder = store.update_reminder(client, str(reminder_id), updates)
+        if payload.action in (ReminderUpdateAction.complete, ReminderUpdateAction.cancel, ReminderUpdateAction.reopen):
+            store.log_activity(client, reminder.hub_id, current_user.id, payload.action.value, "reminder", reminder.id, {"title": reminder.title, "message": reminder.message})
+        elif payload.action is None:
+            store.log_activity(client, reminder.hub_id, current_user.id, "updated", "reminder", reminder.id, {"title": reminder.title, "message": reminder.message})
     except KeyError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Reminder not found") from exc
     except APIError as exc:
         raise_postgrest_error(exc)
-    if payload.action in (ReminderUpdateAction.complete, ReminderUpdateAction.cancel):
-        store.log_activity(client, reminder.hub_id, current_user.id, payload.action.value, "reminder", reminder.id, {"message": reminder.message})
+        return  # unreachable — keeps type checker happy
     return reminder
 
 
@@ -147,9 +162,12 @@ def delete_reminder(
     client: Client = Depends(get_supabase_user_client),
     current_user: CurrentUser = Depends(get_current_user),
 ) -> None:
-    _ = current_user
     try:
+        reminder = store.get_reminder(client, str(reminder_id))
+        if reminder.user_id != current_user.id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not your reminder.")
         store.delete_reminder(client, str(reminder_id))
+        store.log_activity(client, reminder.hub_id, current_user.id, "deleted", "reminder", reminder.id, {"title": reminder.title, "message": reminder.message})
     except KeyError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Reminder not found") from exc
     except APIError as exc:
@@ -169,11 +187,14 @@ def list_candidates(
     client: Client = Depends(get_supabase_user_client),
     current_user: CurrentUser = Depends(get_current_user),
 ) -> list[ReminderCandidate]:
-    _ = current_user
+    if not hub_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="hub_id is required.")
+    member = require_hub_member(client, str(hub_id), current_user.id)
+    require_accepted(member)
     try:
         return store.list_candidates(
             client,
-            hub_id=str(hub_id) if hub_id else None,
+            hub_id=str(hub_id),
             source_id=str(source_id) if source_id else None,
             status=status_filter.value if status_filter else None,
         )
@@ -200,6 +221,10 @@ def decide_candidate(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Candidate not found") from exc
     except APIError as exc:
         raise_postgrest_error(exc)
+
+    # Verify the caller is an accepted member of the candidate's hub.
+    member = require_hub_member(client, candidate.hub_id, current_user.id)
+    require_accepted(member)
 
     if candidate.status != ReminderCandidateStatus.pending:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Candidate already reviewed.")
@@ -230,7 +255,7 @@ def decide_candidate(
             message=message,
         )
         reminder = store.create_reminder(client, current_user.id, create_payload)
-        store.log_activity(client, reminder.hub_id, current_user.id, "created", "reminder", reminder.id, {"message": reminder.message})
+        store.log_activity(client, reminder.hub_id, current_user.id, "created", "reminder", reminder.id, {"title": reminder.title, "message": reminder.message})
 
     # Persist review status and user feedback (accept/decline edits).
     try:

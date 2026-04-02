@@ -5,27 +5,22 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ChatPanel } from "../../../components/ChatPanel";
 import type { ChatPanelHandle } from "../../../components/ChatPanel";
-import { FaqPanel } from "../../../components/FaqPanel";
-import { GuidePanel } from "../../../components/GuidePanel";
 import { HubModerationPanel } from "../../../components/HubModerationPanel";
-import { TabSwitcher } from "../../../components/TabSwitcher";
 import { UploadPanel } from "../../../components/UploadPanel";
 import { MembersPanel } from "../../../components/MembersPanel";
-import { RemindersPanel } from "../../../components/RemindersPanel";
-import { ReminderCandidatesPanel } from "../../../components/ReminderCandidatesPanel";
+import { DashboardOverview } from "../../../components/hub-dashboard/DashboardOverview";
+import { GuidesPage } from "../../../components/hub-dashboard/GuidesPage";
+import { FaqsPage } from "../../../components/hub-dashboard/FaqsPage";
+import { RemindersPage } from "../../../components/hub-dashboard/RemindersPage";
+
 import { acceptInvite, listInvites, listSources, trackHubAccess } from "../../../lib/api";
 import { useCurrentHub } from "../../../lib/CurrentHubContext";
 import { useHubTab } from "../../../lib/HubTabContext";
+import { useHubDashboardTab } from "../../../lib/HubDashboardTabContext";
+import type { HubDashboardTab } from "../../../lib/HubDashboardTabContext";
 import { useSearch } from "../../../lib/SearchContext";
 import type { HubTab } from "../../../lib/HubTabContext";
 import type { Hub } from "../../../lib/types";
-
-const REMINDER_TABS = [
-  { key: 'suggested', label: 'Suggested' },
-  { key: 'manual', label: 'Manual' },
-];
-
-const EMPTY_SOURCES: never[] = [];
 
 const VALID_TABS: HubTab[] = ['chat', 'sources', 'dashboard', 'members', 'settings', 'admin'];
 
@@ -36,11 +31,11 @@ export default function HubDetail({ params }: { params: { hubId: string } }) {
   const hasTrackedAccess = useRef(false);
   const previousHubId = useRef<string | null>(null);
   const { activeTab, setActiveTab } = useHubTab();
+  const { activeDashTab, setActiveDashTab } = useHubDashboardTab();
   const { currentHub: hub, isLoading: currentHubLoading } = useCurrentHub();
   const { setSearchQuery } = useSearch();
-  const [reminderSubTab, setReminderSubTab] = useState('suggested');
-
   // Switch to the tab specified in ?tab= URL param (e.g. from dashboard prompt links)
+  // Only override if the URL explicitly contains a tab param; otherwise leave the current tab alone
   useEffect(() => {
     const tabParam = searchParams.get('tab') as HubTab | null;
     const isNewHub = previousHubId.current !== params.hubId;
@@ -48,10 +43,17 @@ export default function HubDetail({ params }: { params: { hubId: string } }) {
 
     if (tabParam && VALID_TABS.includes(tabParam)) {
       setActiveTab(tabParam);
+      if (tabParam === 'dashboard') {
+        const dashTabParam = searchParams.get('dashTab') as HubDashboardTab | null;
+        const validDashTabs: HubDashboardTab[] = ['overview', 'guides', 'reminders', 'faqs'];
+        if (dashTabParam && validDashTabs.includes(dashTabParam)) {
+          setActiveDashTab(dashTabParam);
+        }
+      }
     } else if (isNewHub) {
       setActiveTab('chat');
     }
-  }, [params.hubId, searchParams, setActiveTab]);
+  }, [params.hubId, searchParams, setActiveTab, setActiveDashTab]);
 
   // Clear search when switching tabs so stale queries don't carry over
   useEffect(() => {
@@ -89,7 +91,6 @@ export default function HubDetail({ params }: { params: { hubId: string } }) {
 
   const chatPanelRef = useRef<ChatPanelHandle>(null);
   const [chatSourceIds, setChatSourceIds] = useState<string[]>([]);
-  const completeSourceIds = (sources ?? EMPTY_SOURCES).filter((s) => s.status === 'complete').map((s) => s.id);
   const handleChatSourceChange = useCallback((ids: string[]) => setChatSourceIds(ids), []);
   const handleToggleSource = useCallback((sourceId: string) => chatPanelRef.current?.toggleSource(sourceId), []);
   const handleSelectAllSources = useCallback((scope?: string[]) => chatPanelRef.current?.selectAllSources(scope), []);
@@ -138,11 +139,11 @@ export default function HubDetail({ params }: { params: { hubId: string } }) {
     return (
       <main className="page-content page-content--no-hero">
         <div className="content-inner">
-          <div className="card" style={{ maxWidth: '720px', margin: '0 auto', padding: '24px' }}>
-            <h2 style={{ marginTop: 0 }}>
+          <div className="card hub-gate">
+            <h2>
               {pendingInvite ? 'Accept your invite to open this hub' : 'Hub access required'}
             </h2>
-            <p className="muted" style={{ marginBottom: '16px' }}>
+            <p className="muted hub-gate__message">
               {pendingInvite
                 ? 'This invite has not been accepted yet. Accept it before viewing chat, sources, or other hub content.'
                 : 'This hub is not available from your accepted memberships.'}
@@ -158,7 +159,7 @@ export default function HubDetail({ params }: { params: { hubId: string } }) {
               </button>
             )}
             {acceptInviteMutation.error && (
-              <p className="muted" role="alert" style={{ marginTop: '12px' }}>
+              <p className="muted hub-gate__error" role="alert">
                 {(acceptInviteMutation.error as Error).message}
               </p>
             )}
@@ -171,7 +172,7 @@ export default function HubDetail({ params }: { params: { hubId: string } }) {
   return (
     <main className={`page-content page-content--no-hero${activeTab === 'chat' ? ' page-content--fullscreen' : ''}`}>
       <div className="content-inner">
-        {activeTab !== 'chat' && activeTab !== 'admin' && activeTab !== 'sources' && activeTab !== 'members' && (
+        {activeTab !== 'chat' && activeTab !== 'admin' && activeTab !== 'sources' && activeTab !== 'members' && activeTab !== 'dashboard' && (
           <header className="hub-header">
             <h2 className="hub-header__name">{hub?.name ?? "Hub"}</h2>
             {hub?.description && (
@@ -216,39 +217,30 @@ export default function HubDetail({ params }: { params: { hubId: string } }) {
           )}
           {activeTab === 'dashboard' && (
             <div className="hub-dashboard">
-              <section className="hub-dashboard__section">
-                <h3 className="hub-dashboard__section-title">Guides</h3>
-                <GuidePanel
+              {activeDashTab === 'overview' && (
+                <DashboardOverview
                   hubId={params.hubId}
-                  selectedSourceIds={chatSourceIds}
-                  hasSelectableSources={completeSourceIds.length > 0}
+                  canEdit={canUpload}
+                  onSwitchTab={setActiveDashTab}
+                />
+              )}
+              {activeDashTab === 'guides' && (
+                <GuidesPage
+                  hubId={params.hubId}
+                  sources={sources ?? []}
                   canEdit={canUpload}
                 />
-              </section>
-              <section className="hub-dashboard__section">
-                <h3 className="hub-dashboard__section-title">FAQs</h3>
-                <FaqPanel
+              )}
+              {activeDashTab === 'reminders' && (
+                <RemindersPage hubId={params.hubId} />
+              )}
+              {activeDashTab === 'faqs' && (
+                <FaqsPage
                   hubId={params.hubId}
-                  selectedSourceIds={chatSourceIds}
-                  hasSelectableSources={completeSourceIds.length > 0}
+                  sources={sources ?? []}
                   canEdit={canUpload}
                 />
-              </section>
-              <section className="hub-dashboard__section">
-                <h3 className="hub-dashboard__section-title">Reminders</h3>
-                <div className="grid" style={{ gap: '16px' }}>
-                  <TabSwitcher
-                    tabs={REMINDER_TABS}
-                    activeKey={reminderSubTab}
-                    onTabChange={setReminderSubTab}
-                  />
-                  {reminderSubTab === 'suggested' ? (
-                    <ReminderCandidatesPanel hubId={params.hubId} />
-                  ) : (
-                    <RemindersPanel hubId={params.hubId} />
-                  )}
-                </div>
-              </section>
+              )}
             </div>
           )}
           {activeTab === 'settings' && (

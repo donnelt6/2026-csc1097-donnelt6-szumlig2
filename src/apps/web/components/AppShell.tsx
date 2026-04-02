@@ -11,6 +11,7 @@ import { NotificationsMenu } from './navigation/NotificationsMenu';
 import { useAuth } from './auth/AuthProvider';
 import { useSearch } from '../lib/SearchContext';
 import { useHubTab } from '../lib/HubTabContext';
+import { useHubDashboardTab, type HubDashboardTab } from '../lib/HubDashboardTabContext';
 import { listHubs, searchChatMessages } from '../lib/api';
 import { CurrentHubProvider } from '../lib/CurrentHubContext';
 import { resolveHubAppearance } from '../lib/hubAppearance';
@@ -35,6 +36,14 @@ export function AppShell({ children }: AppShellProps) {
   const { user, loading } = useAuth();
   const { searchQuery, setSearchQuery } = useSearch();
   const { activeTab } = useHubTab();
+  const { activeDashTab, setActiveDashTab } = useHubDashboardTab();
+
+  const hubDashboardTabs: { key: HubDashboardTab; label: string }[] = [
+    { key: 'overview', label: 'Dashboard' },
+    { key: 'guides', label: 'Guides' },
+    { key: 'reminders', label: 'Reminders' },
+    { key: 'faqs', label: 'FAQs' },
+  ];
 
   const isAuthPage = pathname.startsWith('/auth');
   const isHome = pathname === '/';
@@ -218,69 +227,97 @@ export function AppShell({ children }: AppShellProps) {
                     <span className="nav-current-hub-name">{currentHub.name}</span>
                   </div>
                 )}
-                <div className="nav-search nav-search--hub-chat">
-                  {activeTab === 'chat' ? (
-                    <div className="nav-chat-search" ref={chatSearchRef}>
-                      <MagnifyingGlassIcon className="nav-search-icon" />
-                      <input
-                        type="text"
-                        placeholder="Search conversations..."
-                        value={chatSearchQuery}
-                        onChange={(e) => setChatSearchQuery(e.target.value)}
-                        onFocus={() => setChatSearchFocused(true)}
-                        className="nav-search-input"
-                      />
-                      {showChatSearchDropdown && (
-                        <div className="nav-chat-search-dropdown">
-                          {chatSearchLoading ? (
-                            <div className="nav-chat-search-empty">Searching chats...</div>
-                          ) : chatSearchResults.length > 0 ? (
-                            chatSearchResults.map((result) => (
-                              <button
-                                key={`${result.session_id}-${result.message_id ?? 'title'}`}
-                                type="button"
-                                className="nav-chat-search-item"
-                                onClick={() => handleChatSearchResultClick(result.session_id, result.message_id)}
-                              >
-                                {result.matched_role === 'title' ? (
-                                  <DocumentTextIcon className="nav-chat-search-item-icon nav-chat-search-item-icon--title" />
-                                ) : (
-                                  <ChatBubbleLeftRightIcon className="nav-chat-search-item-icon nav-chat-search-item-icon--message" />
-                                )}
-                                <div className="nav-chat-search-item-info">
-                                  <div className="nav-chat-search-item-header">
-                                    <span className="nav-chat-search-item-name">{result.session_title}</span>
-                                    <span className={`nav-chat-search-item-kind nav-chat-search-item-kind--${result.matched_role === 'title' ? 'title' : result.matched_role === 'user' ? 'query' : 'response'}`}>
-                                      {result.matched_role === 'title' ? 'Title' : result.matched_role === 'user' ? 'Query' : 'Response'}
+                {activeTab === 'dashboard' ? (
+                  <div className="dash-nav-row">
+                    <div className="dash-nav-tabs">
+                      {hubDashboardTabs.map((tab) => (
+                        <button
+                          key={tab.key}
+                          className={`dash-nav-tab ${activeDashTab === tab.key ? 'dash-nav-tab--active' : ''}`}
+                          onClick={() => { setActiveDashTab(tab.key); setSearchQuery(''); }}
+                        >
+                          {tab.label}
+                        </button>
+                      ))}
+                    </div>
+                    {(activeDashTab === 'faqs' || activeDashTab === 'guides') && (
+                      <div className="nav-search nav-search--dash">
+                        <MagnifyingGlassIcon className="nav-search-icon" />
+                        <input
+                          type="text"
+                          placeholder={activeDashTab === 'faqs' ? "Search FAQs..." : "Search guides..."}
+                          value={searchQuery}
+                          onChange={(e) => setSearchQuery(e.target.value)}
+                          className="nav-search-input"
+                        />
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="nav-search nav-search--hub-chat">
+                    {activeTab === 'chat' ? (
+                      <div className="nav-chat-search" ref={chatSearchRef}>
+                        <MagnifyingGlassIcon className="nav-search-icon" />
+                        <input
+                          type="text"
+                          placeholder="Search conversations..."
+                          value={chatSearchQuery}
+                          onChange={(e) => setChatSearchQuery(e.target.value)}
+                          onFocus={() => setChatSearchFocused(true)}
+                          className="nav-search-input"
+                        />
+                        {showChatSearchDropdown && (
+                          <div className="nav-chat-search-dropdown">
+                            {chatSearchLoading ? (
+                              <div className="nav-chat-search-empty">Searching chats...</div>
+                            ) : chatSearchResults.length > 0 ? (
+                              chatSearchResults.map((result) => (
+                                <button
+                                  key={`${result.session_id}-${result.message_id ?? 'title'}`}
+                                  type="button"
+                                  className="nav-chat-search-item"
+                                  onClick={() => handleChatSearchResultClick(result.session_id, result.message_id)}
+                                >
+                                  {result.matched_role === 'title' ? (
+                                    <DocumentTextIcon className="nav-chat-search-item-icon nav-chat-search-item-icon--title" />
+                                  ) : (
+                                    <ChatBubbleLeftRightIcon className="nav-chat-search-item-icon nav-chat-search-item-icon--message" />
+                                  )}
+                                  <div className="nav-chat-search-item-info">
+                                    <div className="nav-chat-search-item-header">
+                                      <span className="nav-chat-search-item-name">{result.session_title}</span>
+                                      <span className={`nav-chat-search-item-kind nav-chat-search-item-kind--${result.matched_role === 'title' ? 'title' : result.matched_role === 'user' ? 'query' : 'response'}`}>
+                                        {result.matched_role === 'title' ? 'Title' : result.matched_role === 'user' ? 'Query' : 'Response'}
+                                      </span>
+                                    </div>
+                                    <span className="nav-chat-search-item-meta">
+                                      {result.matched_role === 'title'
+                                        ? `Title: ${result.snippet}`
+                                        : `${result.matched_role === 'user' ? 'You' : 'Caddie'}: ${result.snippet}`}
                                     </span>
                                   </div>
-                                  <span className="nav-chat-search-item-meta">
-                                    {result.matched_role === 'title'
-                                      ? `Title: ${result.snippet}`
-                                      : `${result.matched_role === 'user' ? 'You' : 'Caddie'}: ${result.snippet}`}
-                                  </span>
-                                </div>
-                              </button>
-                            ))
-                          ) : (
-                            <div className="nav-chat-search-empty">No matching messages found.</div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <>
-                      <MagnifyingGlassIcon className="nav-search-icon" />
-                      <input
-                        type="text"
-                        placeholder={activeTab === 'sources' ? "Search sources..." : activeTab === 'members' ? "Search members..." : "Search conversations..."}
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        className="nav-search-input"
-                      />
-                    </>
-                  )}
-                </div>
+                                </button>
+                              ))
+                            ) : (
+                              <div className="nav-chat-search-empty">No matching messages found.</div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <>
+                        <MagnifyingGlassIcon className="nav-search-icon" />
+                        <input
+                          type="text"
+                          placeholder={activeTab === 'sources' ? "Search sources..." : activeTab === 'members' ? "Search members..." : "Search conversations..."}
+                          value={searchQuery}
+                          onChange={(e) => setSearchQuery(e.target.value)}
+                          className="nav-search-input"
+                        />
+                      </>
+                    )}
+                  </div>
+                )}
               </>
             ) : isSettingsPage ? null : (
               <div className="nav-search nav-search--hubs">

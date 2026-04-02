@@ -185,6 +185,7 @@ export interface GuideEntry {
   topic?: string | null;
   summary?: string | null;
   source_ids: string[];
+  is_favourited?: boolean;
   archived_at?: string | null;
   created_at: string;
   created_by?: string | null;
@@ -272,7 +273,7 @@ export interface FlaggedChatDetail {
 
 export type ReminderStatus = "scheduled" | "sent" | "completed" | "cancelled";
 export type ReminderCandidateStatus = "pending" | "accepted" | "declined" | "expired";
-export type ReminderUpdateAction = "complete" | "cancel" | "snooze";
+export type ReminderUpdateAction = "complete" | "cancel" | "snooze" | "reopen";
 export type NotificationStatus = "queued" | "sent" | "failed";
 export type NotificationChannel = "in_app";
 
@@ -283,7 +284,9 @@ export interface Reminder {
   source_id?: string | null;
   due_at: string;
   timezone: string;
+  title?: string | null;
   message?: string | null;
+  notify_before?: number | null;
   status: ReminderStatus;
   created_at: string;
   sent_at?: string | null;

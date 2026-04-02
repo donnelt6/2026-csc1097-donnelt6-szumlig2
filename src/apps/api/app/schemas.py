@@ -524,6 +524,12 @@ class FaqEntry(BaseModel):
     generation_batch_id: Optional[str] = None
 
 
+class FaqCreateRequest(StrictModel):
+    hub_id: UUID
+    question: str = Field(..., min_length=1, max_length=4000)
+    answer: str = Field(..., min_length=1, max_length=8000)
+
+
 class FaqGenerateRequest(StrictModel):
     hub_id: UUID
     source_ids: List[UUID]
@@ -576,6 +582,7 @@ class GuideEntry(BaseModel):
     topic: Optional[str] = None
     summary: Optional[str] = None
     source_ids: List[str] = Field(default_factory=list)
+    is_favourited: bool = False
     archived_at: Optional[datetime] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
     created_by: Optional[str] = None
@@ -600,6 +607,7 @@ class GuideUpdateRequest(StrictModel):
     title: Optional[str] = Field(default=None, min_length=1, max_length=240)
     topic: Optional[str] = Field(default=None, max_length=240)
     summary: Optional[str] = Field(default=None, max_length=2000)
+    is_favourited: Optional[bool] = None
     archived: Optional[bool] = None
 
 
@@ -652,7 +660,9 @@ class Reminder(BaseModel):
     source_id: Optional[str] = None
     due_at: datetime
     timezone: str
+    title: Optional[str] = None
     message: Optional[str] = None
+    notify_before: Optional[int] = None
     status: ReminderStatus
     created_at: datetime = Field(default_factory=datetime.utcnow)
     sent_at: Optional[datetime] = None
@@ -664,19 +674,24 @@ class ReminderCreate(StrictModel):
     source_id: Optional[UUID] = None
     due_at: datetime
     timezone: str = Field(..., min_length=1, max_length=64)
+    title: Optional[str] = Field(default=None, max_length=100)
     message: Optional[str] = Field(default=None, max_length=500)
+    notify_before: Optional[int] = Field(default=None, ge=0, le=60 * 24 * 7)
 
 
 class ReminderUpdateAction(str, Enum):
     complete = "complete"
     cancel = "cancel"
     snooze = "snooze"
+    reopen = "reopen"
 
 
 class ReminderUpdate(StrictModel):
     due_at: Optional[datetime] = None
     timezone: Optional[str] = Field(default=None, min_length=1, max_length=64)
+    title: Optional[str] = Field(default=None, max_length=100)
     message: Optional[str] = Field(default=None, max_length=500)
+    notify_before: Optional[int] = Field(default=None, ge=0, le=60 * 24 * 7)
     action: Optional[ReminderUpdateAction] = None
     snooze_minutes: Optional[int] = Field(default=None, ge=1, le=60 * 24 * 30)
 

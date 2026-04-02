@@ -4,6 +4,13 @@ from app.main import app
 from app.schemas import FaqEntry, HubMember, MembershipRole
 from app.services import store as store_module
 
+OWNER = HubMember(
+    hub_id="11111111-1111-1111-1111-111111111111",
+    user_id="00000000-0000-0000-0000-000000000001",
+    role=MembershipRole.owner,
+    accepted_at="2026-01-01T00:00:00Z",
+)
+
 
 def test_faq_generate_requires_editor(client, monkeypatch) -> None:
     member = HubMember(
@@ -39,6 +46,7 @@ def test_faq_list_returns_entries(client, monkeypatch) -> None:
         created_at="2026-01-01T00:00:00Z",
     )
 
+    monkeypatch.setattr(store_module.store, "get_member_role", lambda _client, hub_id, user_id: OWNER)
     monkeypatch.setattr(store_module.store, "list_faqs", lambda _client, hub_id: [entry])
 
     resp = client.get("/faqs", params={"hub_id": entry.hub_id})
