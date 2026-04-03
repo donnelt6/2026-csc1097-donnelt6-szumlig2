@@ -22,6 +22,8 @@ import {
   createFlaggedChatRevision,
   applyFlaggedChatRevision,
 } from '../lib/api';
+import { HubAnalyticsPanel } from './HubAnalyticsPanel';
+import { useHubDashboardTab } from '../lib/HubDashboardTabContext';
 import type {
   Citation,
   FlaggedContentQueueItem,
@@ -41,6 +43,7 @@ interface AdminDashboardProps {
 
 export function AdminDashboard({ hubId, hubRole, onSwitchTab }: AdminDashboardProps) {
   const queryClient = useQueryClient();
+  const { activeAdminTab } = useHubDashboardTab();
   const canModerate = hubRole === 'owner' || hubRole === 'admin';
 
   const [modTab, setModTab] = useState<ModTab>('chats');
@@ -238,6 +241,10 @@ export function AdminDashboard({ hubId, hubRole, onSwitchTab }: AdminDashboardPr
 
   return (
     <div className="admin">
+      {activeAdminTab === 'analytics' ? (
+        <HubAnalyticsPanel hubId={hubId} hubRole={hubRole} />
+      ) : (
+      <>
       <h2 className="admin__title">Admin Console</h2>
       <p className="admin__description">Manage sources, moderate content, and review flagged items.</p>
 
@@ -455,6 +462,8 @@ export function AdminDashboard({ hubId, hubRole, onSwitchTab }: AdminDashboardPr
             </div>
           </div>
         </div>
+      )}
+      </>
       )}
     </div>
   );

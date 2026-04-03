@@ -5,7 +5,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ChatPanel } from "../../../components/ChatPanel";
 import type { ChatPanelHandle } from "../../../components/ChatPanel";
-import { HubAnalyticsPanel } from "../../../components/HubAnalyticsPanel";
 import { AdminDashboard } from "../../../components/AdminDashboard";
 import { UploadPanel } from "../../../components/UploadPanel";
 import { MembersPanel } from "../../../components/MembersPanel";
