@@ -595,6 +595,15 @@ class ChatStoreMixin:
             message_id=str(payload.message_id) if payload.message_id else None,
             metadata=payload.metadata,
         )
+        self.log_activity(
+            client,
+            str(payload.hub_id),
+            user_id,
+            payload.event_type.value,
+            "chat_event",
+            str(payload.message_id or payload.session_id or payload.hub_id),
+            payload.metadata,
+        )
         return ChatEventResponse(
             event_type=ChatEventType(inserted.get("event_type") or payload.event_type.value),
             created_at=inserted.get("created_at") or datetime.now(timezone.utc),
@@ -1443,6 +1452,15 @@ class ChatStoreMixin:
             event_type=ChatEventType.answer_feedback_submitted.value,
             metadata={"rating": payload.rating.value},
         )
+        self.log_activity(
+            client,
+            str(session_row["hub_id"]),
+            user_id,
+            "submitted",
+            "chat_feedback",
+            str(message_id),
+            {"rating": payload.rating.value},
+        )
         return ChatFeedbackResponse(
             message_id=str(message_id),
             rating=ChatFeedbackRating(str(row.get("rating") or payload.rating.value)),
@@ -1505,6 +1523,19 @@ class ChatStoreMixin:
             metadata={
                 "source_id": payload.source_id,
                 "chunk_index": payload.chunk_index,
+            },
+        )
+        self.log_activity(
+            client,
+            str(session_row["hub_id"]),
+            user_id,
+            "submitted",
+            "citation_feedback",
+            str(message_id),
+            {
+                "source_id": payload.source_id,
+                "chunk_index": payload.chunk_index,
+                "event_type": payload.event_type.value,
             },
         )
         return CitationFeedbackResponse(

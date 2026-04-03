@@ -3,8 +3,9 @@
 from .internals import ConflictError, SupabaseStore as _InternalSupabaseStore, logger
 
 
-class StoreBase:
+class StoreBase(_InternalSupabaseStore):
     """Base class that preserves the original store constructor."""
 
-    # Reuse the original store constructor so every mixin instance gets the same shared clients and settings.
-    __init__ = _InternalSupabaseStore.__init__
+    # Keep constructor chaining explicit so future mixins can safely participate via super().
+    def __init__(self) -> None:
+        super().__init__()
