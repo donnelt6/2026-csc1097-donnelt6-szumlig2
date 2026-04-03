@@ -11,15 +11,23 @@ from app.services import store as store_module
 from app.services.store import ConflictError
 
 
+# Test rate limiter that always returns the same result.
+# Test helpers and fixtures.
 class FixedRateLimiter:
+
+    # Initializes the test helper state used by this class.
     def __init__(self, result: rate_limit_module.RateLimitResult) -> None:
         self.result = result
 
+    # Returns the configured rate-limit result for each check.
     def check(self, key: str, limit: int, window_seconds: int = 60) -> rate_limit_module.RateLimitResult:
         return self.result
 
 
+# Verifies that list sources returns sources.
+# Endpoint behavior tests.
 def test_list_sources_returns_sources(client, monkeypatch) -> None:
+
     # Mocks list_sources; expect /sources/{hub_id} to return sources.
     source = Source(
         id="src-1",
@@ -34,6 +42,7 @@ def test_list_sources_returns_sources(client, monkeypatch) -> None:
     assert resp.json()[0]["id"] == "src-1"
 
 
+# Verifies that create source rate limited.
 def test_create_source_rate_limited(client, monkeypatch) -> None:
     # Forces rate limit failure; expect 429 response.
     rl = rate_limit_module.RateLimitResult(allowed=False, remaining=0, reset_in_seconds=10)
@@ -46,6 +55,7 @@ def test_create_source_rate_limited(client, monkeypatch) -> None:
     assert resp.status_code == 429
 
 
+# Verifies that create source success.
 def test_create_source_success(client, monkeypatch) -> None:
     # Mocks create_source; expect 201 with upload URL and source payload.
     rl = rate_limit_module.RateLimitResult(allowed=True, remaining=1, reset_in_seconds=60)
@@ -69,6 +79,7 @@ def test_create_source_success(client, monkeypatch) -> None:
     assert data["upload_url"] == "http://upload"
 
 
+# Verifies that get source status not found.
 def test_get_source_status_not_found(client, monkeypatch) -> None:
     # Mocks missing source; expect 404 response.
     def raise_not_found(_client, source_id):
@@ -79,6 +90,7 @@ def test_get_source_status_not_found(client, monkeypatch) -> None:
     assert resp.status_code == 404
 
 
+# Verifies that enqueue source missing storage path.
 def test_enqueue_source_missing_storage_path(client, monkeypatch) -> None:
     # Mocks source without storage path; expect 400 response.
     rl = rate_limit_module.RateLimitResult(allowed=True, remaining=1, reset_in_seconds=60)
@@ -96,6 +108,7 @@ def test_enqueue_source_missing_storage_path(client, monkeypatch) -> None:
     assert resp.status_code == 400
 
 
+# Verifies that enqueue source success.
 def test_enqueue_source_success(client, monkeypatch) -> None:
     # Mocks enqueue path; expect task dispatch and queued status.
     rl = rate_limit_module.RateLimitResult(allowed=True, remaining=1, reset_in_seconds=60)
@@ -117,6 +130,7 @@ def test_enqueue_source_success(client, monkeypatch) -> None:
 
     sent = {}
 
+    # Simulates Celery task dispatch so the test can inspect the payload.
     def fake_send_task(name, args):
         sent["name"] = name
         sent["args"] = args
@@ -128,6 +142,7 @@ def test_enqueue_source_success(client, monkeypatch) -> None:
     assert resp.json()["status"] == "queued"
 
 
+# Verifies that create upload url success.
 def test_create_upload_url_success(client, monkeypatch) -> None:
     # Mocks upload URL creation; expect 200 with upload URL payload.
     source = Source(
@@ -145,6 +160,7 @@ def test_create_upload_url_success(client, monkeypatch) -> None:
     assert resp.json()["upload_url"] == "http://upload.retry"
 
 
+# Verifies that create upload url missing storage path.
 def test_create_upload_url_missing_storage_path(client, monkeypatch) -> None:
     # Mocks source without storage path; expect 400 response.
     source = Source(
@@ -159,6 +175,7 @@ def test_create_upload_url_missing_storage_path(client, monkeypatch) -> None:
     assert resp.status_code == 400
 
 
+# Verifies that fail source success.
 def test_fail_source_success(client, monkeypatch) -> None:
     # Mocks status update; expect 200 with failed status.
     source = Source(
@@ -184,6 +201,7 @@ def test_fail_source_success(client, monkeypatch) -> None:
     assert data["failure_reason"] == "upload failed"
 
 
+# Verifies that create web source success.
 def test_create_web_source_success(client, monkeypatch) -> None:
     # Mocks web source creation; expect ingest_web_source task enqueued.
     rl = rate_limit_module.RateLimitResult(allowed=True, remaining=1, reset_in_seconds=60)
@@ -201,6 +219,7 @@ def test_create_web_source_success(client, monkeypatch) -> None:
 
     sent = {}
 
+    # Simulates Celery task dispatch so the test can inspect the payload.
     def fake_send_task(name, args):
         sent["name"] = name
         sent["args"] = args
@@ -216,6 +235,7 @@ def test_create_web_source_success(client, monkeypatch) -> None:
     assert sent["args"][0] == "src-web-1"
 
 
+# Verifies that create youtube source success.
 def test_create_youtube_source_success(client, monkeypatch) -> None:
     # Mocks YouTube source creation; expect ingest_youtube_source task enqueued.
     rl = rate_limit_module.RateLimitResult(allowed=True, remaining=1, reset_in_seconds=60)
@@ -234,6 +254,7 @@ def test_create_youtube_source_success(client, monkeypatch) -> None:
 
     sent = {}
 
+    # Simulates Celery task dispatch so the test can inspect the payload.
     def fake_send_task(name, args):
         sent["name"] = name
         sent["args"] = args
@@ -255,11 +276,13 @@ def test_create_youtube_source_success(client, monkeypatch) -> None:
     assert sent["args"][-1] == "abc123def45"
 
 
+# Verifies that create youtube source invalid video id.
 def test_create_youtube_source_invalid_video_id(client, monkeypatch) -> None:
     # Mocks failure to extract video ID; expect 400 response.
     rl = rate_limit_module.RateLimitResult(allowed=True, remaining=1, reset_in_seconds=60)
     monkeypatch.setitem(app.dependency_overrides, get_rate_limiter, lambda: FixedRateLimiter(rl))
 
+    # Helper used by the surrounding test code.
     def raise_invalid(_client, _payload):
         raise ValueError("Unable to extract YouTube video ID")
 
@@ -272,6 +295,7 @@ def test_create_youtube_source_invalid_video_id(client, monkeypatch) -> None:
     assert resp.status_code == 400
 
 
+# Verifies that create youtube source requires http url.
 def test_create_youtube_source_requires_http_url(client) -> None:
     # Missing scheme should fail validation.
     resp = client.post(
@@ -281,6 +305,7 @@ def test_create_youtube_source_requires_http_url(client) -> None:
     assert resp.status_code == 422
 
 
+# Verifies that create youtube source requires youtube domain.
 def test_create_youtube_source_requires_youtube_domain(client) -> None:
     # Non-YouTube domains should fail validation.
     resp = client.post(
@@ -290,6 +315,7 @@ def test_create_youtube_source_requires_youtube_domain(client) -> None:
     assert resp.status_code == 422
 
 
+# Verifies that refresh web source success.
 def test_refresh_web_source_success(client, monkeypatch) -> None:
     # Mocks refresh; expect ingest_web_source task enqueued.
     rl = rate_limit_module.RateLimitResult(allowed=True, remaining=1, reset_in_seconds=60)
@@ -312,6 +338,7 @@ def test_refresh_web_source_success(client, monkeypatch) -> None:
 
     sent = {}
 
+    # Simulates Celery task dispatch so the test can inspect the payload.
     def fake_send_task(name, args):
         sent["name"] = name
         sent["args"] = args
@@ -324,6 +351,7 @@ def test_refresh_web_source_success(client, monkeypatch) -> None:
     assert sent["args"][0] == source_id
 
 
+# Verifies that refresh youtube source success.
 def test_refresh_youtube_source_success(client, monkeypatch) -> None:
     # Mocks refresh; expect ingest_youtube_source task enqueued.
     rl = rate_limit_module.RateLimitResult(allowed=True, remaining=1, reset_in_seconds=60)
@@ -355,6 +383,7 @@ def test_refresh_youtube_source_success(client, monkeypatch) -> None:
 
     sent = {}
 
+    # Simulates Celery task dispatch so the test can inspect the payload.
     def fake_send_task(name, args):
         sent["name"] = name
         sent["args"] = args
@@ -368,6 +397,7 @@ def test_refresh_youtube_source_success(client, monkeypatch) -> None:
     assert sent["args"][-1] == "abc123def45"
 
 
+# Verifies that list source suggestions returns pending items.
 def test_list_source_suggestions_returns_pending_items(client, monkeypatch) -> None:
     suggestion = SourceSuggestion(
         id="11111111-1111-1111-1111-111111111111",
@@ -387,6 +417,7 @@ def test_list_source_suggestions_returns_pending_items(client, monkeypatch) -> N
     assert resp.json()[0]["id"] == suggestion.id
 
 
+# Verifies that accept web source suggestion success.
 def test_accept_web_source_suggestion_success(client, monkeypatch) -> None:
     suggestion_id = "11111111-1111-1111-1111-111111111111"
     hub_id = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
@@ -432,6 +463,7 @@ def test_accept_web_source_suggestion_success(client, monkeypatch) -> None:
 
     sent = {}
 
+    # Simulates Celery task dispatch so the test can inspect the payload.
     def fake_send_task(name, args):
         sent["name"] = name
         sent["args"] = args
@@ -445,6 +477,7 @@ def test_accept_web_source_suggestion_success(client, monkeypatch) -> None:
     assert sent["args"][0] == source.id
 
 
+# Verifies that accept youtube source suggestion success.
 def test_accept_youtube_source_suggestion_success(client, monkeypatch) -> None:
     suggestion_id = "22222222-2222-2222-2222-222222222222"
     hub_id = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
@@ -491,6 +524,7 @@ def test_accept_youtube_source_suggestion_success(client, monkeypatch) -> None:
 
     sent = {}
 
+    # Simulates Celery task dispatch so the test can inspect the payload.
     def fake_send_task(name, args):
         sent["name"] = name
         sent["args"] = args
@@ -504,6 +538,7 @@ def test_accept_youtube_source_suggestion_success(client, monkeypatch) -> None:
     assert sent["args"][-1] == "abc123def45"
 
 
+# Verifies that decline source suggestion success.
 def test_decline_source_suggestion_success(client, monkeypatch) -> None:
     suggestion_id = "33333333-3333-3333-3333-333333333333"
     hub_id = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
@@ -542,6 +577,7 @@ def test_decline_source_suggestion_success(client, monkeypatch) -> None:
     assert resp.json()["suggestion"]["status"] == "declined"
 
 
+# Verifies that source suggestion review forbidden for viewer.
 def test_source_suggestion_review_forbidden_for_viewer(client, monkeypatch) -> None:
     suggestion = SourceSuggestion(
         id="44444444-4444-4444-4444-444444444444",
@@ -570,6 +606,7 @@ def test_source_suggestion_review_forbidden_for_viewer(client, monkeypatch) -> N
     assert resp.status_code == 403
 
 
+# Verifies that source suggestion not found.
 def test_source_suggestion_not_found(client, monkeypatch) -> None:
     monkeypatch.setattr(
         store_module.store,
@@ -581,6 +618,7 @@ def test_source_suggestion_not_found(client, monkeypatch) -> None:
     assert resp.status_code == 404
 
 
+# Verifies that source suggestion conflict when already reviewed.
 def test_source_suggestion_conflict_when_already_reviewed(client, monkeypatch) -> None:
     suggestion = SourceSuggestion(
         id="66666666-6666-6666-6666-666666666666",
@@ -599,6 +637,7 @@ def test_source_suggestion_conflict_when_already_reviewed(client, monkeypatch) -
     assert resp.status_code == 409
 
 
+# Verifies that source suggestion conflict when review claim is lost.
 def test_source_suggestion_conflict_when_review_claim_is_lost(client, monkeypatch) -> None:
     suggestion = SourceSuggestion(
         id="77777777-7777-7777-7777-777777777777",

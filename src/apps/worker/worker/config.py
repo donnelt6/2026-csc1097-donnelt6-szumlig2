@@ -1,11 +1,15 @@
+"""config.py: Loads environment-backed settings used by the worker tasks and schedulers."""
+
 import os
 from dataclasses import dataclass
 
 from dotenv import load_dotenv
 
+# Loads `.env` values before the settings object reads environment variables.
 load_dotenv()
 
 
+# Groups the worker configuration values into a single reusable settings object.
 @dataclass
 class Settings:
     redis_url: str = os.getenv("REDIS_URL", "redis://localhost:6379/0")
@@ -37,5 +41,6 @@ class Settings:
     suggested_sources_lock_ttl_seconds: int = int(os.getenv("SUGGESTED_SOURCES_LOCK_TTL_SECONDS", "540"))
 
 
+# Builds a fresh settings object from the current environment variables.
 def get_settings() -> Settings:
     return Settings()

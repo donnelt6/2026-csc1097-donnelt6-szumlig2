@@ -1,3 +1,5 @@
+"""guides.py: Lists, generates, updates, and manages multi-step guide content for hubs."""
+
 from datetime import datetime, timezone
 from uuid import UUID
 
@@ -24,11 +26,17 @@ from .errors import raise_postgrest_error
 router = APIRouter(prefix="/guides", tags=["guides"])
 
 
+# Guide permission helpers.
+
+# Restrict guide editing to content-management roles.
 def _require_editor(role: MembershipRole) -> None:
     if role not in (MembershipRole.owner, MembershipRole.admin, MembershipRole.editor):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Owner, admin, or editor role required.")
 
 
+# Guide routes.
+
+# Return all guides the current user can access in a hub.
 @router.get(
     "",
     response_model=list[GuideEntry],
@@ -45,6 +53,7 @@ def list_guides(
         raise_postgrest_error(exc)
 
 
+# Generate a guide from selected source documents.
 @router.post(
     "/generate",
     response_model=GuideGenerateResponse,
@@ -74,6 +83,7 @@ def generate_guide(
         raise_postgrest_error(exc)
 
 
+# Update guide metadata such as title, summary, favourite state, or archive state.
 @router.patch(
     "/{guide_id}",
     response_model=GuideEntry,
@@ -86,6 +96,7 @@ def update_guide(
     current_user: CurrentUser = Depends(get_current_user),
 ) -> GuideEntry:
     updates: dict = {}
+    # Build a partial update payload from only the supplied fields.
     if payload.title is not None:
         updates["title"] = payload.title
     if payload.topic is not None:
@@ -116,6 +127,7 @@ def update_guide(
         raise_postgrest_error(exc)
 
 
+# Update a single guide step's text content.
 @router.patch(
     "/steps/{step_id}",
     response_model=GuideStep,
@@ -128,6 +140,7 @@ def update_guide_step(
     current_user: CurrentUser = Depends(get_current_user),
 ) -> GuideStep:
     updates: dict = {}
+    # Guide steps only allow text field edits here.
     if payload.title is not None:
         updates["title"] = payload.title
     if payload.instruction is not None:
@@ -152,6 +165,7 @@ def update_guide_step(
         raise_postgrest_error(exc)
 
 
+# Add a new step to an existing guide.
 @router.post(
     "/{guide_id}/steps",
     response_model=GuideStep,
@@ -177,6 +191,7 @@ def create_guide_step(
         raise_postgrest_error(exc)
 
 
+# Save a new display order for all steps in a guide.
 @router.post(
     "/{guide_id}/steps/reorder",
     response_model=list[GuideStep],
@@ -195,6 +210,7 @@ def reorder_guide_steps(
         if not member.accepted_at:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invite not accepted yet.")
         _require_editor(member.role)
+        # Convert incoming UUIDs into the ordered string list the store expects.
         ordered_ids = [str(step_id) for step_id in payload.ordered_step_ids]
         return store.reorder_guide_steps(client, str(guide_id), ordered_ids)
     except KeyError as exc:
@@ -205,6 +221,7 @@ def reorder_guide_steps(
         raise_postgrest_error(exc)
 
 
+# Update the current user's completion progress for a guide step.
 @router.patch(
     "/steps/{step_id}/progress",
     response_model=GuideStep,
@@ -230,6 +247,7 @@ def update_guide_progress(
         raise_postgrest_error(exc)
 
 
+# Archive a guide entry.
 @router.delete(
     "/{guide_id}",
     status_code=status.HTTP_204_NO_CONTENT,

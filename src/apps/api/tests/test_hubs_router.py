@@ -6,7 +6,10 @@ from app.schemas import Hub, HubMember, MembershipRole
 from app.services import store as store_module
 
 
+# Builds a hub member record used by membership-related tests.
+# Test helpers and fixtures.
 def _member(role: MembershipRole, *, accepted: bool = True) -> HubMember:
+
     return HubMember(
         hub_id="hub-2",
         user_id="user-1",
@@ -16,7 +19,10 @@ def _member(role: MembershipRole, *, accepted: bool = True) -> HubMember:
     )
 
 
+# Verifies that list hubs returns hubs.
+# Endpoint behavior tests.
 def test_list_hubs_returns_hubs(client, monkeypatch) -> None:
+
     # Mocks list_hubs; expect /hubs returns the mocked hub list.
     hub = Hub(
         id="hub-1",
@@ -38,6 +44,7 @@ def test_list_hubs_returns_hubs(client, monkeypatch) -> None:
     assert data[0]["color_key"] == "slate"
 
 
+# Verifies that create hub returns hub.
 def test_create_hub_returns_hub(client, monkeypatch) -> None:
     # Mocks create_hub; expect 201 and returned hub payload.
     hub = Hub(
@@ -60,6 +67,7 @@ def test_create_hub_returns_hub(client, monkeypatch) -> None:
     assert data["color_key"] == "blue"
 
 
+# Verifies that create hub handles value error.
 def test_create_hub_handles_value_error(client, monkeypatch) -> None:
     # Forces ValueError in store; expect 400 response.
     def raise_value_error(_client, user_id, payload):
@@ -70,11 +78,13 @@ def test_create_hub_handles_value_error(client, monkeypatch) -> None:
     assert resp.status_code == 400
 
 
+# Verifies that create hub rejects invalid appearance keys.
 def test_create_hub_rejects_invalid_appearance_keys(client) -> None:
     resp = client.post("/hubs", json={"name": "Bad Hub", "icon_key": "bad-icon", "color_key": "blue"})
     assert resp.status_code == 400
 
 
+# Verifies that update hub returns updated hub.
 def test_update_hub_returns_updated_hub(client, monkeypatch) -> None:
     hub = Hub(
         id="hub-2",
@@ -95,12 +105,14 @@ def test_update_hub_returns_updated_hub(client, monkeypatch) -> None:
     assert data["color_key"] == "pink"
 
 
+# Verifies that update hub rejects invalid appearance keys.
 def test_update_hub_rejects_invalid_appearance_keys(client, monkeypatch) -> None:
     monkeypatch.setattr(store_module.store, "get_member_role", lambda _client, hub_id, user_id: _member(MembershipRole.owner))
     resp = client.patch("/hubs/hub-2", json={"icon_key": "bad-icon"})
     assert resp.status_code == 400
 
 
+# Verifies that update hub allows admin members.
 def test_update_hub_allows_admin_members(client, monkeypatch) -> None:
     hub = Hub(
         id="hub-2",
@@ -118,6 +130,7 @@ def test_update_hub_allows_admin_members(client, monkeypatch) -> None:
     assert resp.status_code == 200
 
 
+# Verifies that update hub rejects non admin members.
 def test_update_hub_rejects_non_admin_members(client, monkeypatch) -> None:
     monkeypatch.setattr(store_module.store, "get_member_role", lambda _client, hub_id, user_id: _member(MembershipRole.editor))
 
@@ -126,6 +139,7 @@ def test_update_hub_rejects_non_admin_members(client, monkeypatch) -> None:
     assert resp.json()["detail"] == "Owner or admin role required."
 
 
+# Verifies that update hub rejects pending member.
 def test_update_hub_rejects_pending_member(client, monkeypatch) -> None:
     monkeypatch.setattr(store_module.store, "get_member_role", lambda _client, hub_id, user_id: _member(MembershipRole.owner, accepted=False))
 
@@ -134,7 +148,9 @@ def test_update_hub_rejects_pending_member(client, monkeypatch) -> None:
     assert resp.json()["detail"] == "Invite not accepted yet."
 
 
+# Verifies that update hub rejects non member.
 def test_update_hub_rejects_non_member(client, monkeypatch) -> None:
+    # Helper used by the surrounding test code.
     def raise_missing(_client, hub_id, user_id):
         raise KeyError("Membership not found")
 
@@ -145,6 +161,7 @@ def test_update_hub_rejects_non_member(client, monkeypatch) -> None:
     assert resp.json()["detail"] == "Hub access required."
 
 
+# Verifies that archive hub returns archived hub.
 def test_archive_hub_returns_archived_hub(client, monkeypatch) -> None:
     hub = Hub(
         id="hub-2",
@@ -165,6 +182,7 @@ def test_archive_hub_returns_archived_hub(client, monkeypatch) -> None:
     assert data["archived_at"] == "2026-03-24T12:00:00Z"
 
 
+# Verifies that unarchive hub returns unarchived hub.
 def test_unarchive_hub_returns_unarchived_hub(client, monkeypatch) -> None:
     hub = Hub(
         id="hub-2",
@@ -185,6 +203,7 @@ def test_unarchive_hub_returns_unarchived_hub(client, monkeypatch) -> None:
     assert data["archived_at"] is None
 
 
+# Verifies that archive hub rejects non owner.
 def test_archive_hub_rejects_non_owner(client, monkeypatch) -> None:
     monkeypatch.setattr(store_module.store, "get_member_role", lambda _client, hub_id, user_id: _member(MembershipRole.admin))
 
@@ -193,6 +212,7 @@ def test_archive_hub_rejects_non_owner(client, monkeypatch) -> None:
     assert resp.json()["detail"] == "Owner role required."
 
 
+# Verifies that unarchive hub rejects non owner.
 def test_unarchive_hub_rejects_non_owner(client, monkeypatch) -> None:
     monkeypatch.setattr(store_module.store, "get_member_role", lambda _client, hub_id, user_id: _member(MembershipRole.admin))
 

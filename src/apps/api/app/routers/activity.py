@@ -1,3 +1,5 @@
+"""activity.py: Lists activity events for a user, either across hubs or within one hub."""
+
 from typing import Optional
 from uuid import UUID
 
@@ -14,6 +16,9 @@ from .errors import raise_postgrest_error
 router = APIRouter(prefix="/activity", tags=["activity"])
 
 
+# Activity routes.
+
+# Return recent activity, optionally limited to a specific hub.
 @router.get(
     "",
     response_model=list[ActivityEvent],
@@ -28,9 +33,11 @@ def list_activity(
     try:
         accepted_hub_ids: list[str] | None = None
         if hub_id is not None:
+            # When a hub is provided, enforce membership before listing its activity.
             member = require_hub_member(client, str(hub_id), current_user.id)
             require_accepted(member)
         else:
+            # Without a hub filter, only include hubs the user has already accepted.
             accepted_hub_ids = [hub.id for hub in store.list_hubs(client, current_user.id)]
         return store.list_activity(
             client,

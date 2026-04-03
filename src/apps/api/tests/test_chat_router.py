@@ -21,14 +21,20 @@ from app.services import rate_limit as rate_limit_module
 from app.services import store as store_module
 
 
+# Test rate limiter that always returns the same result.
+# Test helpers and fixtures.
 class FixedRateLimiter:
+
+    # Initializes the test helper state used by this class.
     def __init__(self, result: rate_limit_module.RateLimitResult) -> None:
         self.result = result
 
+    # Returns the configured rate-limit result for each check.
     def check(self, key: str, limit: int, window_seconds: int = 60) -> rate_limit_module.RateLimitResult:
         return self.result
 
 
+# Builds a hub member record used by membership-related tests.
 def _member(*, accepted: bool) -> HubMember:
     return HubMember(
         hub_id="11111111-1111-1111-1111-111111111111",
@@ -39,7 +45,10 @@ def _member(*, accepted: bool) -> HubMember:
     )
 
 
+# Verifies that chat rate limited.
+# Endpoint behavior tests.
 def test_chat_rate_limited(client, monkeypatch) -> None:
+
     # Forces rate limit failure; expect 429 response from /chat.
     rl = rate_limit_module.RateLimitResult(allowed=False, remaining=0, reset_in_seconds=10)
     monkeypatch.setitem(app.dependency_overrides, get_rate_limiter, lambda: FixedRateLimiter(rl))
@@ -50,6 +59,7 @@ def test_chat_rate_limited(client, monkeypatch) -> None:
     assert resp.headers["Retry-After"] == "10"
 
 
+# Verifies that list chat sessions rate limited.
 def test_list_chat_sessions_rate_limited(client, monkeypatch) -> None:
     rl = rate_limit_module.RateLimitResult(allowed=False, remaining=0, reset_in_seconds=10)
     monkeypatch.setitem(app.dependency_overrides, get_rate_limiter, lambda: FixedRateLimiter(rl))
@@ -61,6 +71,7 @@ def test_list_chat_sessions_rate_limited(client, monkeypatch) -> None:
     assert resp.headers["Retry-After"] == "10"
 
 
+# Verifies that delete chat session rate limited.
 def test_delete_chat_session_rate_limited(client, monkeypatch) -> None:
     rl = rate_limit_module.RateLimitResult(allowed=False, remaining=0, reset_in_seconds=10)
     monkeypatch.setitem(app.dependency_overrides, get_rate_limiter, lambda: FixedRateLimiter(rl))
@@ -72,6 +83,7 @@ def test_delete_chat_session_rate_limited(client, monkeypatch) -> None:
     assert resp.headers["Retry-After"] == "10"
 
 
+# Verifies that chat success.
 def test_chat_success(client, monkeypatch) -> None:
     # Mocks chat response; expect 200 with answer and citations.
     rl = rate_limit_module.RateLimitResult(allowed=True, remaining=1, reset_in_seconds=60)
@@ -93,6 +105,7 @@ def test_chat_success(client, monkeypatch) -> None:
     assert data["answer"] == "Answer"
 
 
+# Verifies that chat prompt suggestion success.
 def test_chat_prompt_suggestion_success(client, monkeypatch) -> None:
     monkeypatch.setattr(store_module.store, "get_member_role", lambda _client, hub_id, user_id: _member(accepted=True))
     monkeypatch.setattr(
@@ -107,6 +120,7 @@ def test_chat_prompt_suggestion_success(client, monkeypatch) -> None:
     assert resp.json() == {"prompt": "What deadlines matter most here?"}
 
 
+# Verifies that submit chat feedback.
 def test_submit_chat_feedback(client, monkeypatch) -> None:
     monkeypatch.setattr(
         store_module.store,
@@ -128,6 +142,7 @@ def test_submit_chat_feedback(client, monkeypatch) -> None:
     assert resp.json()["rating"] == ChatFeedbackRating.helpful.value
 
 
+# Verifies that submit citation feedback.
 def test_submit_citation_feedback(client, monkeypatch) -> None:
     monkeypatch.setattr(
         store_module.store,
@@ -150,6 +165,7 @@ def test_submit_citation_feedback(client, monkeypatch) -> None:
     assert resp.json()["event_type"] == CitationFeedbackEventType.opened.value
 
 
+# Verifies that create chat event.
 def test_create_chat_event(client, monkeypatch) -> None:
     monkeypatch.setattr(store_module.store, "get_member_role", lambda _client, hub_id, user_id: _member(accepted=True))
     monkeypatch.setattr(
@@ -174,6 +190,7 @@ def test_create_chat_event(client, monkeypatch) -> None:
     assert resp.json()["event_type"] == ChatEventType.answer_copied.value
 
 
+# Verifies that chat accepts source ids.
 def test_chat_accepts_source_ids(client, monkeypatch) -> None:
     rl = rate_limit_module.RateLimitResult(allowed=True, remaining=1, reset_in_seconds=60)
     monkeypatch.setitem(app.dependency_overrides, get_rate_limiter, lambda: FixedRateLimiter(rl))
@@ -187,6 +204,7 @@ def test_chat_accepts_source_ids(client, monkeypatch) -> None:
     )
     captured = {}
 
+    # Helper used by the surrounding test code.
     def fake_chat(_client, user_id, payload):
         captured["source_ids"] = payload.source_ids
         return response
@@ -204,6 +222,7 @@ def test_chat_accepts_source_ids(client, monkeypatch) -> None:
     assert [str(value) for value in captured["source_ids"]] == ["22222222-2222-2222-2222-222222222222"]
 
 
+# Verifies that chat rejects unaccepted invite.
 def test_chat_rejects_unaccepted_invite(client, monkeypatch) -> None:
     monkeypatch.setattr(store_module.store, "get_member_role", lambda _client, hub_id, user_id: _member(accepted=False))
 
@@ -213,6 +232,7 @@ def test_chat_rejects_unaccepted_invite(client, monkeypatch) -> None:
     assert resp.json()["detail"] == "Invite not accepted yet."
 
 
+# Verifies that list chat sessions.
 def test_list_chat_sessions(client, monkeypatch) -> None:
     response = [
         ChatSessionSummary(
@@ -236,6 +256,7 @@ def test_list_chat_sessions(client, monkeypatch) -> None:
     assert data[0]["title"] == "How do I submit assignments?"
 
 
+# Verifies that get chat session messages.
 def test_get_chat_session_messages(client, monkeypatch) -> None:
     response = ChatSessionDetail(
         session=ChatSessionSummary(
@@ -275,6 +296,7 @@ def test_get_chat_session_messages(client, monkeypatch) -> None:
     assert data["messages"][0]["content"] == "How do I submit assignments?"
 
 
+# Verifies that search chat messages.
 def test_search_chat_messages(client, monkeypatch) -> None:
     response = [
         ChatSearchResult(
@@ -304,6 +326,7 @@ def test_search_chat_messages(client, monkeypatch) -> None:
     assert data[0]["matched_role"] == "assistant"
 
 
+# Verifies that search chat messages returns title matches.
 def test_search_chat_messages_returns_title_matches(client, monkeypatch) -> None:
     response = [
         ChatSearchResult(
@@ -332,6 +355,7 @@ def test_search_chat_messages_returns_title_matches(client, monkeypatch) -> None
     assert data[0]["matched_role"] == "title"
 
 
+# Verifies that search chat messages rejects unaccepted invite.
 def test_search_chat_messages_rejects_unaccepted_invite(client, monkeypatch) -> None:
     monkeypatch.setattr(store_module.store, "get_member_role", lambda _client, hub_id, user_id: _member(accepted=False))
 
@@ -344,6 +368,7 @@ def test_search_chat_messages_rejects_unaccepted_invite(client, monkeypatch) -> 
     assert resp.json()["detail"] == "Invite not accepted yet."
 
 
+# Verifies that list chat sessions rejects unaccepted invite.
 def test_list_chat_sessions_rejects_unaccepted_invite(client, monkeypatch) -> None:
     monkeypatch.setattr(store_module.store, "get_member_role", lambda _client, hub_id, user_id: _member(accepted=False))
 
@@ -353,6 +378,7 @@ def test_list_chat_sessions_rejects_unaccepted_invite(client, monkeypatch) -> No
     assert resp.json()["detail"] == "Invite not accepted yet."
 
 
+# Verifies that get chat session messages rejects unaccepted invite.
 def test_get_chat_session_messages_rejects_unaccepted_invite(client, monkeypatch) -> None:
     monkeypatch.setattr(store_module.store, "get_member_role", lambda _client, hub_id, user_id: _member(accepted=False))
 
@@ -365,9 +391,11 @@ def test_get_chat_session_messages_rejects_unaccepted_invite(client, monkeypatch
     assert resp.json()["detail"] == "Invite not accepted yet."
 
 
+# Verifies that delete chat session.
 def test_delete_chat_session(client, monkeypatch) -> None:
     captured = {}
 
+    # Helper used by the surrounding test code.
     def fake_delete(_client, user_id, session_id) -> None:
         captured["session_id"] = session_id
 
@@ -378,6 +406,7 @@ def test_delete_chat_session(client, monkeypatch) -> None:
     assert captured["session_id"] == "11111111-1111-1111-1111-111111111111"
 
 
+# Verifies that rename chat session rejects non owner.
 def test_rename_chat_session_rejects_non_owner(client, monkeypatch) -> None:
     monkeypatch.setattr(
         store_module.store,
@@ -395,6 +424,7 @@ def test_rename_chat_session_rejects_non_owner(client, monkeypatch) -> None:
     assert resp.json()["detail"] == "Only the chat creator can modify this session."
 
 
+# Verifies that delete chat session rejects non owner.
 def test_delete_chat_session_rejects_non_owner(client, monkeypatch) -> None:
     monkeypatch.setattr(
         store_module.store,

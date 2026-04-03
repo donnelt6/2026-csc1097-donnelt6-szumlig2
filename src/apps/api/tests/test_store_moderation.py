@@ -8,24 +8,33 @@ from app.schemas import FlagCaseStatus, FlagReason
 from app.services import store as store_module
 
 
+# Test exception type used to mimic upstream API failures.
+# Test helpers and fixtures.
 class FakeAPIError(Exception):
+
+    # Initializes the test helper state used by this class.
     def __init__(self, message: str, code: str) -> None:
         super().__init__(message)
         self.message = message
         self.code = code
 
 
+# Simple response stub used by the surrounding tests.
 class FakeResponse:
+    # Initializes the test helper state used by this class.
     def __init__(self, data):
         self.data = data
 
 
+# Test double used by the surrounding tests.
 class FakeRpcCall:
+    # Initializes the test helper state used by this class.
     def __init__(self, client: "FakeServiceClient", name: str, payload: dict) -> None:
         self.client = client
         self.name = name
         self.payload = payload
 
+    # Returns the prepared fake response for the current operation.
     def execute(self) -> FakeResponse:
         self.client.rpc_calls.append((self.name, self.payload))
         if self.name == "create_message_flag_case_with_original_revision":
@@ -64,7 +73,9 @@ class FakeRpcCall:
         return FakeResponse([])
 
 
+# Table stub used to emulate Supabase table calls in tests.
 class FakeTable:
+    # Initializes the test helper state used by this class.
     def __init__(self, client: "FakeServiceClient", name: str) -> None:
         self.client = client
         self.name = name
@@ -75,31 +86,38 @@ class FakeTable:
         self._limit: int | None = None
         self._order_desc = False
 
+    # Captures the requested select clause for later execution.
     def select(self, _fields: str) -> "FakeTable":
         self._op = "select"
         return self
 
+    # Records an insert payload and returns the stub for chaining.
     def insert(self, payload: dict) -> "FakeTable":
         self._op = "insert"
         self._payload = payload
         return self
 
+    # Captures an equality filter for the current query stub.
     def eq(self, column: str, value: str) -> "FakeTable":
         self._eq_filters[column] = value
         return self
 
+    # Captures an inclusion filter for the current query stub.
     def in_(self, column: str, values: list[str]) -> "FakeTable":
         self._in_filters[column] = values
         return self
 
+    # Captures ordering details for the current query stub.
     def order(self, _column: str, desc: bool = False) -> "FakeTable":
         self._order_desc = desc
         return self
 
+    # Captures a result limit for the current query stub.
     def limit(self, value: int) -> "FakeTable":
         self._limit = value
         return self
 
+    # Returns the prepared fake response for the current operation.
     def execute(self) -> FakeResponse:
         if self.name == "message_flag_cases":
             if self._op == "select":
@@ -159,7 +177,9 @@ class FakeTable:
         return FakeResponse([])
 
 
+# Service-role client stub used by the surrounding tests.
 class FakeServiceClient:
+    # Initializes the test helper state used by this class.
     def __init__(self) -> None:
         self.flag_cases: list[dict] = []
         self.flag_case_inserts: list[dict] = []
@@ -174,13 +194,16 @@ class FakeServiceClient:
         self.flag_create_session_id = "session-1"
         self.apply_rpc_result: dict | None = None
 
+    # Returns a stub table object for the requested table name.
     def table(self, name: str) -> FakeTable:
         return FakeTable(self, name)
 
+    # Returns a stub RPC call object for the requested procedure.
     def rpc(self, name: str, payload: dict) -> FakeRpcCall:
         return FakeRpcCall(self, name, payload)
 
 
+# Patches the shared service client dependency for moderation store tests.
 @pytest.fixture
 def fake_service_client(monkeypatch) -> FakeServiceClient:
     client = FakeServiceClient()
@@ -188,7 +211,10 @@ def fake_service_client(monkeypatch) -> FakeServiceClient:
     return client
 
 
+# Verifies that flag message creates case and original revision on first flag.
+# Store service tests.
 def test_flag_message_creates_case_and_original_revision_on_first_flag(fake_service_client, monkeypatch) -> None:
+
     fake_service_client.hubs = [{"id": "hub-1", "owner_id": "user-1"}]
     monkeypatch.setattr(
         store_module.store,
@@ -230,6 +256,7 @@ def test_flag_message_creates_case_and_original_revision_on_first_flag(fake_serv
     assert fake_service_client.message_revision_inserts[0]["revision_type"] == "original"
 
 
+# Verifies that flag message returns existing active case without new insert.
 def test_flag_message_returns_existing_active_case_without_new_insert(fake_service_client, monkeypatch) -> None:
     fake_service_client.hubs = [{"id": "hub-1", "owner_id": "user-1"}]
     fake_service_client.chat_sessions = [{"id": "session-1", "hub_id": "hub-1"}]
@@ -274,6 +301,7 @@ def test_flag_message_returns_existing_active_case_without_new_insert(fake_servi
     assert fake_service_client.message_revision_inserts == []
 
 
+# Verifies that flag message recovers from unique race and returns existing case.
 def test_flag_message_recovers_from_unique_race_and_returns_existing_case(fake_service_client, monkeypatch) -> None:
     fake_service_client.hubs = [{"id": "hub-1", "owner_id": "user-1"}]
     fake_service_client.raise_unique_on_flag_insert = True
@@ -321,6 +349,7 @@ def test_flag_message_recovers_from_unique_race_and_returns_existing_case(fake_s
     assert fake_service_client.message_revision_inserts == []
 
 
+# Verifies that flag message rejects user without hub access.
 def test_flag_message_rejects_user_without_hub_access(fake_service_client, monkeypatch) -> None:
     monkeypatch.setattr(
         store_module.store,
@@ -349,6 +378,7 @@ def test_flag_message_rejects_user_without_hub_access(fake_service_client, monke
     assert fake_service_client.rpc_calls == []
 
 
+# Verifies that apply flagged chat revision uses atomic rpc.
 def test_apply_flagged_chat_revision_uses_atomic_rpc(fake_service_client, monkeypatch) -> None:
     monkeypatch.setattr(
         store_module.store,
@@ -402,6 +432,7 @@ def test_apply_flagged_chat_revision_uses_atomic_rpc(fake_service_client, monkey
     )
 
 
+# Verifies that apply flagged chat revision rejects revision from other case.
 def test_apply_flagged_chat_revision_rejects_revision_from_other_case(monkeypatch) -> None:
     monkeypatch.setattr(
         store_module.store,
@@ -428,6 +459,7 @@ def test_apply_flagged_chat_revision_rejects_revision_from_other_case(monkeypatc
         store_module.store.apply_flagged_chat_revision("user-1", "hub-1", "flag-1", "revision-2")
 
 
+# Verifies that apply flagged chat revision rejects original revision.
 def test_apply_flagged_chat_revision_rejects_original_revision(monkeypatch) -> None:
     monkeypatch.setattr(
         store_module.store,
@@ -454,6 +486,7 @@ def test_apply_flagged_chat_revision_rejects_original_revision(monkeypatch) -> N
         store_module.store.apply_flagged_chat_revision("user-1", "hub-1", "flag-1", "revision-1")
 
 
+# Verifies that list flagged chat queue includes deleted sessions.
 def test_list_flagged_chat_queue_includes_deleted_sessions(fake_service_client, monkeypatch) -> None:
     fake_service_client.flag_cases = [
         {
@@ -496,6 +529,7 @@ def test_list_flagged_chat_queue_includes_deleted_sessions(fake_service_client, 
     assert items[0].session_title == "Deleted chat"
 
 
+# Verifies that list flagged chat queue skips unreadable cases.
 def test_list_flagged_chat_queue_skips_unreadable_cases(fake_service_client, monkeypatch) -> None:
     fake_service_client.flag_cases = [
         {
@@ -546,6 +580,7 @@ def test_list_flagged_chat_queue_skips_unreadable_cases(fake_service_client, mon
     assert [item.id for item in items] == ["flag-good"]
 
 
+# Verifies that get flagged chat detail loads deleted session.
 def test_get_flagged_chat_detail_loads_deleted_session(fake_service_client, monkeypatch) -> None:
     fake_service_client.hubs = [{"id": "hub-1", "name": "Hub One"}]
     include_deleted_calls: list[bool] = []
@@ -612,6 +647,7 @@ def test_get_flagged_chat_detail_loads_deleted_session(fake_service_client, monk
     assert include_deleted_calls == [True]
 
 
+# Verifies that flag case generation context loads deleted session.
 def test_flag_case_generation_context_loads_deleted_session(monkeypatch) -> None:
     include_deleted_calls: list[bool] = []
     monkeypatch.setattr(

@@ -12,7 +12,10 @@ OWNER = HubMember(
 )
 
 
+# Verifies that faq generate requires editor.
+# Endpoint behavior tests.
 def test_faq_generate_requires_editor(client, monkeypatch) -> None:
+
     member = HubMember(
         hub_id="11111111-1111-1111-1111-111111111111",
         user_id="00000000-0000-0000-0000-000000000001",
@@ -33,6 +36,7 @@ def test_faq_generate_requires_editor(client, monkeypatch) -> None:
     assert resp.status_code == 403
 
 
+# Verifies that faq list returns entries.
 def test_faq_list_returns_entries(client, monkeypatch) -> None:
     entry = FaqEntry(
         id="faq-1",
@@ -55,6 +59,7 @@ def test_faq_list_returns_entries(client, monkeypatch) -> None:
     assert data[0]["question"] == "What is Caddie?"
 
 
+# Verifies that faq patch updates.
 def test_faq_patch_updates(client, monkeypatch) -> None:
     entry = FaqEntry(
         id="22222222-2222-2222-2222-222222222222",

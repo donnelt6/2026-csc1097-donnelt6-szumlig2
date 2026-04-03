@@ -1,3 +1,5 @@
+"""config.py: Defines application settings, validates environment values, and exposes a cached settings loader."""
+
 from functools import lru_cache
 from typing import List
 from urllib.parse import urlparse
@@ -6,6 +8,7 @@ from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings
 
 
+# Application settings model and defaults.
 class Settings(BaseSettings):
     supabase_url: str = ""
     supabase_anon_key: str = ""
@@ -53,14 +56,17 @@ class Settings(BaseSettings):
         env_file = ".env"
         extra = "ignore"
 
+    # Normalise the environment name so the rest of the config logic can rely on a consistent value.
     @field_validator("environment", mode="before")
     @classmethod
     def normalize_environment(cls, value: object) -> str:
         cleaned = str(value or "local").strip().lower()
         return cleaned or "local"
 
+    # Apply CORS defaults for local development and require explicit origins elsewhere.
     @model_validator(mode="after")
     def apply_environment_origin_rules(self) -> "Settings":
+        # Parse any configured origins first so validation happens before fallback logic is applied.
         origins = self._parse_and_validate_origins(self.allowed_origins)
         if self.environment == "local" and not origins:
             self.allowed_origins = "http://localhost:3000,http://127.0.0.1:3000"
@@ -70,6 +76,7 @@ class Settings(BaseSettings):
         self.cors_allowed_origins = origins
         return self
 
+    # Split the allowed origins string and reject values that are not valid HTTP(S) origins.
     @staticmethod
     def _parse_and_validate_origins(value: str) -> List[str]:
         origins = [item.strip() for item in value.split(",") if item.strip()]
@@ -80,6 +87,7 @@ class Settings(BaseSettings):
         return origins
 
 
+# Return a cached Settings instance so the app reuses one validated config object.
 @lru_cache
 def get_settings() -> Settings:
     return Settings()

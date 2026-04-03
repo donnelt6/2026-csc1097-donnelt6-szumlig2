@@ -6,17 +6,24 @@ from app.schemas import HubCreate, HubUpdate, MembershipRole
 from app.services import store as store_module
 
 
+# Response stub used by the surrounding tests.
+# Test helpers and fixtures.
 class FakeRpcResponse:
+
+    # Initializes the test helper state used by this class.
     def __init__(self, data):
         self.data = data
 
 
+# Test double used by the surrounding tests.
 class FakeRpcCall:
+    # Initializes the test helper state used by this class.
     def __init__(self, client: "FakeServiceClient", name: str, payload: dict) -> None:
         self.client = client
         self.name = name
         self.payload = payload
 
+    # Returns the prepared fake response for the current operation.
     def execute(self) -> FakeRpcResponse:
         self.client.rpc_calls.append((self.name, self.payload))
         return FakeRpcResponse(
@@ -38,7 +45,9 @@ class FakeRpcCall:
         )
 
 
+# Service-role client stub used by the surrounding tests.
 class FakeServiceClient:
+    # Initializes the test helper state used by this class.
     def __init__(self) -> None:
         self.rpc_calls: list[tuple[str, dict]] = []
         self.auth = type(
@@ -53,48 +62,63 @@ class FakeServiceClient:
             },
         )()
 
+    # Returns a stub RPC call object for the requested procedure.
     def rpc(self, name: str, payload: dict) -> FakeRpcCall:
         return FakeRpcCall(self, name, payload)
 
 
+# Simple response stub used by the surrounding tests.
 class FakeResponse:
+    # Initializes the test helper state used by this class.
     def __init__(self, data):
         self.data = data
 
 
+# Query stub used to capture chained store operations in tests.
 class FakeQuery:
+    # Initializes the test helper state used by this class.
     def __init__(self, data):
         self.data = data
 
+    # Captures the requested select clause for later execution.
     def select(self, _fields: str):
         return self
 
+    # Captures an equality filter for the current query stub.
     def eq(self, _column: str, _value: str):
         return self
 
+    # Helper used by the surrounding test code.
     @property
     def not_(self):
         return self
 
+    # Helper used by the surrounding test code.
     def is_(self, _column: str, _value: str):
         return self
 
+    # Captures ordering details for the current query stub.
     def order(self, _column: str, desc: bool = False):
         _ = desc
         return self
 
+    # Captures an inclusion filter for the current query stub.
     def in_(self, _column: str, _values: list[str]):
         return self
 
+    # Returns the prepared fake response for the current operation.
     def execute(self):
         return FakeResponse(self.data)
 
 
+# Simple client stub used by the surrounding tests.
 class FakeClient:
+    # Initializes the test helper state used by this class.
     def __init__(self, memberships: list[dict], members: list[dict]) -> None:
         self.memberships = memberships
         self.members = members
 
+    # Returns a stub table object for the requested table name.
     def table(self, name: str):
         if name == "hub_members":
             if self.members and not self.memberships:
@@ -107,11 +131,14 @@ class FakeClient:
         raise AssertionError(f"Unexpected table {name}")
 
 
+# Query stub used to capture chained store operations in tests.
 class FallbackHubMembersQuery(FakeQuery):
+    # Initializes the test helper state used by this class.
     def __init__(self, responses: list[object]) -> None:
         super().__init__([])
         self.responses = responses
 
+    # Returns the prepared fake response for the current operation.
     def execute(self):
         response = self.responses.pop(0)
         if isinstance(response, Exception):
@@ -119,34 +146,43 @@ class FallbackHubMembersQuery(FakeQuery):
         return FakeResponse(response)
 
 
+# Client stub used by the surrounding tests.
 class FallbackClient:
+    # Initializes the test helper state used by this class.
     def __init__(self, responses: list[object]) -> None:
         self.responses = responses
 
+    # Returns a stub table object for the requested table name.
     def table(self, name: str):
         if name == "hub_members":
             return FallbackHubMembersQuery(self.responses)
         raise AssertionError(f"Unexpected table {name}")
 
 
+# Query stub used to capture chained store operations in tests.
 class FakeHubsQuery:
+    # Initializes the test helper state used by this class.
     def __init__(self, client: "FakeUpdateClient") -> None:
         self.client = client
         self.mode: str | None = None
         self.payload: dict | None = None
 
+    # Captures an update payload for the current query stub.
     def update(self, payload: dict):
         self.mode = "update"
         self.payload = payload
         return self
 
+    # Captures the requested select clause for later execution.
     def select(self, _fields: str):
         self.mode = "select"
         return self
 
+    # Captures an equality filter for the current query stub.
     def eq(self, _column: str, _value: str):
         return self
 
+    # Returns the prepared fake response for the current operation.
     def execute(self):
         if self.mode == "update":
             self.client.update_calls.append(self.payload or {})
@@ -170,34 +206,43 @@ class FakeHubsQuery:
         raise AssertionError("Unexpected hubs query mode")
 
 
+# Client stub used by the surrounding tests.
 class FakeUpdateClient:
+    # Initializes the test helper state used by this class.
     def __init__(self) -> None:
         self.update_calls: list[dict] = []
 
+    # Returns a stub table object for the requested table name.
     def table(self, name: str):
         if name == "hubs":
             return FakeHubsQuery(self)
         raise AssertionError(f"Unexpected table {name}")
 
 
+# Query stub used to capture chained store operations in tests.
 class FakeArchiveHubsQuery:
+    # Initializes the test helper state used by this class.
     def __init__(self, client: "FakeArchiveClient") -> None:
         self.client = client
         self.mode: str | None = None
         self.payload: dict | None = None
 
+    # Captures the requested select clause for later execution.
     def select(self, _fields: str):
         self.mode = "select"
         return self
 
+    # Captures an update payload for the current query stub.
     def update(self, payload: dict):
         self.mode = "update"
         self.payload = payload
         return self
 
+    # Captures an equality filter for the current query stub.
     def eq(self, _column: str, _value: str):
         return self
 
+    # Returns the prepared fake response for the current operation.
     def execute(self):
         if self.mode == "select":
             if not self.client.exists:
@@ -225,19 +270,25 @@ class FakeArchiveHubsQuery:
         raise AssertionError("Unexpected hubs archive query mode")
 
 
+# Client stub used by the surrounding tests.
 class FakeArchiveClient:
+    # Initializes the test helper state used by this class.
     def __init__(self, exists: bool = True) -> None:
         self.exists = exists
         self.update_calls: list[dict] = []
         self.archived_at: str | None = None
 
+    # Returns a stub table object for the requested table name.
     def table(self, name: str):
         if name == "hubs":
             return FakeArchiveHubsQuery(self)
         raise AssertionError(f"Unexpected table {name}")
 
 
+# Verifies that create hub uses atomic service role rpc.
+# Store service tests.
 def test_create_hub_uses_atomic_service_role_rpc(monkeypatch) -> None:
+
     fake_service_client = FakeServiceClient()
     monkeypatch.setattr(store_module.store, "service_client", fake_service_client)
 
@@ -266,6 +317,7 @@ def test_create_hub_uses_atomic_service_role_rpc(monkeypatch) -> None:
     assert hub.color_key == "blue"
 
 
+# Verifies that list hubs returns appearance fields.
 def test_list_hubs_returns_appearance_fields(monkeypatch) -> None:
     fake_service_client = FakeServiceClient()
     monkeypatch.setattr(store_module.store, "service_client", fake_service_client)
@@ -299,6 +351,7 @@ def test_list_hubs_returns_appearance_fields(monkeypatch) -> None:
     assert hubs[0].color_key == "blue"
 
 
+# Verifies that list hubs falls back when appearance columns are missing.
 def test_list_hubs_falls_back_when_appearance_columns_are_missing(monkeypatch) -> None:
     fake_service_client = FakeServiceClient()
     monkeypatch.setattr(store_module.store, "service_client", fake_service_client)
@@ -333,6 +386,7 @@ def test_list_hubs_falls_back_when_appearance_columns_are_missing(monkeypatch) -
     assert hubs[0].color_key == "slate"
 
 
+# Verifies that list hubs falls back when archived at column is missing.
 def test_list_hubs_falls_back_when_archived_at_column_is_missing(monkeypatch) -> None:
     fake_service_client = FakeServiceClient()
     monkeypatch.setattr(store_module.store, "service_client", fake_service_client)
@@ -369,6 +423,7 @@ def test_list_hubs_falls_back_when_archived_at_column_is_missing(monkeypatch) ->
     assert hubs[0].archived_at is None
 
 
+# Verifies that update hub updates then reads back hub.
 def test_update_hub_updates_then_reads_back_hub(monkeypatch) -> None:
     fake_service_client = FakeServiceClient()
     monkeypatch.setattr(store_module.store, "service_client", fake_service_client)
@@ -386,6 +441,7 @@ def test_update_hub_updates_then_reads_back_hub(monkeypatch) -> None:
     assert hub.color_key == "blue"
 
 
+# Verifies that archive hub sets archived at for existing hub.
 def test_archive_hub_sets_archived_at_for_existing_hub(monkeypatch) -> None:
     fake_service_client = FakeServiceClient()
     monkeypatch.setattr(store_module.store, "service_client", fake_service_client)
@@ -398,6 +454,7 @@ def test_archive_hub_sets_archived_at_for_existing_hub(monkeypatch) -> None:
     assert hub.archived_at is not None
 
 
+# Verifies that unarchive hub clears archived at for existing hub.
 def test_unarchive_hub_clears_archived_at_for_existing_hub(monkeypatch) -> None:
     fake_service_client = FakeServiceClient()
     monkeypatch.setattr(store_module.store, "service_client", fake_service_client)

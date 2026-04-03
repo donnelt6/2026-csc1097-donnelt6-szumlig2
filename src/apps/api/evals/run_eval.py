@@ -1,3 +1,5 @@
+"""run_eval.py: Runs local RAG evaluation cases and writes a JSON report of the results."""
+
 from __future__ import annotations
 
 import argparse
@@ -11,6 +13,7 @@ from app.schemas import Citation, HubScope
 from app.services.store import store
 
 
+# One evaluation case loaded from the dataset file.
 @dataclass
 class EvalCase:
     case_id: str
@@ -24,6 +27,7 @@ class EvalCase:
     mode: str = "answer"
 
 
+# Load JSONL evaluation cases from disk.
 def load_cases(path: Path) -> List[EvalCase]:
     cases: List[EvalCase] = []
     for line in path.read_text(encoding="utf-8").splitlines():
@@ -35,6 +39,7 @@ def load_cases(path: Path) -> List[EvalCase]:
     return cases
 
 
+# Normalize stored history into the two formats used by retrieval and generation.
 def normalize_history(history: List[Dict[str, Any]] | None) -> tuple[List[Dict[str, str]], List[Dict[str, Any]]]:
     history_rows = history or []
     return (
@@ -50,6 +55,7 @@ def normalize_history(history: List[Dict[str, Any]] | None) -> tuple[List[Dict[s
     )
 
 
+# Detect whether an answer chose to abstain instead of answering directly.
 def abstained(answer: str) -> bool:
     lowered = (answer or "").lower()
     return any(
@@ -65,6 +71,7 @@ def abstained(answer: str) -> bool:
     )
 
 
+# Run one evaluation case through the chat answer pipeline and compute metrics.
 def run_case(case: EvalCase) -> Dict[str, Any]:
     history_messages, retrieval_history = normalize_history(case.chat_history)
     retrieval_source_ids = case.source_ids or None
@@ -119,6 +126,7 @@ def run_case(case: EvalCase) -> Dict[str, Any]:
     }
 
 
+# Aggregate per-case metrics into one summary block.
 def summarise(results: List[Dict[str, Any]]) -> Dict[str, Any]:
     if not results:
         return {"cases": 0}
@@ -139,6 +147,7 @@ def summarise(results: List[Dict[str, Any]]) -> Dict[str, Any]:
     return summary
 
 
+# Parse CLI arguments, run the dataset, and save the final report.
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run Caddie RAG evals.")
     parser.add_argument("--dataset", default="evals/dataset.jsonl")
@@ -170,5 +179,6 @@ def main() -> None:
     print(json.dumps({"output": str(output_path), "summary": summary}, indent=2))
 
 
+# Run the CLI entry point when the script is executed directly.
 if __name__ == "__main__":
     main()

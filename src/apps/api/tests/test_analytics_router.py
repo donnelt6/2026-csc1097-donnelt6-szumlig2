@@ -1,10 +1,15 @@
+"""test_analytics_router.py: Contains API tests for analytics router."""
 from datetime import datetime
+
 
 from app.schemas import HubMember, MembershipRole
 from app.services import store as store_module
 
 
+# Builds a hub member record used by membership-related tests.
+# Test helpers and fixtures.
 def _member(role: MembershipRole, *, accepted: bool = True) -> HubMember:
+
     return HubMember(
         hub_id="11111111-1111-1111-1111-111111111111",
         user_id="user-1",
@@ -14,7 +19,10 @@ def _member(role: MembershipRole, *, accepted: bool = True) -> HubMember:
     )
 
 
+# Verifies that hub analytics summary requires owner or admin.
+# Endpoint behavior tests.
 def test_hub_analytics_summary_requires_owner_or_admin(client, monkeypatch) -> None:
+
     monkeypatch.setattr(store_module.store, "get_member_role", lambda _client, hub_id, user_id: _member(MembershipRole.viewer))
 
     resp = client.get("/hubs/11111111-1111-1111-1111-111111111111/analytics/summary")
@@ -23,6 +31,7 @@ def test_hub_analytics_summary_requires_owner_or_admin(client, monkeypatch) -> N
     assert "Only hub owners and admins" in resp.json()["detail"]
 
 
+# Verifies that hub analytics summary success.
 def test_hub_analytics_summary_success(client, monkeypatch) -> None:
     monkeypatch.setattr(store_module.store, "get_member_role", lambda _client, hub_id, user_id: _member(MembershipRole.owner))
     monkeypatch.setattr(
@@ -54,6 +63,7 @@ def test_hub_analytics_summary_success(client, monkeypatch) -> None:
     assert resp.json()["total_questions"] == 10
 
 
+# Verifies that hub analytics trends success.
 def test_hub_analytics_trends_success(client, monkeypatch) -> None:
     monkeypatch.setattr(store_module.store, "get_member_role", lambda _client, hub_id, user_id: _member(MembershipRole.admin))
     monkeypatch.setattr(

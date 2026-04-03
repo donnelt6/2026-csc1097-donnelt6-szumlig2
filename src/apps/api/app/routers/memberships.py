@@ -1,3 +1,5 @@
+"""memberships.py: Manages hub members, invites, profile enrichment, and ownership changes."""
+
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -12,16 +14,21 @@ from .errors import raise_postgrest_error
 router = APIRouter(prefix="", tags=["memberships"])
 
 
+# Membership permission helpers.
+
+# Ensure the member has accepted the invite before continuing.
 def _require_accepted(member: HubMember) -> None:
     if not member.accepted_at:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invite not accepted yet.")
 
 
+# Restrict owner-only membership actions.
 def _require_owner(member: HubMember) -> None:
     if member.role != "owner":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Owner role required.")
 
 
+# Attach profile data so membership responses include user-facing details.
 def _attach_profiles(members: list[HubMember]) -> list[HubMember]:
     profile_by_id = store.resolve_user_profiles_by_ids({member.user_id for member in members})
     for member in members:
@@ -36,6 +43,9 @@ def _attach_profiles(members: list[HubMember]) -> list[HubMember]:
     return members
 
 
+# Membership routes.
+
+# Return the member list for a hub, including pending invites for owners.
 @router.get(
     "/hubs/{hub_id}/members",
     response_model=list[HubMember],
@@ -49,6 +59,7 @@ def list_members(
     try:
         member = store.get_member_role(client, hub_id, current_user.id)
         _require_accepted(member)
+        # Owners can see pending invites; other roles only see accepted members.
         include_pending = member.role == "owner"
         members = store.list_members(client, hub_id, include_pending=include_pending)
         return _attach_profiles(members)
@@ -58,6 +69,7 @@ def list_members(
         raise_postgrest_error(exc)
 
 
+# Return all pending invites addressed to the current user.
 @router.get(
     "/invites",
     response_model=list[PendingInvite],
@@ -73,6 +85,7 @@ def list_pending_invites(
         raise_postgrest_error(exc)
 
 
+# Return invite notifications that should appear in the UI.
 @router.get(
     "/invites/notifications",
     response_model=list[PendingInvite],
@@ -88,6 +101,7 @@ def list_invite_notifications(
         raise_postgrest_error(exc)
 
 
+# Invite a new member into a hub.
 @router.post(
     "/hubs/{hub_id}/members/invite",
     response_model=HubInviteResponse,
@@ -101,6 +115,7 @@ def invite_member(
     client: Client = Depends(get_supabase_user_client),
 ) -> HubInviteResponse:
     try:
+        # Reject self-invites early for a clearer client error.
         if current_user.email and payload.email.lower() == current_user.email.lower():
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="You already have access.")
         member = store.get_member_role(client, hub_id, current_user.id)
@@ -115,6 +130,7 @@ def invite_member(
         raise_postgrest_error(exc)
 
 
+# Accept a pending invite for the current user.
 @router.post(
     "/hubs/{hub_id}/members/accept",
     response_model=HubMember,
@@ -135,6 +151,7 @@ def accept_invite(
         raise_postgrest_error(exc)
 
 
+# Dismiss an invite notification without accepting it.
 @router.post(
     "/hubs/{hub_id}/members/dismiss-notification",
     status_code=status.HTTP_204_NO_CONTENT,
@@ -153,6 +170,7 @@ def dismiss_invite_notification(
         raise_postgrest_error(exc)
 
 
+# Change another member's role within a hub.
 @router.patch(
     "/hubs/{hub_id}/members/{user_id}",
     response_model=HubMember,
@@ -180,6 +198,7 @@ def update_member_role(
         raise_postgrest_error(exc)
 
 
+# Remove a member from the hub.
 @router.delete(
     "/hubs/{hub_id}/members/{user_id}",
     status_code=status.HTTP_204_NO_CONTENT,
@@ -205,6 +224,7 @@ def remove_member(
         raise_postgrest_error(exc)
 
 
+# Transfer hub ownership from the current owner to an accepted admin.
 @router.post(
     "/hubs/{hub_id}/members/{user_id}/transfer-ownership",
     response_model=HubMember,
@@ -222,6 +242,7 @@ def transfer_ownership(
         _require_owner(member)
         target_member = store.get_member_role(client, hub_id, str(user_id))
         _require_accepted(target_member)
+        # Ownership transfers are intentionally limited to admins to keep the flow predictable.
         if target_member.role != MembershipRole.admin:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,

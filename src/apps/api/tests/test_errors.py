@@ -7,14 +7,21 @@ from fastapi import HTTPException, status
 from app.routers.errors import raise_postgrest_error, raise_upstream_http_error
 
 
+# Test exception type used to mimic upstream API failures.
+# Test helpers and fixtures.
 class FakeAPIError(Exception):
+
+    # Initializes the test helper state used by this class.
     def __init__(self, message: str, code: str) -> None:
         super().__init__(message)
         self.message = message
         self.code = code
 
 
+# Verifies that raise postgrest error maps rls.
+# Error mapping tests.
 def test_raise_postgrest_error_maps_rls() -> None:
+
     # Simulates RLS error; expect 403 Not authorized.
     exc = FakeAPIError("row level security violation", "42501")
     with pytest.raises(HTTPException) as excinfo:
@@ -22,6 +29,7 @@ def test_raise_postgrest_error_maps_rls() -> None:
     assert excinfo.value.status_code == status.HTTP_403_FORBIDDEN
 
 
+# Verifies that raise postgrest error maps unique.
 def test_raise_postgrest_error_maps_unique() -> None:
     # Simulates unique constraint error; expect 409 conflict.
     exc = FakeAPIError("duplicate key value violates unique constraint", "23505")
@@ -30,6 +38,7 @@ def test_raise_postgrest_error_maps_unique() -> None:
     assert excinfo.value.status_code == status.HTTP_409_CONFLICT
 
 
+# Verifies that raise postgrest error defaults to 400.
 def test_raise_postgrest_error_defaults_to_400() -> None:
     # Uses unknown error code; expect 400 with message passed through.
     exc = FakeAPIError("bad input", "99999")
@@ -38,6 +47,7 @@ def test_raise_postgrest_error_defaults_to_400() -> None:
     assert excinfo.value.status_code == status.HTTP_400_BAD_REQUEST
 
 
+# Verifies that raise upstream http error maps transport failure.
 def test_raise_upstream_http_error_maps_transport_failure() -> None:
     exc = httpx.RemoteProtocolError("Server disconnected")
     with pytest.raises(HTTPException) as excinfo:

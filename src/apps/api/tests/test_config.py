@@ -5,14 +5,20 @@ import pytest
 from app.core.config import get_settings
 
 
+# Clears cached settings so each configuration test starts clean.
+# Test helpers and fixtures.
 @pytest.fixture(autouse=True)
+
 def clear_settings_cache() -> None:
     get_settings.cache_clear()
     yield
     get_settings.cache_clear()
 
 
+# Verifies that local environment defaults localhost origins.
+# Configuration parsing tests.
 def test_local_environment_defaults_localhost_origins(monkeypatch) -> None:
+
     monkeypatch.setenv("ENVIRONMENT", "local")
     monkeypatch.setenv("ALLOWED_ORIGINS", "")
 
@@ -24,6 +30,7 @@ def test_local_environment_defaults_localhost_origins(monkeypatch) -> None:
     ]
 
 
+# Verifies that non local environment requires origins.
 def test_non_local_environment_requires_origins(monkeypatch) -> None:
     monkeypatch.setenv("ENVIRONMENT", "production")
     monkeypatch.setenv("ALLOWED_ORIGINS", "")
@@ -32,6 +39,7 @@ def test_non_local_environment_requires_origins(monkeypatch) -> None:
         get_settings()
 
 
+# Verifies that allowed origins are normalized from comma separated string.
 def test_allowed_origins_are_normalized_from_comma_separated_string(monkeypatch) -> None:
     monkeypatch.setenv("ENVIRONMENT", "production")
     monkeypatch.setenv("ALLOWED_ORIGINS", " https://app.example.com,https://admin.example.com ")
@@ -44,6 +52,7 @@ def test_allowed_origins_are_normalized_from_comma_separated_string(monkeypatch)
     ]
 
 
+# Verifies that cors allowed origins are stored after initial parse.
 def test_cors_allowed_origins_are_stored_after_initial_parse(monkeypatch) -> None:
     monkeypatch.setenv("ENVIRONMENT", "production")
     monkeypatch.setenv("ALLOWED_ORIGINS", "https://app.example.com")

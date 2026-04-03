@@ -1,3 +1,5 @@
+"""users.py: Exposes simple routes related to the currently authenticated user."""
+
 from fastapi import APIRouter, Depends
 
 from ..dependencies import CurrentUser, get_current_user, rate_limit_user_ip
@@ -6,6 +8,9 @@ from ..schemas import CurrentUser as CurrentUserSchema
 router = APIRouter(prefix="/users", tags=["users"])
 
 
+# User routes.
+
+# Return the current authenticated user's basic profile.
 @router.get(
     "/me",
     response_model=CurrentUserSchema,

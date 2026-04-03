@@ -1,3 +1,5 @@
+"""reminders.py: Manages reminders, reminder candidates, and reminder notification events."""
+
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 from uuid import UUID
@@ -26,7 +28,9 @@ from .errors import raise_postgrest_error
 router = APIRouter(prefix="/reminders", tags=["reminders"])
 
 
-# Reminder CRUD list endpoint with optional filters.
+# Reminder routes.
+
+# Return reminders for the current user with optional hub, status, and date filters.
 @router.get(
     "",
     response_model=list[Reminder],
@@ -55,7 +59,7 @@ def list_reminders(
         raise_postgrest_error(exc)
 
 
-# Create a confirmed reminder (manual or from candidate acceptance).
+# Create a reminder directly from user input.
 @router.post(
     "",
     response_model=Reminder,
@@ -68,7 +72,7 @@ def create_reminder(
     current_user: CurrentUser = Depends(get_current_user),
 ) -> Reminder:
     due_at = payload.due_at
-    # Normalize datetimes to UTC so comparisons are consistent.
+    # Normalise datetimes to UTC so comparisons are consistent.
     if due_at.tzinfo is None:
         due_at = due_at.replace(tzinfo=timezone.utc)
         payload = payload.model_copy(update={"due_at": due_at})
@@ -83,7 +87,7 @@ def create_reminder(
     return reminder
 
 
-# Update reminder timing/status (complete, cancel, snooze, edit).
+# Update reminder status, timing, or text fields.
 @router.patch(
     "/{reminder_id}",
     response_model=Reminder,
@@ -151,7 +155,7 @@ def update_reminder(
     return reminder
 
 
-# Delete a reminder (user-scoped).
+# Delete one of the current user's reminders.
 @router.delete(
     "/{reminder_id}",
     status_code=status.HTTP_204_NO_CONTENT,
@@ -174,7 +178,7 @@ def delete_reminder(
         raise_postgrest_error(exc)
 
 
-# List pending/filtered reminder candidates for a hub/source.
+# Return reminder candidates that were extracted from source content.
 @router.get(
     "/candidates",
     response_model=list[ReminderCandidate],
@@ -202,7 +206,7 @@ def list_candidates(
         raise_postgrest_error(exc)
 
 
-# Accept or decline a candidate and optionally create a reminder.
+# Accept or decline a reminder candidate and optionally create a real reminder.
 @router.patch(
     "/candidates/{candidate_id}",
     response_model=ReminderCandidateDecisionResponse,
@@ -267,7 +271,7 @@ def decide_candidate(
     return ReminderCandidateDecisionResponse(candidate=candidate, reminder=reminder)
 
 
-# List in-app notification events for the current user.
+# Return reminder notification events for the current user.
 @router.get(
     "/notifications",
     response_model=list[NotificationEvent],
@@ -283,7 +287,7 @@ def list_notifications(
     except APIError as exc:
         raise_postgrest_error(exc)
 
-
+# Mark a reminder notification as dismissed.
 @router.post(
     "/notifications/{notification_id}/dismiss",
     response_model=NotificationEvent,
@@ -302,7 +306,7 @@ def dismiss_notification(
         raise_postgrest_error(exc)
 
 
-# Build a default reminder message from the candidate snippet/title.
+# Build a fallback reminder message from candidate text when the user does not provide one.
 def _auto_message(candidate: ReminderCandidate) -> str:
     source = candidate.snippet or candidate.title_suggestion or ""
     cleaned = " ".join(source.split()).strip()

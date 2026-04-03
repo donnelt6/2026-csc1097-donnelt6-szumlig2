@@ -14,27 +14,36 @@ from app.services.store import (
 )
 
 
+# Simple response stub used by the surrounding tests.
+# Test helpers and fixtures.
 class FakeResponse:
+
+    # Initializes the test helper state used by this class.
     def __init__(self, data: list[dict]) -> None:
         self.data = data
 
 
+# Table stub used to emulate Supabase table calls in tests.
 class FakeTable:
+    # Initializes the test helper state used by this class.
     def __init__(self, client: "FakeClient", name: str) -> None:
         self.client = client
         self.name = name
         self._payload = None
 
+    # Records an insert payload and returns the stub for chaining.
     def insert(self, payload: dict) -> "FakeTable":
         self._payload = payload
         self.client.inserted.setdefault(self.name, []).append(payload)
         return self
 
+    # Records an upsert payload and returns the stub for chaining.
     def upsert(self, payload: dict, on_conflict: str | None = None) -> "FakeTable":
         self._payload = payload
         self.client.upserted.setdefault(self.name, []).append({"payload": payload, "on_conflict": on_conflict})
         return self
 
+    # Returns the prepared fake response for the current operation.
     def execute(self) -> FakeResponse:
         if self.name == "chat_sessions":
             return FakeResponse([{"id": "session-1", "created_at": "2026-01-01T00:00:00Z"}])
@@ -62,16 +71,20 @@ class FakeTable:
         return FakeResponse([{}])
 
 
+# Simple client stub used by the surrounding tests.
 class FakeClient:
+    # Initializes the test helper state used by this class.
     def __init__(self) -> None:
         self.message_count = 0
         self.inserted: dict[str, list[dict]] = {}
         self.upserted: dict[str, list[dict]] = {}
 
+    # Returns a stub table object for the requested table name.
     def table(self, name: str) -> FakeTable:
         return FakeTable(self, name)
 
 
+# Replaces chat session helpers with deterministic test doubles.
 @pytest.fixture(autouse=True)
 def stub_session_helpers(monkeypatch) -> None:
     monkeypatch.setattr(
@@ -113,35 +126,46 @@ def stub_session_helpers(monkeypatch) -> None:
     monkeypatch.setattr(store, "_generate_chat_session_title", lambda first_message: "Assignment Help")
 
 
+# Fake LLM completion payload used by chat tests.
 class FakeCompletion:
+    # Initializes the test helper state used by this class.
     def __init__(self, content: str) -> None:
         self.choices = [SimpleNamespace(message=SimpleNamespace(content=content))]
         self.usage = None
 
 
+# Test double used by the surrounding tests.
 class FakeChatCompletions:
+    # Initializes the test helper state used by this class.
     def __init__(self, content: str) -> None:
         self._content = content
 
+    # Builds the fake response used by the surrounding tests.
     def create(self, **kwargs) -> FakeCompletion:
         return FakeCompletion(self._content)
 
 
+# Test double used by the surrounding tests.
 class RecordingChatCompletions:
+    # Initializes the test helper state used by this class.
     def __init__(self, content: str) -> None:
         self._content = content
         self.calls: list[dict] = []
 
+    # Builds the fake response used by the surrounding tests.
     def create(self, **kwargs) -> FakeCompletion:
         self.calls.append(kwargs)
         return FakeCompletion(self._content)
 
 
+# Test double used by the surrounding tests.
 class SequenceChatCompletions:
+    # Initializes the test helper state used by this class.
     def __init__(self, responses: list[object]) -> None:
         self._responses = list(responses)
         self.calls: list[dict] = []
 
+    # Builds the fake response used by the surrounding tests.
     def create(self, **kwargs) -> FakeCompletion:
         self.calls.append(kwargs)
         response = self._responses.pop(0)
@@ -150,27 +174,37 @@ class SequenceChatCompletions:
         return FakeCompletion(str(response))
 
 
+# Fake chat API wrapper used by the surrounding tests.
 class FakeChat:
+    # Initializes the test helper state used by this class.
     def __init__(self, completions) -> None:
         self.completions = completions
 
 
+# Fake LLM client used by the surrounding tests.
 class FakeLLMClient:
+    # Initializes the test helper state used by this class.
     def __init__(self, content: str) -> None:
         self.chat = FakeChat(FakeChatCompletions(content))
 
 
+# Client stub used by the surrounding tests.
 class RecordingLLMClient:
+    # Initializes the test helper state used by this class.
     def __init__(self, content: str) -> None:
         self.chat = FakeChat(RecordingChatCompletions(content))
 
 
+# Client stub used by the surrounding tests.
 class SequenceLLMClient:
+    # Initializes the test helper state used by this class.
     def __init__(self, responses: list[object]) -> None:
         self.chat = FakeChat(SequenceChatCompletions(responses))
 
 
+# Response stub used by the surrounding tests.
 class FakeWebSearchResponse:
+    # Initializes the test helper state used by this class.
     def __init__(self, content: str) -> None:
         self.output_text = content
         self.output = [
@@ -190,38 +224,51 @@ class FakeWebSearchResponse:
         self.usage = None
 
 
+# Client stub used by the surrounding tests.
 class FakeResponsesClient:
+    # Initializes the test helper state used by this class.
     def __init__(self, response: FakeWebSearchResponse) -> None:
         self._response = response
 
+    # Builds the fake response used by the surrounding tests.
     def create(self, **kwargs) -> FakeWebSearchResponse:
         return self._response
 
 
+# Client stub used by the surrounding tests.
 class FakeLLMClientWithResponses:
+    # Initializes the test helper state used by this class.
     def __init__(self, response: FakeWebSearchResponse) -> None:
         self.responses = FakeResponsesClient(response)
         self.chat = FakeChat(FakeChatCompletions("Fallback"))
 
 
+# Table stub used to emulate Supabase table calls in tests.
 class HubLookupTable:
+    # Initializes the test helper state used by this class.
     def __init__(self, data: list[dict]) -> None:
         self._data = data
 
+    # Captures the requested select clause for later execution.
     def select(self, *_args, **_kwargs) -> "HubLookupTable":
         return self
 
+    # Captures an equality filter for the current query stub.
     def eq(self, *_args, **_kwargs) -> "HubLookupTable":
         return self
 
+    # Captures a result limit for the current query stub.
     def limit(self, *_args, **_kwargs) -> "HubLookupTable":
         return self
 
+    # Returns the prepared fake response for the current operation.
     def execute(self):
         return SimpleNamespace(data=self._data)
 
 
+# Client stub used by the surrounding tests.
 class SuggestionClient:
+    # Returns a stub table object for the requested table name.
     def table(self, name: str) -> HubLookupTable:
         if name != "hubs":
             raise AssertionError(f"Unexpected table lookup: {name}")
@@ -235,34 +282,45 @@ class SuggestionClient:
         ])
 
 
+# Query stub used to capture chained store operations in tests.
 class AnalyticsQueryTable:
+    # Initializes the test helper state used by this class.
     def __init__(self, data: list[dict]) -> None:
         self._data = data
 
+    # Captures the requested select clause for later execution.
     def select(self, *_args, **_kwargs) -> "AnalyticsQueryTable":
         return self
 
+    # Captures an equality filter for the current query stub.
     def eq(self, *_args, **_kwargs) -> "AnalyticsQueryTable":
         return self
 
+    # Helper used by the surrounding test code.
     def gte(self, *_args, **_kwargs) -> "AnalyticsQueryTable":
         return self
 
+    # Captures an inclusion filter for the current query stub.
     def in_(self, *_args, **_kwargs) -> "AnalyticsQueryTable":
         return self
 
+    # Returns the prepared fake response for the current operation.
     def execute(self):
         return SimpleNamespace(data=self._data)
 
 
+# Client stub used by the surrounding tests.
 class AnalyticsServiceClient:
+    # Initializes the test helper state used by this class.
     def __init__(self, tables: dict[str, list[dict]]) -> None:
         self.tables = tables
 
+    # Returns a stub table object for the requested table name.
     def table(self, name: str) -> AnalyticsQueryTable:
         return AnalyticsQueryTable(self.tables.get(name, []))
 
 
+# Matches selected fields so nested payload assertions stay concise.
 def _match(
     source_id: str = "src-1",
     snippet: str = "Snippet",
@@ -281,6 +339,7 @@ def _match(
     return row
 
 
+# Builds retrieval history fixtures for follow-up chat tests.
 def _retrieval_history() -> list[dict]:
     return [
         {"role": "user", "content": "What is lexical analysis?", "citations": []},
@@ -298,6 +357,7 @@ def _retrieval_history() -> list[dict]:
     ]
 
 
+# Builds mixed-source retrieval history for chat rewrite tests.
 def _mixed_retrieval_history() -> list[dict]:
     return [
         {
@@ -324,6 +384,7 @@ def _mixed_retrieval_history() -> list[dict]:
     ]
 
 
+# Builds follow-up history that mixes source context across turns.
 def _mixed_follow_up_history() -> list[dict]:
     return [
         {
@@ -376,7 +437,10 @@ def _mixed_follow_up_history() -> list[dict]:
     ]
 
 
+# Verifies that suggest chat prompt randomizes focus for all selected sources.
+# Store service tests.
 def test_suggest_chat_prompt_randomizes_focus_for_all_selected_sources(monkeypatch) -> None:
+
     llm = RecordingLLMClient("What risks matter most across these sources?")
     monkeypatch.setattr(store, "llm_client", llm)
     monkeypatch.setattr(
@@ -409,6 +473,7 @@ def test_suggest_chat_prompt_randomizes_focus_for_all_selected_sources(monkeypat
             ),
         ],
     )
+    # Helper used by the surrounding test code.
     def fake_choice(options):
         if options and isinstance(options[0], str):
             return options[1]
@@ -425,6 +490,7 @@ def test_suggest_chat_prompt_randomizes_focus_for_all_selected_sources(monkeypat
     assert "Preferred source anchor: Notes.md" in llm.chat.completions.calls[0]["messages"][1]["content"]
 
 
+# Verifies that chat abstains for hub queries with no context without llm call.
 def test_chat_abstains_for_hub_queries_with_no_context_without_llm_call(monkeypatch) -> None:
     fake_client = FakeClient()
     llm_client = RecordingLLMClient("This should not be used.")
@@ -440,6 +506,7 @@ def test_chat_abstains_for_hub_queries_with_no_context_without_llm_call(monkeypa
     assert llm_client.chat.completions.calls == []
 
 
+# Verifies that chat diversifies citations across relevant sources.
 def test_chat_diversifies_citations_across_relevant_sources(monkeypatch) -> None:
     fake_client = FakeClient()
     monkeypatch.setattr(store, "_embed_query", lambda text: [1.0, 0.0])
@@ -462,6 +529,7 @@ def test_chat_diversifies_citations_across_relevant_sources(monkeypatch) -> None
     assert len({citation.source_id for citation in result.citations}) >= 2
 
 
+# Verifies that chat allows single source when only one source is relevant.
 def test_chat_allows_single_source_when_only_one_source_is_relevant(monkeypatch) -> None:
     fake_client = FakeClient()
     monkeypatch.setattr(store, "_embed_query", lambda text: [1.0, 0.0])
@@ -484,6 +552,7 @@ def test_chat_allows_single_source_when_only_one_source_is_relevant(monkeypatch)
     assert {citation.source_id for citation in result.citations} == {"src-a"}
 
 
+# Verifies that chat prefers top source only for non exploratory fact queries.
 def test_chat_prefers_top_source_only_for_non_exploratory_fact_queries(monkeypatch) -> None:
     fake_client = FakeClient()
     monkeypatch.setattr(store, "_embed_query", lambda text: [1.0, 0.0])
@@ -504,6 +573,7 @@ def test_chat_prefers_top_source_only_for_non_exploratory_fact_queries(monkeypat
     assert [citation.source_id for citation in result.citations] == ["src-a", "src-a"]
 
 
+# Verifies that chat allows one close secondary source for non exploratory fact queries.
 def test_chat_allows_one_close_secondary_source_for_non_exploratory_fact_queries(monkeypatch) -> None:
     fake_client = FakeClient()
     monkeypatch.setattr(store, "_embed_query", lambda text: [1.0, 0.0])
@@ -524,6 +594,7 @@ def test_chat_allows_one_close_secondary_source_for_non_exploratory_fact_queries
     assert [citation.source_id for citation in result.citations] == ["src-a", "src-b"]
 
 
+# Verifies that chat sparse fallback keeps best raw match.
 def test_chat_sparse_fallback_keeps_best_raw_match(monkeypatch) -> None:
     fake_client = FakeClient()
     monkeypatch.setattr(store, "_embed_query", lambda text: [1.0, 0.0])
@@ -543,6 +614,7 @@ def test_chat_sparse_fallback_keeps_best_raw_match(monkeypatch) -> None:
     assert [citation.source_id for citation in result.citations] == ["src-low"]
 
 
+# Verifies that chat reranks before relative cutoff for low similarity fact query.
 def test_chat_reranks_before_relative_cutoff_for_low_similarity_fact_query(monkeypatch) -> None:
     fake_client = FakeClient()
     monkeypatch.setattr(store, "_embed_query", lambda text: [1.0, 0.0])
@@ -563,6 +635,7 @@ def test_chat_reranks_before_relative_cutoff_for_low_similarity_fact_query(monke
     assert [citation.source_id for citation in result.citations] == ["src-a"]
 
 
+# Verifies that chat relative cutoff excludes weak tail candidates.
 def test_chat_relative_cutoff_excludes_weak_tail_candidates(monkeypatch) -> None:
     fake_client = FakeClient()
     monkeypatch.setattr(store, "_embed_query", lambda text: [1.0, 0.0])
@@ -583,6 +656,7 @@ def test_chat_relative_cutoff_excludes_weak_tail_candidates(monkeypatch) -> None
     assert [citation.source_id for citation in result.citations] == ["src-a", "src-b"]
 
 
+# Verifies that chat rewrites vague follow up using recent history and prior citations.
 def test_chat_rewrites_vague_follow_up_using_recent_history_and_prior_citations(monkeypatch) -> None:
     fake_client = FakeClient()
     retrieval_history = _retrieval_history()
@@ -592,6 +666,7 @@ def test_chat_rewrites_vague_follow_up_using_recent_history_and_prior_citations(
     monkeypatch.setattr(store, "_recent_conversation", lambda client, session_id: retrieval_history)
     monkeypatch.setattr(store, "_recent_retrieval_context", lambda client, session_id: retrieval_history)
 
+    # Helper used by the surrounding test code.
     def fake_rewrite(question: str, history: list[dict]) -> str:
         rewrite_calls.append((question, history))
         return "Explain lexical analysis in more detail"
@@ -620,18 +695,21 @@ def test_chat_rewrites_vague_follow_up_using_recent_history_and_prior_citations(
     assert [citation.source_id for citation in result.citations] == ["src-lex"]
 
 
+# Verifies that detects longer deictic follow up questions.
 def test_detects_longer_deictic_follow_up_questions() -> None:
     assert _is_vague_follow_up("How could a Haskell palindrome example fit into that?")
     assert _is_vague_follow_up("Why would normalization be a good exercise there?")
     assert not _is_vague_follow_up("How does this function work in Haskell?")
 
 
+# Verifies that chat session title normalization and fallback.
 def test_chat_session_title_normalization_and_fallback() -> None:
     assert _normalize_chat_session_title('Title: "Assignment Help"') == "Assignment Help"
     assert _normalize_chat_session_title("How do I submit assignments for this module today") == "How do I submit assignments"
     assert _fallback_chat_session_title("  How\n\n do   I submit assignments?  ") == "How do I submit assignments?"
 
 
+# Verifies that normalized source ids follow complete source order.
 def test_normalized_source_ids_follow_complete_source_order() -> None:
     assert store._normalize_source_ids_to_complete_order(
         ["src-3", "src-1"],
@@ -639,6 +717,7 @@ def test_normalized_source_ids_follow_complete_source_order() -> None:
     ) == ["src-1", "src-3"]
 
 
+# Verifies that normalize chat source ids uses all complete sources when omitted.
 def test_normalize_chat_source_ids_uses_all_complete_sources_when_omitted(monkeypatch) -> None:
     monkeypatch.setattr(store, "_complete_source_ids_for_hub", lambda client, hub_id: ["src-2", "src-1"])
 
@@ -653,6 +732,7 @@ def test_normalize_chat_source_ids_uses_all_complete_sources_when_omitted(monkey
     assert retrieval_source_ids is None
 
 
+# Verifies that normalize chat source ids preserves explicit empty selection.
 def test_normalize_chat_source_ids_preserves_explicit_empty_selection(monkeypatch) -> None:
     monkeypatch.setattr(store, "_complete_source_ids_for_hub", lambda client, hub_id: ["src-2", "src-1"])
 
@@ -667,6 +747,7 @@ def test_normalize_chat_source_ids_preserves_explicit_empty_selection(monkeypatc
     assert retrieval_source_ids == []
 
 
+# Verifies that chat draft failure does not persist session.
 def test_chat_draft_failure_does_not_persist_session(monkeypatch) -> None:
     fake_client = FakeClient()
     helper_calls: list[dict] = []
@@ -693,6 +774,7 @@ def test_chat_draft_failure_does_not_persist_session(monkeypatch) -> None:
     assert set(fake_client.inserted.keys()) == {"chat_events"}
 
 
+# Verifies that chat persists new session after first successful send.
 def test_chat_persists_new_session_after_first_successful_send(monkeypatch) -> None:
     fake_client = FakeClient()
     persisted: dict[str, object] = {}
@@ -700,6 +782,7 @@ def test_chat_persists_new_session_after_first_successful_send(monkeypatch) -> N
     monkeypatch.setattr(store, "_match_chunks", lambda client, hub_id, embedding, top_k, source_ids=None: [])
     monkeypatch.setattr(store, "llm_client", FakeLLMClient("Hello! How can I help you today?"))
 
+    # Helper used by the surrounding test code.
     def fake_create_chat_session_with_messages(**kwargs):
         persisted.update(kwargs)
         return {
@@ -723,6 +806,7 @@ def test_chat_persists_new_session_after_first_successful_send(monkeypatch) -> N
     assert set(fake_client.inserted.keys()) == {"chat_events"}
 
 
+# Verifies that anchor selection skips context dependent turns.
 def test_anchor_selection_skips_context_dependent_turns() -> None:
     assert (
         _most_recent_informative_user_turn(_mixed_follow_up_history())
@@ -730,6 +814,7 @@ def test_anchor_selection_skips_context_dependent_turns() -> None:
     )
 
 
+# Verifies that chat rewrites longer deictic follow up using recent history.
 def test_chat_rewrites_longer_deictic_follow_up_using_recent_history(monkeypatch) -> None:
     fake_client = FakeClient()
     retrieval_history = _mixed_follow_up_history()
@@ -739,6 +824,7 @@ def test_chat_rewrites_longer_deictic_follow_up_using_recent_history(monkeypatch
     monkeypatch.setattr(store, "_recent_conversation", lambda client, session_id: retrieval_history)
     monkeypatch.setattr(store, "_recent_retrieval_context", lambda client, session_id: retrieval_history)
 
+    # Helper used by the surrounding test code.
     def fake_rewrite(question: str, history: list[dict]) -> str:
         rewrite_calls.append((question, history))
         return "Why would incorporating normalization as an exercise in the Haskell palindrome example enhance onboarding?"
@@ -766,6 +852,7 @@ def test_chat_rewrites_longer_deictic_follow_up_using_recent_history(monkeypatch
     assert result.answer == "Answer [1]"
 
 
+# Verifies that chat anchors vague follow up when mixed history collapses to one source.
 def test_chat_anchors_vague_follow_up_when_mixed_history_collapses_to_one_source(monkeypatch) -> None:
     fake_client = FakeClient()
     retrieval_history = _mixed_follow_up_history()
@@ -781,6 +868,7 @@ def test_chat_anchors_vague_follow_up_when_mixed_history_collapses_to_one_source
     monkeypatch.setattr(store, "_rewrite_query_for_retrieval", lambda question, history: rewritten_query)
     monkeypatch.setattr(store, "_embed_query", lambda text: embedded_queries.append(text) or [len(embedded_queries), 0.0])
 
+    # Helper used by the surrounding test code.
     def fake_match_chunks(client, hub_id, embedding, top_k, source_ids=None):
         query_text = embedded_queries[-1]
         if query_text == rewritten_query:
@@ -810,6 +898,7 @@ def test_chat_anchors_vague_follow_up_when_mixed_history_collapses_to_one_source
     assert result.citations
 
 
+# Verifies that chat does not anchor follow up when recent history is single source.
 def test_chat_does_not_anchor_follow_up_when_recent_history_is_single_source(monkeypatch) -> None:
     fake_client = FakeClient()
     retrieval_history = _retrieval_history()
@@ -840,6 +929,7 @@ def test_chat_does_not_anchor_follow_up_when_recent_history_is_single_source(mon
     assert [citation.source_id for citation in result.citations] == ["src-lex"]
 
 
+# Verifies that chat keeps initial retrieval when anchored fallback does not improve diversity.
 def test_chat_keeps_initial_retrieval_when_anchored_fallback_does_not_improve_diversity(monkeypatch) -> None:
     fake_client = FakeClient()
     retrieval_history = _mixed_follow_up_history()
@@ -855,6 +945,7 @@ def test_chat_keeps_initial_retrieval_when_anchored_fallback_does_not_improve_di
     monkeypatch.setattr(store, "_rewrite_query_for_retrieval", lambda question, history: rewritten_query)
     monkeypatch.setattr(store, "_embed_query", lambda text: embedded_queries.append(text) or [len(embedded_queries), 0.0])
 
+    # Helper used by the surrounding test code.
     def fake_match_chunks(client, hub_id, embedding, top_k, source_ids=None):
         query_text = embedded_queries[-1]
         if query_text == rewritten_query:
@@ -876,6 +967,7 @@ def test_chat_keeps_initial_retrieval_when_anchored_fallback_does_not_improve_di
     assert embedded_queries == [rewritten_query, anchored_query]
     assert [citation.snippet for citation in result.citations] == ["Initial palindrome context."]
 
+# Verifies that chat does not rewrite clear standalone question.
 def test_chat_does_not_rewrite_clear_standalone_question(monkeypatch) -> None:
     fake_client = FakeClient()
     embedded_queries: list[str] = []
@@ -886,6 +978,7 @@ def test_chat_does_not_rewrite_clear_standalone_question(monkeypatch) -> None:
     monkeypatch.setattr(store, "_recent_conversation", lambda client, session_id: retrieval_history)
     monkeypatch.setattr(store, "_recent_retrieval_context", lambda client, session_id: retrieval_history)
 
+    # Helper used by the surrounding test code.
     def fake_rewrite(question_text: str, history: list[dict]) -> str:
         rewrite_calls.append(question_text)
         return "unused rewrite"
@@ -911,6 +1004,7 @@ def test_chat_does_not_rewrite_clear_standalone_question(monkeypatch) -> None:
     assert result.answer == "Answer [1]"
 
 
+# Verifies that chat retries with rewrite after initial no match.
 def test_chat_retries_with_rewrite_after_initial_no_match(monkeypatch) -> None:
     fake_client = FakeClient()
     retrieval_history = _retrieval_history()
@@ -921,10 +1015,12 @@ def test_chat_retries_with_rewrite_after_initial_no_match(monkeypatch) -> None:
     monkeypatch.setattr(store, "_recent_conversation", lambda client, session_id: retrieval_history)
     monkeypatch.setattr(store, "_recent_retrieval_context", lambda client, session_id: retrieval_history)
 
+    # Helper used by the surrounding test code.
     def fake_rewrite(question: str, history: list[dict]) -> str:
         rewrite_calls.append(question)
         return "How many assignments are there in CSC1098?"
 
+    # Helper used by the surrounding test code.
     def fake_match_chunks(client, hub_id, embedding, top_k, source_ids=None):
         match_calls.append(str(embedding[0]))
         if len(match_calls) == 1:
@@ -952,6 +1048,7 @@ def test_chat_retries_with_rewrite_after_initial_no_match(monkeypatch) -> None:
     assert [citation.source_id for citation in result.citations] == ["src-2"]
 
 
+# Verifies that chat preserves source filters when rewriting.
 def test_chat_preserves_source_filters_when_rewriting(monkeypatch) -> None:
     fake_client = FakeClient()
     retrieval_history = _retrieval_history()
@@ -966,6 +1063,7 @@ def test_chat_preserves_source_filters_when_rewriting(monkeypatch) -> None:
     )
     monkeypatch.setattr(store, "_embed_query", lambda text: [0.1])
 
+    # Helper used by the surrounding test code.
     def fake_match(client, hub_id, embedding, top_k, source_ids=None):
         received_source_ids.append(source_ids)
         if len(received_source_ids) == 1:
@@ -989,6 +1087,7 @@ def test_chat_preserves_source_filters_when_rewriting(monkeypatch) -> None:
     ]
 
 
+# Verifies that chat falls back cleanly when rewrite fails.
 def test_chat_falls_back_cleanly_when_rewrite_fails(monkeypatch) -> None:
     fake_client = FakeClient()
     retrieval_history = _retrieval_history()
@@ -1013,6 +1112,7 @@ def test_chat_falls_back_cleanly_when_rewrite_fails(monkeypatch) -> None:
     assert result.citations == []
 
 
+# Verifies that chat retries once when grounded answer omits citations.
 def test_chat_retries_once_when_grounded_answer_omits_citations(monkeypatch) -> None:
     fake_client = FakeClient()
     llm_client = SequenceLLMClient(
@@ -1040,6 +1140,7 @@ def test_chat_retries_once_when_grounded_answer_omits_citations(monkeypatch) -> 
     assert len(llm_client.chat.completions.calls) == 2
 
 
+# Verifies that chat retry failure keeps uncited answer without inventing citations.
 def test_chat_retry_failure_keeps_uncited_answer_without_inventing_citations(monkeypatch) -> None:
     fake_client = FakeClient()
     llm_client = SequenceLLMClient(
@@ -1066,6 +1167,7 @@ def test_chat_retry_failure_keeps_uncited_answer_without_inventing_citations(mon
     assert len(llm_client.chat.completions.calls) == 2
 
 
+# Verifies that chat uses recent citation snippets in rewrite context.
 def test_chat_uses_recent_citation_snippets_in_rewrite_context(monkeypatch) -> None:
     llm_client = RecordingLLMClient("Explain lexical analysis in more detail")
     monkeypatch.setattr(store, "llm_client", llm_client)
@@ -1085,6 +1187,7 @@ def test_chat_uses_recent_citation_snippets_in_rewrite_context(monkeypatch) -> N
     assert llm_client.chat.completions.calls[0]["temperature"] == 0
 
 
+# Verifies that chat global uses web search.
 def test_chat_global_uses_web_search(monkeypatch) -> None:
     fake_client = FakeClient()
     monkeypatch.setattr(store, "_embed_query", lambda text: [1.0, 0.0])
@@ -1104,6 +1207,7 @@ def test_chat_global_uses_web_search(monkeypatch) -> None:
     assert result.citations[0].source_id == "https://example.com"
 
 
+# Verifies that global scope also benefits from rewritten hub retrieval.
 def test_global_scope_also_benefits_from_rewritten_hub_retrieval(monkeypatch) -> None:
     fake_client = FakeClient()
     retrieval_history = _retrieval_history()
@@ -1139,10 +1243,12 @@ def test_global_scope_also_benefits_from_rewritten_hub_retrieval(monkeypatch) ->
     assert result.citations
 
 
+# Verifies that chat filters by selected sources.
 def test_chat_filters_by_selected_sources(monkeypatch) -> None:
     fake_client = FakeClient()
     captured: dict[str, list[str] | None] = {}
 
+    # Helper used by the surrounding test code.
     def fake_match(client, hub_id, embedding, top_k, source_ids=None):
         captured["source_ids"] = source_ids
         return []
@@ -1161,6 +1267,7 @@ def test_chat_filters_by_selected_sources(monkeypatch) -> None:
     assert captured["source_ids"] == ["22222222-2222-2222-2222-222222222222"]
 
 
+# Verifies that rename chat session rejects non owner.
 def test_rename_chat_session_rejects_non_owner(monkeypatch) -> None:
     monkeypatch.setattr(
         store,
@@ -1177,6 +1284,7 @@ def test_rename_chat_session_rejects_non_owner(monkeypatch) -> None:
         store.rename_chat_session(object(), "user-1", "session-1", "Updated title")
 
 
+# Verifies that delete chat session rejects non owner.
 def test_delete_chat_session_rejects_non_owner(monkeypatch) -> None:
     monkeypatch.setattr(
         store,
@@ -1193,6 +1301,7 @@ def test_delete_chat_session_rejects_non_owner(monkeypatch) -> None:
         store.delete_chat_session(object(), "user-1", "session-1")
 
 
+# Verifies that chat caps citations at three and stores selected order.
 def test_chat_caps_citations_at_three_and_stores_selected_order(monkeypatch) -> None:
     fake_client = FakeClient()
     persisted: dict[str, object] = {}
@@ -1229,6 +1338,7 @@ def test_chat_caps_citations_at_three_and_stores_selected_order(monkeypatch) -> 
     ]
 
 
+# Verifies that chat returns only explicitly referenced citations.
 def test_chat_returns_only_explicitly_referenced_citations(monkeypatch) -> None:
     fake_client = FakeClient()
     persisted: dict[str, object] = {}
@@ -1262,6 +1372,7 @@ def test_chat_returns_only_explicitly_referenced_citations(monkeypatch) -> None:
     assert [citation.source_id for citation in persisted["assistant_citations"]] == ["src-a"]
 
 
+# Verifies that chat deduplicates and orders referenced citations.
 def test_chat_deduplicates_and_orders_referenced_citations(monkeypatch) -> None:
     fake_client = FakeClient()
     monkeypatch.setattr(store, "_embed_query", lambda text: [1.0, 0.0])
@@ -1282,6 +1393,7 @@ def test_chat_deduplicates_and_orders_referenced_citations(monkeypatch) -> None:
     assert [citation.source_id for citation in result.citations] == ["src-b", "src-a"]
 
 
+# Verifies that chat ignores malformed and out of range citation markers.
 def test_chat_ignores_malformed_and_out_of_range_citation_markers(monkeypatch) -> None:
     fake_client = FakeClient()
     monkeypatch.setattr(store, "_embed_query", lambda text: [1.0, 0.0])
@@ -1301,6 +1413,7 @@ def test_chat_ignores_malformed_and_out_of_range_citation_markers(monkeypatch) -
     assert [citation.source_id for citation in result.citations] == ["src-b"]
 
 
+# Verifies that chat ignores malformed quote keys but keeps valid quote metadata.
 def test_chat_ignores_malformed_quote_keys_but_keeps_valid_quote_metadata(monkeypatch) -> None:
     fake_client = FakeClient()
     monkeypatch.setattr(store, "_embed_query", lambda text: [1.0, 0.0])
@@ -1335,6 +1448,7 @@ def test_chat_ignores_malformed_quote_keys_but_keeps_valid_quote_metadata(monkey
     assert result.citations[0].paraphrased_quotes == ["Use Moodle for submissions."]
 
 
+# Verifies that chat succeeds when analytics event insert fails.
 def test_chat_succeeds_when_analytics_event_insert_fails(monkeypatch) -> None:
     fake_client = FakeClient()
     monkeypatch.setattr(store, "_embed_query", lambda text: [1.0, 0.0])
@@ -1353,6 +1467,7 @@ def test_chat_succeeds_when_analytics_event_insert_fails(monkeypatch) -> None:
     assert result.session_id == "session-1"
 
 
+# Verifies that create chat feedback succeeds when analytics event insert fails.
 def test_create_chat_feedback_succeeds_when_analytics_event_insert_fails(monkeypatch) -> None:
     fake_client = FakeClient()
     monkeypatch.setattr(
@@ -1390,6 +1505,7 @@ def test_create_chat_feedback_succeeds_when_analytics_event_insert_fails(monkeyp
     assert response.rating == "helpful"
 
 
+# Verifies that create chat event requires session owner.
 def test_create_chat_event_requires_session_owner(monkeypatch) -> None:
     monkeypatch.setattr(store, "_require_hub_access", lambda user_id, hub_id: None)
     monkeypatch.setattr(
@@ -1414,6 +1530,7 @@ def test_create_chat_event_requires_session_owner(monkeypatch) -> None:
         )
 
 
+# Verifies that create chat event rejects message session mismatch.
 def test_create_chat_event_rejects_message_session_mismatch(monkeypatch) -> None:
     monkeypatch.setattr(store, "_require_hub_access", lambda user_id, hub_id: None)
     monkeypatch.setattr(
@@ -1448,6 +1565,7 @@ def test_create_chat_event_rejects_message_session_mismatch(monkeypatch) -> None
         )
 
 
+# Verifies that hub analytics summary uses total citations shown for open rate.
 def test_hub_analytics_summary_uses_total_citations_shown_for_open_rate(monkeypatch) -> None:
     monkeypatch.setattr(
         store,

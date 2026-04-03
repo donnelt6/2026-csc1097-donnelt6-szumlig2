@@ -19,15 +19,21 @@ from app.main import app
 from app.services.rate_limit import RateLimitResult
 
 
+# Minimal client stub used by dependency overrides.
+# Test helpers and fixtures.
 class DummyClient:
+
     pass
 
 
+# Test rate limiter that always allows the request.
 class AllowAllRateLimiter:
+    # Returns the configured rate-limit result for each check.
     def check(self, key: str, limit: int, window_seconds: int = 60) -> RateLimitResult:
         return RateLimitResult(allowed=True, remaining=limit, reset_in_seconds=window_seconds)
 
 
+# Creates a FastAPI test client with shared dependency overrides.
 @pytest.fixture
 def client() -> TestClient:
     # Overrides auth/client dependencies so router tests run offline.

@@ -1,3 +1,5 @@
+"""moderation.py: Lets users flag chat messages and lets moderators review flagged chat cases."""
+
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
@@ -22,6 +24,9 @@ from .errors import raise_postgrest_error
 router = APIRouter(prefix="", tags=["moderation"])
 
 
+# Moderation routes.
+
+# Flag a message for moderation review.
 @router.post(
     "/messages/{message_id}/flag",
     response_model=FlagMessageResponse,
@@ -36,6 +41,7 @@ def flag_message(
 ) -> FlagMessageResponse:
     try:
         result = store.flag_message(client, current_user.id, str(message_id), payload)
+        # Reused flags return 200; new flags return 201.
         response.status_code = status.HTTP_201_CREATED if result.created else status.HTTP_200_OK
         return result
     except KeyError as exc:
@@ -50,6 +56,7 @@ def flag_message(
         raise_postgrest_error(exc)
 
 
+# Return the flagged chat queue for a hub.
 @router.get(
     "/hubs/{hub_id}/flagged-chats",
     response_model=list[FlaggedChatQueueItem],
@@ -72,6 +79,7 @@ def list_flagged_chats(
         raise_postgrest_error(exc)
 
 
+# Return the full detail for one flagged chat case.
 @router.get(
     "/hubs/{hub_id}/flagged-chats/{flag_id}",
     response_model=FlaggedChatDetail,
@@ -92,6 +100,7 @@ def get_flagged_chat(
         raise_postgrest_error(exc)
 
 
+# Regenerate an alternative response revision for a flagged chat.
 @router.post(
     "/hubs/{hub_id}/flagged-chats/{flag_id}/regenerate",
     response_model=MessageRevision,
@@ -114,6 +123,7 @@ def regenerate_flagged_chat(
         raise_postgrest_error(exc)
 
 
+# Create a manual revision for a flagged chat response.
 @router.post(
     "/hubs/{hub_id}/flagged-chats/{flag_id}/revisions",
     response_model=MessageRevision,
@@ -137,6 +147,7 @@ def create_flagged_chat_revision(
         raise_postgrest_error(exc)
 
 
+# Apply a selected revision to resolve a flagged chat case.
 @router.post(
     "/hubs/{hub_id}/flagged-chats/{flag_id}/apply",
     response_model=FlagCase,
@@ -160,6 +171,7 @@ def apply_flagged_chat_revision(
         raise_postgrest_error(exc)
 
 
+# Dismiss a flagged chat case without applying a revision.
 @router.post(
     "/hubs/{hub_id}/flagged-chats/{flag_id}/dismiss",
     response_model=FlagCase,

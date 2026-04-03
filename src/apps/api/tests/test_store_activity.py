@@ -5,39 +5,51 @@ from types import SimpleNamespace
 from app.services import store as store_module
 
 
+# Simple response stub used by the surrounding tests.
+# Test helpers and fixtures.
 class FakeResponse:
+
+    # Initializes the test helper state used by this class.
     def __init__(self, data):
         self.data = data
 
 
+# Query stub used to capture chained store operations in tests.
 class FakeActivityQuery:
+    # Initializes the test helper state used by this class.
     def __init__(self, rows: list[dict]) -> None:
         self.rows = rows
         self.hub_id: str | None = None
         self.hub_ids: list[str] | None = None
         self.limit_value: int | None = None
 
+    # Captures the requested select clause for later execution.
     def select(self, _fields: str):
         return self
 
+    # Captures an equality filter for the current query stub.
     def eq(self, column: str, value: str):
         if column == "hub_id":
             self.hub_id = value
         return self
 
+    # Captures an inclusion filter for the current query stub.
     def in_(self, column: str, values: list[str]):
         if column == "hub_id":
             self.hub_ids = values
         return self
 
+    # Captures ordering details for the current query stub.
     def order(self, _column: str, desc: bool = False):
         _ = desc
         return self
 
+    # Captures a result limit for the current query stub.
     def limit(self, value: int):
         self.limit_value = value
         return self
 
+    # Returns the prepared fake response for the current operation.
     def execute(self):
         rows = self.rows
         if self.hub_id is not None:
@@ -49,28 +61,37 @@ class FakeActivityQuery:
         return FakeResponse(rows)
 
 
+# Simple client stub used by the surrounding tests.
 class FakeClient:
+    # Initializes the test helper state used by this class.
     def __init__(self, rows: list[dict]) -> None:
         self.rows = rows
 
+    # Returns a stub table object for the requested table name.
     def table(self, name: str):
         if name == "activity_events":
             return FakeActivityQuery(self.rows)
         raise AssertionError(f"Unexpected table {name}")
 
 
+# Admin client stub used by the surrounding tests.
 class FakeAdmin:
+    # Initializes the test helper state used by this class.
     def __init__(self, pages: list[list[SimpleNamespace]]) -> None:
         self.pages = pages
         self.calls: list[tuple[int, int]] = []
 
+    # Helper used by the surrounding test code.
     def list_users(self, *, page: int = 1, per_page: int = 100):
         self.calls.append((page, per_page))
         index = page - 1
         return SimpleNamespace(users=self.pages[index] if index < len(self.pages) else [])
 
 
+# Verifies that list activity resolves only needed actor labels.
+# Store service tests.
 def test_list_activity_resolves_only_needed_actor_labels(monkeypatch) -> None:
+
     rows = [
         {
             "id": "event-1",
@@ -116,6 +137,7 @@ def test_list_activity_resolves_only_needed_actor_labels(monkeypatch) -> None:
     assert events[1].metadata["actor_label"] == "viewer@example.com"
 
 
+# Verifies that list activity marks current user as you.
 def test_list_activity_marks_current_user_as_you(monkeypatch) -> None:
     rows = [
         {

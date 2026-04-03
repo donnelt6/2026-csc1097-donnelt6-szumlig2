@@ -1,3 +1,5 @@
+"""chat.py: Handles chat requests, feedback, prompt suggestions, and session history routes."""
+
 import logging
 from typing import List
 from uuid import UUID
@@ -32,6 +34,9 @@ router = APIRouter(prefix="/chat", tags=["chat"])
 logger = logging.getLogger(__name__)
 
 
+# Core chat routes.
+
+# Send a chat request and create activity for brand-new sessions.
 @router.post(
     "",
     response_model=ChatResponse,
@@ -61,10 +66,12 @@ def ask(
     except APIError as exc:
         raise_postgrest_error(exc)
     if is_new_session:
+        # Only log a "started" event the first time a session is created.
         store.log_activity(client, str(payload.hub_id), current_user.id, "started", "chat", response.session_id, {"title": response.session_title})
     return response
 
 
+# Record feedback for a chat message.
 @router.post(
     "/messages/{message_id}/feedback",
     response_model=ChatFeedbackResponse,
@@ -86,6 +93,7 @@ def submit_message_feedback(
         raise_postgrest_error(exc)
 
 
+# Record feedback for a specific citation on a chat message.
 @router.post(
     "/messages/{message_id}/citations/feedback",
     response_model=CitationFeedbackResponse,
@@ -107,6 +115,7 @@ def submit_citation_feedback(
         raise_postgrest_error(exc)
 
 
+# Store a tracked chat-side event such as an impression or click.
 @router.post(
     "/events",
     response_model=ChatEventResponse,
@@ -131,6 +140,7 @@ def create_chat_event(
         raise_postgrest_error(exc)
 
 
+# Generate a suggested prompt based on the hub and optional source filters.
 @router.get(
     "/prompt-suggestion",
     response_model=ChatPromptSuggestionResponse,
@@ -145,6 +155,7 @@ def suggest_prompt(
     try:
         member = require_hub_member(client, str(hub_id), current_user.id)
         require_accepted(member)
+        # Convert UUID query params into the string IDs expected by the store layer.
         normalized_source_ids = [str(source_id) for source_id in source_ids] if source_ids is not None else None
         return ChatPromptSuggestionResponse(prompt=store.suggest_chat_prompt(client, str(hub_id), normalized_source_ids))
     except KeyError as exc:
@@ -162,6 +173,7 @@ def suggest_prompt(
         raise_postgrest_error(exc)
 
 
+# List saved chat sessions for a hub.
 @router.get(
     "/sessions",
     response_model=List[ChatSessionSummary],
@@ -180,6 +192,7 @@ def list_sessions(
         raise_postgrest_error(exc)
 
 
+# Return one chat session together with its saved messages.
 @router.get(
     "/sessions/{session_id}/messages",
     response_model=ChatSessionDetail,
@@ -201,6 +214,7 @@ def get_session_messages(
         raise_postgrest_error(exc)
 
 
+# Search chat messages within a hub.
 @router.get(
     "/search",
     response_model=List[ChatSearchResult],
@@ -220,6 +234,7 @@ def search_messages(
         raise_postgrest_error(exc)
 
 
+# Rename a saved chat session.
 @router.patch(
     "/sessions/{session_id}",
     status_code=status.HTTP_204_NO_CONTENT,
@@ -242,6 +257,7 @@ def rename_session(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
+# Delete a saved chat session.
 @router.delete(
     "/sessions/{session_id}",
     status_code=status.HTTP_204_NO_CONTENT,
@@ -263,6 +279,7 @@ def delete_session(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
+# Return condensed chat history for the hub.
 @router.get(
     "/history",
     response_model=List[HistoryMessage],

@@ -1,3 +1,5 @@
+"""store.py: Central service layer for Supabase access, retrieval logic, and AI-backed API features."""
+
 import json
 import logging
 import math
@@ -98,6 +100,7 @@ logger = logging.getLogger(__name__)
 logger = logging.getLogger(__name__)
 
 
+# Store exceptions and primary store implementation.
 class ConflictError(RuntimeError):
     """Raised when a conditional update loses a concurrency race."""
 
@@ -105,6 +108,8 @@ class ConflictError(RuntimeError):
 class SupabaseStore:
     """Supabase-backed store for hubs, sources, and chat."""
 
+    # Load configuration and initialise shared clients used across the API.
+    # Initialize the object with the required settings and clients.
     def __init__(self) -> None:
         settings = get_settings()
         if not settings.supabase_url or not settings.supabase_service_role_key or not settings.supabase_anon_key:
@@ -140,7 +145,11 @@ class SupabaseStore:
         self.analytics_trend_days = settings.analytics_trend_days
         self.service_client: Client = create_client(settings.supabase_url, settings.supabase_service_role_key)
         self.llm_client = OpenAI(api_key=settings.openai_api_key)
-
+        
+#####################################################################################################################################################################################
+    # Hub management methods.
+    
+    # Return hubs.
     def list_hubs(self, client: Client, user_id: str) -> List[Hub]:
         select_with_appearance = (
             "role, last_accessed_at, is_favourite, "
@@ -229,6 +238,7 @@ class SupabaseStore:
 
         return hubs
 
+    # Create hub.
     def create_hub(self, client: Client, user_id: str, payload: HubCreate) -> Hub:
         _ = client
         self._validate_hub_appearance(payload.icon_key, payload.color_key)
@@ -249,6 +259,7 @@ class SupabaseStore:
             raise RuntimeError("Failed to create hub.")
         return Hub(**data[0])
 
+    # Update hub.
     def update_hub(self, client: Client, hub_id: str, payload: HubUpdate) -> Hub:
         update_payload = payload.model_dump(exclude_none=True)
         if not update_payload:
@@ -273,6 +284,7 @@ class SupabaseStore:
             raise KeyError("Hub not found")
         return Hub(**response.data[0])
 
+    # Archive hub.
     def archive_hub(self, client: Client, hub_id: str) -> Hub:
         existing = client.table("hubs").select("id").eq("id", str(hub_id)).execute()
         if not existing.data:
@@ -289,6 +301,7 @@ class SupabaseStore:
             raise KeyError("Hub not found")
         return Hub(**response.data[0])
 
+    # Restore hub.
     def unarchive_hub(self, client: Client, hub_id: str) -> Hub:
         existing = client.table("hubs").select("id").eq("id", str(hub_id)).execute()
         if not existing.data:
@@ -304,12 +317,17 @@ class SupabaseStore:
             raise KeyError("Hub not found")
         return Hub(**response.data[0])
 
+    # Validate hub appearance.
     def _validate_hub_appearance(self, icon_key: Optional[str], color_key: Optional[str]) -> None:
         if icon_key is not None and icon_key not in HUB_ICON_KEYS:
             raise ValueError("Invalid hub icon.")
         if color_key is not None and color_key not in HUB_COLOR_KEYS:
             raise ValueError("Invalid hub color.")
 
+#####################################################################################################################################################################################
+    # Source creation and ingestion methods.
+
+    # Create source.
     def create_source(self, client: Client, payload: SourceCreate) -> Tuple[Source, str]:
         source_id = str(uuid.uuid4())
         hub_id = str(payload.hub_id)
@@ -343,6 +361,7 @@ class SupabaseStore:
 
         return Source(**row), upload_url
 
+    # Create web source.
     def create_web_source(self, client: Client, payload: WebSourceCreate) -> Source:
         source_id = str(uuid.uuid4())
         hub_id = str(payload.hub_id)
@@ -366,6 +385,7 @@ class SupabaseStore:
         row = response.data[0]
         return Source(**row)
 
+    # Create youtube source.
     def create_youtube_source(self, client: Client, payload: YouTubeSourceCreate) -> Source:
         source_id = str(uuid.uuid4())
         hub_id = str(payload.hub_id)
@@ -399,6 +419,7 @@ class SupabaseStore:
         row = response.data[0]
         return Source(**row)
 
+    # Return sources.
     def list_sources(self, client: Client, hub_id: str) -> List[Source]:
         response = (
             client.table("sources")
@@ -409,6 +430,7 @@ class SupabaseStore:
         )
         return [Source(**row) for row in response.data]
 
+    # Generate chat prompt.
     def suggest_chat_prompt(self, client: Client, hub_id: str, source_ids: Optional[List[str]] = None) -> str:
         hub_response = (
             client.table("hubs")
@@ -502,12 +524,14 @@ class SupabaseStore:
             return "What should this hub focus on?"
         return suggestion
 
+    # Return source.
     def get_source(self, client: Client, source_id: str) -> Source:
         response = client.table("sources").select("*").eq("id", str(source_id)).limit(1).execute()
         if not response.data:
             raise KeyError("Source not found")
         return Source(**response.data[0])
 
+    # Return source chunks.
     def list_source_chunks(self, client: Client, source_id: str) -> List[dict]:
         response = (
             client.table("source_chunks")
@@ -518,6 +542,7 @@ class SupabaseStore:
         )
         return response.data or []
 
+    # Delete source.
     def delete_source(self, client: Client, source_id: str) -> None:
         source = self.get_source(client, source_id)
         response = client.table("sources").delete().eq("id", str(source_id)).execute()
@@ -530,6 +555,7 @@ class SupabaseStore:
                 # Storage cleanup failure should not block source deletion.
                 pass
 
+    # Set source status.
     def set_source_status(self, client: Client, source_id: str, status: SourceStatus, failure_reason: Optional[str] = None) -> Source:
         response = (
             client.table("sources")
@@ -542,6 +568,7 @@ class SupabaseStore:
         row = response.data[0]
         return Source(**row)
 
+    # Refresh source.
     def refresh_source(self, client: Client, source_id: str) -> tuple[Source, dict]:
         source = self.get_source(client, source_id)
         if source.type == SourceType.web:
@@ -553,6 +580,7 @@ class SupabaseStore:
             return refreshed, info
         raise ValueError("Source type does not support refresh")
 
+    # Refresh web source.
     def refresh_web_source(self, client: Client, source_id: str, source: Optional[Source] = None) -> tuple[Source, str]:
         if source is None:
             source = self.get_source(client, source_id)
@@ -584,6 +612,7 @@ class SupabaseStore:
             raise KeyError("Source not found")
         return Source(**response.data[0]), url
 
+    # Refresh youtube source.
     def refresh_youtube_source(self, client: Client, source_id: str, source: Optional[Source] = None) -> tuple[Source, dict]:
         if source is None:
             source = self.get_source(client, source_id)
@@ -631,6 +660,7 @@ class SupabaseStore:
             "allow_auto_captions": allow_auto_captions,
         }
 
+    # Return source status.
     def get_source_status(self, client: Client, source_id: str) -> SourceStatusResponse:
         response = client.table("sources").select("id,status,failure_reason").eq("id", str(source_id)).execute()
         if not response.data:
@@ -638,6 +668,7 @@ class SupabaseStore:
         row = response.data[0]
         return SourceStatusResponse(id=row["id"], status=row["status"], failure_reason=row.get("failure_reason"))
 
+    # Create upload url.
     def create_upload_url(self, storage_path: str) -> str:
         upload = self.service_client.storage.from_(self.storage_bucket).create_signed_upload_url(storage_path)
         upload_url = upload.get("signedURL") or upload.get("signedUrl") or upload.get("signed_url")
@@ -645,6 +676,7 @@ class SupabaseStore:
             raise RuntimeError("Failed to create signed upload URL")
         return upload_url
 
+    # Return source suggestions.
     def list_source_suggestions(
         self,
         client: Client,
@@ -659,12 +691,14 @@ class SupabaseStore:
         response = query.order("created_at", desc=True).execute()
         return [SourceSuggestion(**row) for row in response.data]
 
+    # Return source suggestion.
     def get_source_suggestion(self, client: Client, suggestion_id: str) -> SourceSuggestion:
         response = client.table("source_suggestions").select("*").eq("id", str(suggestion_id)).limit(1).execute()
         if not response.data:
             raise KeyError("Source suggestion not found")
         return SourceSuggestion(**response.data[0])
 
+    # Update source suggestion.
     def update_source_suggestion(
         self,
         client: Client,
@@ -692,6 +726,7 @@ class SupabaseStore:
             raise KeyError("Source suggestion not found")
         return SourceSuggestion(**response.data[0])
 
+    # Find existing source for suggestion.
     def find_existing_source_for_suggestion(self, client: Client, suggestion: SourceSuggestion) -> Optional[Source]:
         sources = self.list_sources(client, suggestion.hub_id)
         if suggestion.type == SourceSuggestionType.web:
@@ -717,6 +752,8 @@ class SupabaseStore:
                     return source
         return None
 
+    # Membership and hub access methods.
+    # Return member role.
     def get_member_role(self, client: Client, hub_id: str, user_id: str) -> HubMember:
         response = (
             client.table("hub_members")
@@ -730,6 +767,7 @@ class SupabaseStore:
             raise KeyError("Membership not found")
         return HubMember(**response.data[0])
 
+    # Return members.
     def list_members(self, client: Client, hub_id: str, include_pending: bool) -> List[HubMember]:
         query = (
             client.table("hub_members")
@@ -741,6 +779,7 @@ class SupabaseStore:
         response = query.order("invited_at", desc=True).execute()
         return [HubMember(**row) for row in response.data]
 
+    # Return pending invites.
     def list_pending_invites(self, client: Client, user_id: str) -> List[dict[str, Any]]:
         response = (
             client.table("hub_members")
@@ -762,6 +801,7 @@ class SupabaseStore:
             )
         return invites
 
+    # Return invite notifications.
     def list_invite_notifications(self, client: Client, user_id: str) -> List[dict[str, Any]]:
         response = (
             client.table("hub_members")
@@ -784,6 +824,7 @@ class SupabaseStore:
             )
         return invites
 
+    # Dismiss invite notification.
     def dismiss_invite_notification(self, client: Client, hub_id: str, user_id: str) -> None:
         now = datetime.now(timezone.utc).isoformat()
         response = (
@@ -798,6 +839,7 @@ class SupabaseStore:
         if not response.data:
             raise KeyError("Invite notification not found")
 
+    # Invite member.
     def invite_member(self, client: Client, hub_id: str, payload: HubInviteRequest) -> HubMember:
         users = self.service_client.auth.admin.list_users()
         target = next((user for user in users if (user.email or "").lower() == payload.email.lower()), None)
@@ -819,6 +861,7 @@ class SupabaseStore:
         row["email"] = target.email
         return HubMember(**row)
 
+    # Accept invite.
     def accept_invite(self, client: Client, hub_id: str, user_id: str) -> HubMember:
         now = datetime.now(timezone.utc).isoformat()
         response = (
@@ -833,6 +876,7 @@ class SupabaseStore:
             raise KeyError("Invite not found")
         return HubMember(**response.data[0])
 
+    # Update member role.
     def update_member_role(
         self,
         client: Client,
@@ -854,6 +898,7 @@ class SupabaseStore:
             raise KeyError("Member not found")
         return HubMember(**response.data[0])
 
+    # Transfer hub ownership.
     def transfer_hub_ownership(self, hub_id: str, current_owner_id: str, target_user_id: str) -> HubMember:
         response = self.service_client.rpc(
             "transfer_hub_ownership",
@@ -878,6 +923,7 @@ class SupabaseStore:
             raise KeyError("Transferred owner not found")
         return HubMember(**member_response.data[0])
 
+    # Remove member.
     def remove_member(self, client: Client, hub_id: str, user_id: str) -> None:
         target_member = self.get_member_role(client, hub_id, user_id)
         if target_member.role == MembershipRole.owner:
@@ -892,6 +938,8 @@ class SupabaseStore:
         if not response.data:
             raise KeyError("Member not found")
 
+    # Chat session and moderation helper methods.
+    # Helper for service chat session rows.
     def _service_chat_session_rows(self, session_ids: List[str]) -> Dict[str, Dict[str, Any]]:
         if not session_ids:
             return {}
@@ -903,6 +951,7 @@ class SupabaseStore:
         )
         return {str(row["id"]): row for row in (response.data or [])}
 
+    # Helper for service message rows.
     def _service_message_rows(self, message_ids: List[str]) -> Dict[str, Dict[str, Any]]:
         if not message_ids:
             return {}
@@ -914,6 +963,7 @@ class SupabaseStore:
         )
         return {str(row["id"]): row for row in (response.data or [])}
 
+    # Helper for flagged question rows.
     def _flagged_question_rows(
         self,
         session_ids: List[str],
@@ -937,6 +987,7 @@ class SupabaseStore:
                 previous = row
         return question_rows
 
+    # Update hub access.
     def update_hub_access(self, client: Client, hub_id: str, user_id: str) -> None:
         response = (
             self.service_client.table("hub_members")
@@ -948,6 +999,7 @@ class SupabaseStore:
         if not response.data:
             raise KeyError("Hub membership not found")
 
+    # Toggle hub favourite.
     def toggle_hub_favourite(self, client: Client, hub_id: str, user_id: str, is_favourite: bool) -> None:
         response = (
             client.table("hub_members")
@@ -959,6 +1011,7 @@ class SupabaseStore:
         if not response.data:
             raise KeyError("Hub membership not found")
 
+    # Complete source ids for hub.
     def _complete_source_ids_for_hub(self, client: Client, hub_id: str) -> List[str]:
         response = (
             client.table("sources")
@@ -970,6 +1023,7 @@ class SupabaseStore:
         )
         return [str(row["id"]) for row in (response.data or [])]
 
+    # Normalize source ids to complete order.
     def _normalize_source_ids_to_complete_order(
         self,
         requested_source_ids: Optional[List[str]],
@@ -980,6 +1034,7 @@ class SupabaseStore:
         requested = {str(source_id) for source_id in requested_source_ids if str(source_id)}
         return [source_id for source_id in complete_source_ids if source_id in requested]
 
+    # Normalize chat source ids.
     def _normalize_chat_source_ids(
         self,
         client: Client,
@@ -995,6 +1050,7 @@ class SupabaseStore:
         )
         return normalized_source_ids, normalized_source_ids
 
+    # Convert chat session.
     def _serialize_chat_session(
         self,
         row: Dict[str, Any],
@@ -1014,6 +1070,7 @@ class SupabaseStore:
             last_message_at=row.get("last_message_at") or row["created_at"],
         )
 
+    # Return chat session row.
     def _get_chat_session_row(
         self,
         client: Client,
@@ -1034,6 +1091,7 @@ class SupabaseStore:
             raise KeyError("Chat session not found")
         return response.data[0]
 
+    # Ensure chat session owner.
     def _require_chat_session_owner(
         self,
         client: Client,
@@ -1047,6 +1105,7 @@ class SupabaseStore:
             raise PermissionError("Only the chat creator can modify this session.")
         return row
 
+    # Return session messages.
     def _list_session_messages(
         self,
         client: Client,
@@ -1065,12 +1124,14 @@ class SupabaseStore:
         response = query.execute()
         return response.data or []
 
+    # Helper for conversation from message rows.
     def _conversation_from_message_rows(self, rows: List[Dict[str, Any]]) -> List[Dict[str, str]]:
         return [
             {"role": row["role"], "content": row["content"]}
             for row in rows[-self.chat_rewrite_history_messages :]
         ]
 
+    # Helper for retrieval context from message rows.
     def _retrieval_context_from_message_rows(self, rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         return [
             {
@@ -1081,6 +1142,7 @@ class SupabaseStore:
             for row in rows[-self.chat_rewrite_history_messages :]
         ]
 
+    # Return recent conversation.
     def _recent_conversation(self, client: Client, session_id: str) -> List[Dict[str, str]]:
         try:
             rows = self._list_session_messages(
@@ -1092,6 +1154,7 @@ class SupabaseStore:
         except Exception:
             return []
 
+    # Return recent retrieval context.
     def _recent_retrieval_context(self, client: Client, session_id: str) -> List[Dict[str, Any]]:
         try:
             rows = self._list_session_messages(
@@ -1103,14 +1166,17 @@ class SupabaseStore:
         except Exception:
             return []
 
+    # Convert flag case.
     def _serialize_flag_case(self, row: Dict[str, Any]) -> FlagCase:
         return FlagCase(**row)
 
+    # Convert message revision.
     def _serialize_message_revision(self, row: Dict[str, Any]) -> MessageRevision:
         payload = dict(row)
         payload["citations"] = [Citation(**citation) for citation in (row.get("citations") or [])]
         return MessageRevision(**payload)
 
+    # Helper for message flag metadata.
     def _message_flag_metadata(self, message_ids: List[str]) -> Dict[str, Dict[str, Any]]:
         if not message_ids:
             return {}
@@ -1134,6 +1200,7 @@ class SupabaseStore:
             }
         return metadata
 
+    # Convert session message.
     def _serialize_session_message(
         self,
         message: Dict[str, Any],
@@ -1153,6 +1220,7 @@ class SupabaseStore:
             feedback_rating=(feedback_metadata or {}).get(message_id),
         )
 
+    # Return visible message for user.
     def _visible_message_for_user(self, client: Client, message_id: str) -> Dict[str, Any]:
         response = (
             client.table("messages")
@@ -1165,6 +1233,7 @@ class SupabaseStore:
             raise KeyError("Message not found")
         return response.data[0]
 
+    # Helper for service message row.
     def _service_message_row(self, message_id: str) -> Dict[str, Any]:
         response = (
             self.service_client.table("messages")
@@ -1177,6 +1246,7 @@ class SupabaseStore:
             raise KeyError("Message not found")
         return response.data[0]
 
+    # Helper for message feedback map for user.
     def _message_feedback_map_for_user(self, message_ids: List[str], user_id: str) -> Dict[str, Optional[str]]:
         if not message_ids:
             return {}
@@ -1189,6 +1259,7 @@ class SupabaseStore:
         )
         return {str(row["message_id"]): (row.get("rating") or None) for row in (response.data or [])}
 
+    # Return flag case row.
     def _get_flag_case_row(self, flag_case_id: str) -> Dict[str, Any]:
         response = (
             self.service_client.table("message_flag_cases")
@@ -1201,6 +1272,7 @@ class SupabaseStore:
             raise KeyError("Flag case not found")
         return response.data[0]
 
+    # Return active flag case for message.
     def _get_active_flag_case_for_message(self, message_id: str) -> Optional[Dict[str, Any]]:
         response = (
             self.service_client.table("message_flag_cases")
@@ -1215,6 +1287,7 @@ class SupabaseStore:
             return None
         return response.data[0]
 
+    # Return revision row.
     def _get_revision_row(self, revision_id: str) -> Dict[str, Any]:
         response = (
             self.service_client.table("message_revisions")
@@ -1227,6 +1300,7 @@ class SupabaseStore:
             raise KeyError("Revision not found")
         return response.data[0]
 
+    # Helper for moderated hub ids for user.
     def _moderated_hub_ids_for_user(self, user_id: str) -> List[str]:
         response = (
             self.service_client.table("hub_members")
@@ -1243,10 +1317,12 @@ class SupabaseStore:
                 hub_ids.append(hub_id)
         return hub_ids
 
+    # Ensure moderation access.
     def _require_moderation_access(self, user_id: str, hub_id: str) -> None:
         if str(hub_id) not in self._moderated_hub_ids_for_user(user_id):
             raise PermissionError("Owner or admin role required.")
 
+    # Helper for question for flagged message.
     def _question_for_flagged_message(self, session_id: str, message_id: str) -> Dict[str, Any]:
         rows = self._list_session_messages(
             self.service_client,
@@ -1262,6 +1338,7 @@ class SupabaseStore:
             raise KeyError("Flagged question not found")
         return previous
 
+    # Update chat session state.
     def _update_chat_session_state(
         self,
         session_id: str,
@@ -1278,6 +1355,7 @@ class SupabaseStore:
             }
         ).eq("id", str(session_id)).execute()
 
+    # Create chat session with messages.
     def _create_chat_session_with_messages(
         self,
         *,
@@ -1312,6 +1390,8 @@ class SupabaseStore:
             raise RuntimeError("Failed to create chat session.")
         return data[0]
 
+    # Chat session read and write methods.
+    # Return chat sessions.
     def list_chat_sessions(self, client: Client, user_id: str, hub_id: str) -> List[ChatSessionSummary]:
         response = (
             client.table("chat_sessions")
@@ -1326,6 +1406,7 @@ class SupabaseStore:
         complete_source_ids = self._complete_source_ids_for_hub(client, hub_id)
         return [self._serialize_chat_session(row, complete_source_ids) for row in (response.data or [])]
 
+    # Helper for search chat messages.
     def search_chat_messages(
         self,
         client: Client,
@@ -1421,6 +1502,7 @@ class SupabaseStore:
         )
         return results[:limit]
 
+    # Return chat session with messages.
     def get_chat_session_with_messages(
         self,
         client: Client,
@@ -1442,12 +1524,14 @@ class SupabaseStore:
             messages=[self._serialize_session_message(message, flag_metadata, feedback_metadata) for message in messages],
         )
 
+    # Helper for rename chat session.
     def rename_chat_session(self, client: Client, user_id: str, session_id: str, title: str) -> None:
         self._require_chat_session_owner(client, user_id, session_id)
         self.service_client.table("chat_sessions").update(
             {"title": title}
         ).eq("id", str(session_id)).is_("deleted_at", "null").execute()
 
+    # Delete chat session.
     def delete_chat_session(self, client: Client, user_id: str, session_id: str) -> None:
         row = self._require_chat_session_owner(client, user_id, session_id, include_deleted=True)
         if str(row.get("deleted_at") or "").strip():
@@ -1456,6 +1540,8 @@ class SupabaseStore:
             {"deleted_at": datetime.now(timezone.utc).isoformat()}
         ).eq("id", str(session_id)).is_("deleted_at", "null").execute()
 
+    # Chat event and moderation write methods.
+    # Ensure hub access.
     def _require_hub_access(self, user_id: str, hub_id: str) -> None:
         hub_response = (
             self.service_client.table("hubs")
@@ -1480,6 +1566,7 @@ class SupabaseStore:
         if not member_response.data or not member_response.data[0].get("accepted_at"):
             raise PermissionError("Hub access required.")
 
+    # Insert chat event.
     def _insert_chat_event(
         self,
         client: Client,
@@ -1507,6 +1594,7 @@ class SupabaseStore:
         )
         return (response.data or [{}])[0]
 
+    # Insert chat event best effort.
     def _insert_chat_event_best_effort(self, client: Client, **kwargs: Any) -> Optional[Dict[str, Any]]:
         try:
             return self._insert_chat_event(client, **kwargs)
@@ -1523,6 +1611,7 @@ class SupabaseStore:
             )
             return None
 
+    # Create chat event.
     def create_chat_event(self, client: Client, user_id: str, payload: ChatEventCreate) -> ChatEventResponse:
         self._require_hub_access(user_id, str(payload.hub_id))
         if payload.session_id is not None:
@@ -1560,6 +1649,7 @@ class SupabaseStore:
             created_at=inserted.get("created_at") or datetime.now(timezone.utc),
         )
 
+    # Helper for source name map.
     def _source_name_map(self, source_ids: List[str]) -> Dict[str, str]:
         normalized_ids = [source_id for source_id in source_ids if _is_uuid_like(source_id)]
         if not normalized_ids:
@@ -1572,6 +1662,7 @@ class SupabaseStore:
         )
         return {str(row["id"]): str(row.get("original_name") or row["id"]) for row in (response.data or [])}
 
+    # Flag message.
     def flag_message(
         self,
         client: Client,
@@ -1618,6 +1709,7 @@ class SupabaseStore:
             raise RuntimeError("Failed to create flag case.")
         return FlagMessageResponse(flag_case=self._serialize_flag_case(data[0]), created=True)
 
+    # Return flag case revisions.
     def _list_flag_case_revisions(self, flag_case_id: str) -> List[MessageRevision]:
         response = self._execute_service_query_with_retry(
             lambda: (
@@ -1630,6 +1722,7 @@ class SupabaseStore:
         )
         return [self._serialize_message_revision(row) for row in (response.data or [])]
 
+    # Helper for execute service query with retry.
     def _execute_service_query_with_retry(self, query_fn, *, attempts: int = 3, delay_seconds: float = 0.2):
         last_error: Exception | None = None
         for attempt in range(attempts):
@@ -1644,10 +1737,12 @@ class SupabaseStore:
             raise last_error
         raise RuntimeError("Retry helper exited without a result.")
 
+    # Helper for ensure flag case open.
     def _ensure_flag_case_open(self, case_row: Dict[str, Any]) -> None:
         if str(case_row.get("status") or "") not in {FlagCaseStatus.open.value, FlagCaseStatus.in_review.value}:
             raise ValueError("Closed flag cases cannot be edited.")
 
+    # Flag case generation context.
     def _flag_case_generation_context(
         self,
         flag_case_row: Dict[str, Any],
@@ -1674,6 +1769,7 @@ class SupabaseStore:
         source_ids = [str(source_id) for source_id in (session_row.get("source_ids") or [])]
         return session_row, question_row, history_messages, retrieval_history, source_ids
 
+    # Return flagged chat queue.
     def list_flagged_chat_queue(
         self,
         user_id: str,
@@ -1722,6 +1818,7 @@ class SupabaseStore:
             )
         return items
 
+    # Return flag case for hub.
     def _get_flag_case_for_hub(self, user_id: str, hub_id: str, flag_case_id: str) -> Dict[str, Any]:
         self._require_moderation_access(user_id, hub_id)
         case_row = self._get_flag_case_row(flag_case_id)
@@ -1729,6 +1826,7 @@ class SupabaseStore:
             raise KeyError("Flag case not found")
         return case_row
 
+    # Return flagged chat detail.
     def get_flagged_chat_detail(self, user_id: str, hub_id: str, flag_case_id: str) -> FlaggedChatDetail:
         case_row = self._get_flag_case_for_hub(user_id, hub_id, flag_case_id)
 
@@ -1757,6 +1855,7 @@ class SupabaseStore:
             revisions=self._list_flag_case_revisions(str(flag_case_id)),
         )
 
+    # Regenerate flagged chat revision.
     def regenerate_flagged_chat_revision(self, user_id: str, hub_id: str, flag_case_id: str) -> MessageRevision:
         case_row = self._get_flag_case_for_hub(user_id, hub_id, flag_case_id)
         self._ensure_flag_case_open(case_row)
@@ -1793,6 +1892,7 @@ class SupabaseStore:
             ).eq("id", str(flag_case_id)).execute()
         return self._serialize_message_revision(inserted.data[0])
 
+    # Create flagged chat revision.
     def create_flagged_chat_revision(
         self,
         user_id: str,
@@ -1824,6 +1924,7 @@ class SupabaseStore:
             ).eq("id", str(flag_case_id)).execute()
         return self._serialize_message_revision(inserted.data[0])
 
+    # Apply flagged chat revision.
     def apply_flagged_chat_revision(self, user_id: str, hub_id: str, flag_case_id: str, revision_id: str) -> FlagCase:
         case_row = self._get_flag_case_for_hub(user_id, hub_id, flag_case_id)
         self._ensure_flag_case_open(case_row)
@@ -1848,6 +1949,7 @@ class SupabaseStore:
             raise RuntimeError("Failed to resolve flag case.")
         return self._serialize_flag_case(data[0])
 
+    # Dismiss flagged chat.
     def dismiss_flagged_chat(self, user_id: str, hub_id: str, flag_case_id: str) -> FlagCase:
         case_row = self._get_flag_case_for_hub(user_id, hub_id, flag_case_id)
         self._ensure_flag_case_open(case_row)
@@ -1868,6 +1970,8 @@ class SupabaseStore:
             raise RuntimeError("Failed to dismiss flag case.")
         return self._serialize_flag_case(updated.data[0])
 
+    # Retrieval and answer-generation methods.
+    # Select matches.
     def _select_matches(
         self,
         raw_matches: List[Dict[str, Any]],
@@ -1933,6 +2037,7 @@ class SupabaseStore:
             return raw_matches[:max_citations]
         return []
 
+    # Rerank matches.
     def _rerank_matches(
         self,
         matches: List[Dict[str, Any]],
@@ -1996,6 +2101,7 @@ class SupabaseStore:
 
         return selected
 
+    # Remove rerank metadata.
     def _strip_rerank_metadata(self, matches: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         cleaned: List[Dict[str, Any]] = []
         for candidate in matches:
@@ -2006,6 +2112,7 @@ class SupabaseStore:
             cleaned.append(row)
         return cleaned
 
+    # Helper for should diversify chat matches.
     def _should_diversify_chat_matches(
         self,
         raw_matches: List[Dict[str, Any]],
@@ -2023,6 +2130,7 @@ class SupabaseStore:
             return (top_similarity - second_similarity) < self.chat_diversity_confidence_gap
         return False
 
+    # Helper for mmr score.
     def _mmr_score(
         self,
         candidate: Dict[str, Any],
@@ -2055,6 +2163,7 @@ class SupabaseStore:
                 score -= duplicate_penalty
         return score, query_similarity, -int(candidate.get("_rank", 0))
 
+    # Rewrite query for retrieval.
     def _rewrite_query_for_retrieval(self, question: str, history: List[Dict[str, Any]]) -> str:
         conversation_lines: List[str] = []
         cited_snippets: List[str] = []
@@ -2109,6 +2218,7 @@ class SupabaseStore:
             return question
         return _normalize_retrieval_query(question, rewritten)
 
+    # Generate chat session title.
     def _generate_chat_session_title(self, first_message: str) -> str:
         cleaned = " ".join((first_message or "").split()).strip()
         if not cleaned:
@@ -2135,6 +2245,7 @@ class SupabaseStore:
 
         return _normalize_chat_session_title(content) or _fallback_chat_session_title(cleaned)
 
+    # Helper for retrieve chat context.
     def _retrieve_chat_context(
         self,
         client: Client,
@@ -2163,6 +2274,7 @@ class SupabaseStore:
             context_blocks.append(f"[{idx}] {snippet}")
         return raw_matches, citations, context_blocks
 
+    # Generate chat answer.
     def _generate_chat_answer(
         self,
         client: Client,
@@ -2367,6 +2479,7 @@ class SupabaseStore:
         generation_metadata["retried_for_citations"] = retried_for_citations
         return answer, final_citations, usage, generation_metadata
 
+    # Extract grounded chat citations.
     def _extract_grounded_chat_citations(
         self,
         raw_answer: str,
@@ -2389,6 +2502,7 @@ class SupabaseStore:
         final_citations = [hydrated_citations[idx - 1] for idx in referenced_indices]
         return answer, final_citations
 
+    # Complete chat answer.
     def _complete_chat_answer(
         self,
         *,
@@ -2424,6 +2538,7 @@ class SupabaseStore:
             )
         return completion.choices[0].message.content or "", (completion.usage.model_dump() if completion.usage else None)
 
+    # Handle the requested data.
     def chat(self, client: Client, user_id: str, payload: ChatRequest) -> ChatResponse:
         hub_id = str(payload.hub_id)
         requested_source_ids = None if payload.source_ids is None else [str(source_id) for source_id in payload.source_ids]
@@ -2466,6 +2581,7 @@ class SupabaseStore:
             retrieval_source_ids=retrieval_source_ids,
             existing_session_id=existing_session_id,
         )
+        # Helper for finalize response.
         def finalize_response(
             answer: str,
             response_citations: List[Citation],
@@ -2611,6 +2727,8 @@ class SupabaseStore:
         )
         return finalize_response(answer, citations, usage, generation_metadata)
 
+    # Chat feedback and analytics methods.
+    # Handle history.
     def chat_history(self, client: Client, user_id: str, hub_id: str) -> List[HistoryMessage]:
         response = (
             client.table("chat_sessions")
@@ -2642,6 +2760,7 @@ class SupabaseStore:
             for m in rows
         ]
 
+    # Create chat feedback.
     def create_chat_feedback(
         self,
         client: Client,
@@ -2685,6 +2804,7 @@ class SupabaseStore:
             updated_at=row.get("updated_at") or datetime.now(timezone.utc),
         )
 
+    # Create citation feedback.
     def create_citation_feedback(
         self,
         client: Client,
@@ -2749,6 +2869,7 @@ class SupabaseStore:
             created_at=row.get("created_at") or datetime.now(timezone.utc),
         )
 
+    # Return hub chat analytics summary.
     def get_hub_chat_analytics_summary(
         self,
         hub_id: str,
@@ -2863,6 +2984,7 @@ class SupabaseStore:
             ],
         )
 
+    # Return hub chat analytics trends.
     def get_hub_chat_analytics_trends(
         self,
         hub_id: str,
@@ -2928,6 +3050,8 @@ class SupabaseStore:
             points=[points[day] for day in sorted(points.keys())],
         )
 
+    # FAQ and guide content methods.
+    # Return faqs.
     def list_faqs(self, client: Client, hub_id: str) -> List[FaqEntry]:
         response = (
             client.table("faq_entries")
@@ -2939,6 +3063,7 @@ class SupabaseStore:
         )
         return [FaqEntry(**row) for row in response.data]
 
+    # Create faq.
     def create_faq(self, client: Client, hub_id: str, user_id: str, question: str, answer: str) -> FaqEntry:
         existing = (
             client.table("faq_entries")
@@ -2966,12 +3091,14 @@ class SupabaseStore:
         response = client.table("faq_entries").insert(row).execute()
         return FaqEntry(**response.data[0])
 
+    # Return faq.
     def get_faq(self, client: Client, faq_id: str) -> FaqEntry:
         response = client.table("faq_entries").select("*").eq("id", str(faq_id)).limit(1).execute()
         if not response.data:
             raise KeyError("FAQ entry not found")
         return FaqEntry(**response.data[0])
 
+    # Generate faqs.
     def generate_faqs(self, client: Client, user_id: str, payload: FaqGenerateRequest) -> List[FaqEntry]:
         hub_id = str(payload.hub_id)
         source_ids = [str(source_id) for source_id in payload.source_ids]
@@ -3085,12 +3212,14 @@ class SupabaseStore:
         response = client.table("faq_entries").insert(entries_payload).execute()
         return [FaqEntry(**row) for row in response.data]
 
+    # Update faq.
     def update_faq(self, client: Client, faq_id: str, payload: dict) -> FaqEntry:
         response = client.table("faq_entries").update(payload).eq("id", str(faq_id)).execute()
         if not response.data:
             raise KeyError("FAQ entry not found")
         return FaqEntry(**response.data[0])
 
+    # Archive faq.
     def archive_faq(self, client: Client, faq_id: str, user_id: str) -> FaqEntry:
         now = datetime.now(timezone.utc).isoformat()
         response = (
@@ -3103,6 +3232,7 @@ class SupabaseStore:
             raise KeyError("FAQ entry not found")
         return FaqEntry(**response.data[0])
 
+    # Return guides.
     def list_guides(self, client: Client, user_id: str, hub_id: str) -> List[GuideEntry]:
         response = (
             client.table("guide_entries")
@@ -3165,18 +3295,21 @@ class SupabaseStore:
             guides.append(GuideEntry(**row, steps=steps))
         return guides
 
+    # Return guide.
     def get_guide(self, client: Client, guide_id: str) -> GuideEntry:
         response = client.table("guide_entries").select("*").eq("id", str(guide_id)).limit(1).execute()
         if not response.data:
             raise KeyError("Guide entry not found")
         return GuideEntry(**response.data[0], steps=[])
 
+    # Return guide step.
     def get_guide_step(self, client: Client, step_id: str) -> GuideStep:
         response = client.table("guide_steps").select("*").eq("id", str(step_id)).limit(1).execute()
         if not response.data:
             raise KeyError("Guide step not found")
         return GuideStep(**response.data[0])
 
+    # Generate guide.
     def generate_guide(self, client: Client, user_id: str, payload: GuideGenerateRequest) -> Optional[GuideEntry]:
         hub_id = str(payload.hub_id)
         source_ids = [str(source_id) for source_id in payload.source_ids]
@@ -3284,12 +3417,14 @@ class SupabaseStore:
         steps_out = [GuideStepWithProgress(**row, is_complete=False, completed_at=None) for row in steps_response.data]
         return GuideEntry(**guide_row.data[0], steps=steps_out)
 
+    # Update guide.
     def update_guide(self, client: Client, guide_id: str, payload: dict) -> GuideEntry:
         response = client.table("guide_entries").update(payload).eq("id", str(guide_id)).execute()
         if not response.data:
             raise KeyError("Guide entry not found")
         return GuideEntry(**response.data[0], steps=[])
 
+    # Archive guide.
     def archive_guide(self, client: Client, guide_id: str, user_id: str) -> GuideEntry:
         now = datetime.now(timezone.utc).isoformat()
         response = (
@@ -3302,6 +3437,7 @@ class SupabaseStore:
             raise KeyError("Guide entry not found")
         return GuideEntry(**response.data[0], steps=[])
 
+    # Create guide step.
     def create_guide_step(self, client: Client, guide_id: str, payload: GuideStepCreateRequest) -> GuideStep:
         last_step = (
             client.table("guide_steps")
@@ -3333,12 +3469,14 @@ class SupabaseStore:
             raise KeyError("Guide step not found")
         return GuideStep(**row.data[0])
 
+    # Update guide step.
     def update_guide_step(self, client: Client, step_id: str, payload: dict) -> GuideStep:
         response = client.table("guide_steps").update(payload).eq("id", str(step_id)).execute()
         if not response.data:
             raise KeyError("Guide step not found")
         return GuideStep(**response.data[0])
 
+    # Helper for reorder guide steps.
     def reorder_guide_steps(self, client: Client, guide_id: str, ordered_step_ids: List[str]) -> List[GuideStep]:
         steps_response = (
             client.table("guide_steps")
@@ -3363,6 +3501,7 @@ class SupabaseStore:
         )
         return [GuideStep(**row) for row in updated.data]
 
+    # Helper for upsert guide step progress.
     def upsert_guide_step_progress(
         self,
         client: Client,
@@ -3389,6 +3528,8 @@ class SupabaseStore:
             raise KeyError("Guide step progress not found")
         return response.data[0]
 
+    # Reminder and notification methods.
+    # Return reminders.
     def list_reminders(
         self,
         client: Client,
@@ -3413,6 +3554,7 @@ class SupabaseStore:
         response = query.order("due_at").execute()
         return [Reminder(**row) for row in response.data]
 
+    # Create reminder.
     def create_reminder(self, client: Client, user_id: str, payload: ReminderCreate) -> Reminder:
         response = (
             client.table("reminders")
@@ -3433,23 +3575,27 @@ class SupabaseStore:
         )
         return Reminder(**response.data[0])
 
+    # Update reminder.
     def update_reminder(self, client: Client, reminder_id: str, payload: dict) -> Reminder:
         response = client.table("reminders").update(payload).eq("id", reminder_id).execute()
         if not response.data:
             raise KeyError("Reminder not found")
         return Reminder(**response.data[0])
 
+    # Return reminder.
     def get_reminder(self, client: Client, reminder_id: str) -> Reminder:
         response = client.table("reminders").select("*").eq("id", reminder_id).execute()
         if not response.data:
             raise KeyError("Reminder not found")
         return Reminder(**response.data[0])
 
+    # Delete reminder.
     def delete_reminder(self, client: Client, reminder_id: str) -> None:
         response = client.table("reminders").delete().eq("id", reminder_id).execute()
         if not response.data:
             raise KeyError("Reminder not found")
 
+    # Return candidates.
     def list_candidates(
         self,
         client: Client,
@@ -3467,18 +3613,21 @@ class SupabaseStore:
         response = query.order("created_at", desc=True).execute()
         return [ReminderCandidate(**row) for row in response.data]
 
+    # Return candidate.
     def get_candidate(self, client: Client, candidate_id: str) -> ReminderCandidate:
         response = client.table("reminder_candidates").select("*").eq("id", candidate_id).limit(1).execute()
         if not response.data:
             raise KeyError("Candidate not found")
         return ReminderCandidate(**response.data[0])
 
+    # Update candidate.
     def update_candidate(self, client: Client, candidate_id: str, payload: dict) -> ReminderCandidate:
         response = client.table("reminder_candidates").update(payload).eq("id", candidate_id).execute()
         if not response.data:
             raise KeyError("Candidate not found")
         return ReminderCandidate(**response.data[0])
 
+    # Create candidate feedback.
     def create_candidate_feedback(
         self,
         client: Client,
@@ -3496,6 +3645,7 @@ class SupabaseStore:
             }
         ).execute()
 
+    # Return notifications.
     def list_notifications(self, client: Client, user_id: str, reminder_id: Optional[str] = None) -> List[NotificationEvent]:
         select = "id, reminder_id, channel, status, scheduled_for, sent_at, dismissed_at, reminders (id, hub_id, source_id, due_at, message, status, hubs (name))"
         query = (
@@ -3536,6 +3686,7 @@ class SupabaseStore:
             )
         return events
 
+    # Dismiss notification.
     def dismiss_notification(self, client: Client, user_id: str, notification_id: str) -> NotificationEvent:
         now = datetime.now(timezone.utc).isoformat()
         response = (
@@ -3579,6 +3730,8 @@ class SupabaseStore:
             reminder=ReminderSummary(**{**reminder_row, "hub_name": hub_row.get("name")}),
         )
 
+    # Activity logging and profile lookup methods.
+    # Log activity.
     def log_activity(
         self,
         client: Client,
@@ -3604,6 +3757,7 @@ class SupabaseStore:
         except Exception:
             logger.warning("Failed to log activity event: %s/%s", action, resource_type, exc_info=True)
 
+    # Return activity.
     def list_activity(
         self,
         client: Client,
@@ -3643,6 +3797,7 @@ class SupabaseStore:
             events.append(ActivityEvent(**row))
         return events
 
+    # Resolve user labels by ids.
     def _resolve_user_labels_by_ids(self, user_ids: set[str]) -> Dict[str, str]:
         if not user_ids:
             return {}
@@ -3653,6 +3808,7 @@ class SupabaseStore:
             for user_id, profile in profile_lookup.items()
         }
 
+    # Resolve user profiles by ids.
     def resolve_user_profiles_by_ids(self, user_ids: set[str]) -> Dict[str, UserProfileSummary]:
         if not user_ids:
             return {}
@@ -3696,6 +3852,7 @@ class SupabaseStore:
         return profile_lookup
 
     @staticmethod
+    # Extract admin users.
     def _extract_admin_users(response: Any) -> List[Any]:
         if isinstance(response, list):
             return response
@@ -3713,11 +3870,13 @@ class SupabaseStore:
         return []
 
     @staticmethod
+    # Build label for user.
     def _display_label_for_user(user: Any, fallback: str) -> str:
         profile = SupabaseStore._profile_summary_for_user(user, fallback)
         return profile.display_name or profile.email or fallback
 
     @staticmethod
+    # Helper for profile summary for user.
     def _profile_summary_for_user(user: Any, fallback: str) -> UserProfileSummary:
         metadata = getattr(user, "user_metadata", None) or {}
         full_name = (metadata.get("full_name") or "").strip() if isinstance(metadata, dict) else ""
@@ -3734,6 +3893,8 @@ class SupabaseStore:
             avatar_color=avatar_color or None,
         )
 
+    # LLM and retrieval support methods.
+    # Answer a question using hub context and web search results.
     def _answer_with_web_search(
         self,
         question: str,
@@ -3783,10 +3944,12 @@ class SupabaseStore:
                 answer = "I couldn't find enough information to answer that."
             return answer, [], usage
 
+    # Embed query.
     def _embed_query(self, text: str) -> List[float]:
         response = self.llm_client.embeddings.create(model=self.embedding_model, input=text)
         return response.data[0].embedding
 
+    # Match chunks.
     def _match_chunks(
         self,
         client: Client,
@@ -3806,6 +3969,7 @@ class SupabaseStore:
         ).execute()
         return response.data or []
 
+    # Fetch source context.
     def _fetch_source_context(
         self,
         client: Client,
@@ -3824,6 +3988,7 @@ class SupabaseStore:
         )
         return response.data or []
 
+    # Generate faq questions.
     def _generate_faq_questions(self, context_blocks: List[str], count: int, existing_questions: Optional[List[str]] = None) -> List[str]:
         system_prompt = (
             "You are Caddie, an onboarding assistant. Generate distinct FAQ questions "
@@ -3853,6 +4018,7 @@ class SupabaseStore:
         raw = completion.choices[0].message.content or ""
         return _parse_questions_from_text(raw, count)
 
+    # Generate faq answer.
     def _generate_faq_answer(self, question: str, context_blocks: List[str]) -> str:
         system_prompt = (
             "You are Caddie, an onboarding assistant. Answer using only the provided context. "
@@ -3869,6 +4035,7 @@ class SupabaseStore:
         )
         return completion.choices[0].message.content or ""
 
+    # Generate guide steps.
     def _generate_guide_steps(
         self, context_blocks: List[str], topic: Optional[str], step_count: int
     ) -> List[Dict[str, str]]:
@@ -3895,6 +4062,7 @@ class SupabaseStore:
         return _parse_steps_from_text(raw, step_count)
 
 
+# Shared store instance used by routers and dependencies.
 store = SupabaseStore()
 
 
@@ -3937,6 +4105,10 @@ _FOLLOW_UP_LEAD_TOKENS = {
 _FILENAME_SAFE_RE = re.compile(r"[^A-Za-z0-9._ -]")
 
 
+# Standalone helper functions used throughout the store module.
+
+# Sanitize a filename so it is safe to use in storage paths.
+# Sanitize filename.
 def _sanitize_filename(name: str) -> str:
     base = PurePath(name).name.strip()
     base = _FILENAME_SAFE_RE.sub("_", base)
@@ -3948,16 +4120,20 @@ def _sanitize_filename(name: str) -> str:
     return base
 
 
+# Helper for web storage path.
 def _web_storage_path(hub_id: str, source_id: str) -> str:
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     return f"{hub_id}/{source_id}/web-{stamp}.md"
 
 
+# Helper for youtube storage path.
 def _youtube_storage_path(hub_id: str, source_id: str) -> str:
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     return f"{hub_id}/{source_id}/youtube-{stamp}.md"
 
 
+# Build readable default names for web and YouTube sources.
+# Build web source name.
 def _build_web_source_name(url: str) -> str:
     parsed = urlparse(url)
     host = parsed.netloc or parsed.path or url
@@ -3969,6 +4145,7 @@ def _build_web_source_name(url: str) -> str:
     return display[:255]
 
 
+# Build youtube source name.
 def _build_youtube_source_name(url: str, video_id: str) -> str:
     parsed = urlparse(url)
     host = (parsed.netloc or "youtube.com").lower()
@@ -3979,9 +4156,8 @@ def _build_youtube_source_name(url: str, video_id: str) -> str:
 
 
 _YOUTUBE_ID_RE = re.compile(r"^[A-Za-z0-9_-]{11}$")
-
-
-
+# URL parsing and normalisation helpers.
+# Extract youtube video id.
 def _extract_youtube_video_id(url: str) -> Optional[str]:
     parsed = urlparse(url)
     host = (parsed.netloc or "").lower()
@@ -4002,6 +4178,7 @@ def _extract_youtube_video_id(url: str) -> Optional[str]:
 
 
 
+# Normalize youtube id.
 def _normalize_youtube_id(value: str) -> Optional[str]:
     if not value:
         return None
@@ -4011,6 +4188,7 @@ def _normalize_youtube_id(value: str) -> Optional[str]:
     return candidate
 
 
+# Canonicalize web url.
 def _canonicalize_web_url(url: str) -> Optional[str]:
     cleaned = (url or "").strip()
     if not cleaned:
@@ -4044,8 +4222,8 @@ def _canonicalize_web_url(url: str) -> Optional[str]:
     return urlunparse((parsed.scheme.lower(), netloc, path, "", normalized_query, ""))
 
 
-
-
+# Text cleanup and parsing helpers.
+# Trim text.
 def _trim_text(text: str, max_chars: int) -> str:
     cleaned = " ".join((text or "").split()).strip()
     if len(cleaned) <= max_chars:
@@ -4053,6 +4231,7 @@ def _trim_text(text: str, max_chars: int) -> str:
     return f"{cleaned[:max_chars].rstrip()}..."
 
 
+# Normalize chat session title.
 def _normalize_chat_session_title(text: str) -> str:
     collapsed = " ".join((text or "").split()).strip().strip("\"'`")
     collapsed = re.sub(r"^[Tt]itle\s*:\s*", "", collapsed)
@@ -4068,6 +4247,7 @@ def _normalize_chat_session_title(text: str) -> str:
     return normalized[:80].strip() or ""
 
 
+# Build a fallback chat session title.
 def _fallback_chat_session_title(text: str) -> str:
     collapsed = " ".join((text or "").split()).strip()
     if not collapsed:
@@ -4077,6 +4257,7 @@ def _fallback_chat_session_title(text: str) -> str:
     return normalized[:80].strip() or "New Chat"
 
 
+# Parse questions from text.
 def _parse_questions_from_text(raw: str, max_count: int) -> List[str]:
     if not raw:
         return []
@@ -4084,6 +4265,7 @@ def _parse_questions_from_text(raw: str, max_count: int) -> List[str]:
     candidates: List[str] = []
     seen: set[str] = set()
 
+    # Helper to add parsed items to the result list.
     def _add(items: List[str]) -> None:
         for item in items:
             cleaned = str(item).strip().strip('"').strip("'")
@@ -4100,6 +4282,7 @@ def _parse_questions_from_text(raw: str, max_count: int) -> List[str]:
             if len(candidates) >= max_count:
                 break
 
+    # Helper to parse a JSON array when the model returns one.
     def _load_json_array(value: str) -> Optional[List[str]]:
         try:
             parsed = json.loads(value)
@@ -4130,16 +4313,19 @@ def _parse_questions_from_text(raw: str, max_count: int) -> List[str]:
     return candidates
 
 
+# Parse steps from text.
 def _parse_steps_from_text(raw: str, max_count: int) -> List[Dict[str, str]]:
     if not raw:
         return []
     text = raw.strip()
     steps: List[Dict[str, str]] = []
 
+    # Helper to normalize one parsed text value.
     def _clean(value: str) -> str:
         cleaned = re.sub(r"^[\-\*\d\.\)\s]+", "", value or "").strip()
         return cleaned
 
+    # Helper to add one parsed step to the result list.
     def _add_step(title: Optional[str], instruction: str) -> None:
         if len(steps) >= max_count:
             return
@@ -4154,6 +4340,7 @@ def _parse_steps_from_text(raw: str, max_count: int) -> List[Dict[str, str]]:
             }
         )
 
+    # Helper to parse a JSON array when the model returns one.
     def _load_json_array(value: str) -> Optional[List[Any]]:
         try:
             parsed = json.loads(value)
@@ -4190,16 +4377,19 @@ def _parse_steps_from_text(raw: str, max_count: int) -> List[Dict[str, str]]:
     return steps
 
 
+# Citation extraction and grounding helpers.
 class _QuotePair:
     """A paraphrase + approximate direct quote pair from the LLM."""
 
     __slots__ = ("paraphrase", "quote")
 
+    # Initialize the object with the required settings and clients.
     def __init__(self, paraphrase: str, quote: str) -> None:
         self.paraphrase = paraphrase
         self.quote = quote
 
 
+# Extract the answer text and trailing quote payload from the model output.
 def _extract_quotes(raw_answer: str) -> tuple[str, Dict[str, List[_QuotePair]]]:
     """Split the QUOTES: JSON block from the answer.
 
@@ -4237,6 +4427,7 @@ def _extract_quotes(raw_answer: str) -> tuple[str, Dict[str, List[_QuotePair]]]:
     return answer, {}
 
 
+# Match quote pairs back to the most relevant snippet regions.
 def _match_quote_pairs_to_snippet(
     pairs: list,
     snippet: str,
@@ -4367,6 +4558,7 @@ def _match_quote_pairs_to_snippet(
     return result
 
 
+# Check or answer has citation.
 def _answer_has_citation(answer: str, max_index: int) -> bool:
     if not answer:
         return False
@@ -4380,6 +4572,7 @@ def _answer_has_citation(answer: str, max_index: int) -> bool:
     return False
 
 
+# Check whether like grounded answer.
 def _looks_like_grounded_answer(answer: str) -> bool:
     cleaned = re.sub(r"\s+", " ", (answer or "")).strip()
     if not cleaned:
@@ -4396,6 +4589,7 @@ def _looks_like_grounded_answer(answer: str) -> bool:
     return not any(marker in lowered for marker in abstention_markers)
 
 
+# Helper for referenced citation indices.
 def _referenced_citation_indices(answer: str, max_index: int) -> List[int]:
     if not answer or max_index <= 0:
         return []
@@ -4412,6 +4606,8 @@ def _referenced_citation_indices(answer: str, max_index: int) -> List[int]:
     return indices
 
 
+# Chat query and history helpers.
+# Check whether exploratory chat question.
 def _is_exploratory_chat_question(question: str) -> bool:
     normalized = re.sub(r"\s+", " ", (question or "").strip().lower())
     if not normalized:
@@ -4432,6 +4628,7 @@ def _is_exploratory_chat_question(question: str) -> bool:
     return any(marker in normalized for marker in exploratory_markers)
 
 
+# Check whether vague follow up.
 def _is_vague_follow_up(question: str) -> bool:
     normalized = re.sub(r"\s+", " ", (question or "").strip().lower())
     if not normalized:
@@ -4446,6 +4643,7 @@ def _is_vague_follow_up(question: str) -> bool:
     return tokens[0] in _FOLLOW_UP_LEAD_TOKENS and _has_context_reference(tokens)
 
 
+# Helper for most recent informative user turn.
 def _most_recent_informative_user_turn(history: List[Dict[str, Any]]) -> Optional[str]:
     for message in reversed(history):
         if str(message.get("role") or "") != "user":
@@ -4456,6 +4654,7 @@ def _most_recent_informative_user_turn(history: List[Dict[str, Any]]) -> Optiona
     return None
 
 
+# Helper for history has multi source grounding.
 def _history_has_multi_source_grounding(history: List[Dict[str, Any]]) -> bool:
     grounded_sources: set[str] = set()
     for message in history:
@@ -4473,6 +4672,7 @@ def _history_has_multi_source_grounding(history: List[Dict[str, Any]]) -> bool:
     return False
 
 
+# Count distinct citation sources.
 def _count_distinct_citation_sources(citations: List[Any]) -> int:
     distinct_sources: set[str] = set()
     for citation in citations:
@@ -4485,6 +4685,7 @@ def _count_distinct_citation_sources(citations: List[Any]) -> int:
     return len(distinct_sources)
 
 
+# Check whether context reference.
 def _has_context_reference(tokens: List[str]) -> bool:
     for index, token in enumerate(tokens):
         if token in {"that", "it", "those", "these"}:
@@ -4496,6 +4697,7 @@ def _has_context_reference(tokens: List[str]) -> bool:
     return False
 
 
+# Build anchored retrieval query.
 def _build_anchored_retrieval_query(anchor_turn: str, query_suffix: str) -> str:
     anchor = (anchor_turn or "").strip()
     suffix = (query_suffix or "").strip()
@@ -4509,6 +4711,7 @@ def _build_anchored_retrieval_query(anchor_turn: str, query_suffix: str) -> str:
     return f"{anchor}{separator} {suffix}".strip()
 
 
+# Normalize retrieval query.
 def _normalize_retrieval_query(original_question: str, rewritten_query: str) -> str:
     candidate = (rewritten_query or "").replace("\r", "\n").strip()
     if not candidate:
@@ -4527,6 +4730,8 @@ def _normalize_retrieval_query(original_question: str, rewritten_query: str) -> 
     return candidate
 
 
+# Prompt, search, and ranking helpers.
+# Return the main system prompt used for grounded hub answers.
 def _hub_answer_system_prompt() -> str:
     return (
         "You are Caddie, an onboarding assistant. Answer using the provided context only. "
@@ -4547,6 +4752,7 @@ def _hub_answer_system_prompt() -> str:
     )
 
 
+# Return the repair prompt used when an answer needs stricter grounding.
 def _hub_answer_repair_prompt() -> str:
     return (
         "You are revising an onboarding answer to ensure strict grounding. "
@@ -4557,6 +4763,7 @@ def _hub_answer_repair_prompt() -> str:
     )
 
 
+# Build a preview of text.
 def _preview_text(value: Any, limit: int = 140) -> str:
     text = re.sub(r"\s+", " ", str(value or "")).strip()
     if len(text) <= limit:
@@ -4564,10 +4771,12 @@ def _preview_text(value: Any, limit: int = 140) -> str:
     return f"{text[: max(0, limit - 1)].rstrip()}..."
 
 
+# Escape ilike pattern.
 def _escape_ilike_pattern(value: str) -> str:
     return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
+# Build search snippet.
 def _build_search_snippet(content: str, query: str, radius: int = 72) -> tuple[str, str | None]:
     collapsed = re.sub(r"\s+", " ", (content or "")).strip()
     normalized_query = re.sub(r"\s+", " ", (query or "")).strip()
@@ -4596,6 +4805,7 @@ def _build_search_snippet(content: str, query: str, radius: int = 72) -> tuple[s
     return snippet, matched_text
 
 
+# Handle search score.
 def _chat_search_score(session_title: str, snippet: str, matched_text: str, matched_role: str) -> int:
     haystack = f"{session_title} {snippet}".lower()
     needle = (matched_text or "").lower()
@@ -4607,6 +4817,8 @@ def _chat_search_score(session_title: str, snippet: str, matched_text: str, matc
     return title_boost + occurrences * 10 + starts_sentence
 
 
+# Embedding and vector math helpers.
+# Calculate the average similarity.
 def _average_similarity(matches: List[Dict[str, Any]]) -> float:
     if not matches:
         return 0.0
@@ -4614,6 +4826,7 @@ def _average_similarity(matches: List[Dict[str, Any]]) -> float:
     return sum(values) / len(values)
 
 
+# Normalize embedding value.
 def _normalize_embedding_value(value: Any) -> Optional[List[float]]:
     vector = _coerce_embedding_value(value)
     if vector is None:
@@ -4621,6 +4834,7 @@ def _normalize_embedding_value(value: Any) -> Optional[List[float]]:
     return _normalize_vector(vector)
 
 
+# Coerce embedding value.
 def _coerce_embedding_value(value: Any) -> Optional[List[float]]:
     if value is None:
         return None
@@ -4645,6 +4859,7 @@ def _coerce_embedding_value(value: Any) -> Optional[List[float]]:
     return None
 
 
+# Normalize vector.
 def _normalize_vector(vector: Optional[List[float]]) -> Optional[List[float]]:
     if not vector:
         return None
@@ -4654,18 +4869,22 @@ def _normalize_vector(vector: Optional[List[float]]) -> Optional[List[float]]:
     return [value / magnitude for value in vector]
 
 
+# Helper for cosine similarity.
 def _cosine_similarity(left: Optional[List[float]], right: Optional[List[float]]) -> float:
     if left is None or right is None or len(left) != len(right):
         return 0.0
     return sum(left_value * right_value for left_value, right_value in zip(left, right))
 
 
+# General-purpose coercion and formatting helpers.
+# Return attr.
 def _get_attr(obj: Any, name: str, default: Any = None) -> Any:
     if isinstance(obj, dict):
         return obj.get(name, default)
     return getattr(obj, name, default)
 
 
+# Check whether missing hub optional column error.
 def _is_missing_hub_optional_column_error(exc: APIError) -> bool:
     message = (getattr(exc, "message", "") or str(exc)).lower()
     if "column" not in message or "does not exist" not in message:
@@ -4673,6 +4892,7 @@ def _is_missing_hub_optional_column_error(exc: APIError) -> bool:
     return "icon_key" in message or "archived_at" in message
 
 
+# Safely convert int.
 def _safe_int(value: Any) -> int:
     try:
         return int(value)
@@ -4680,6 +4900,7 @@ def _safe_int(value: Any) -> int:
         return 0
 
 
+# Safely convert float.
 def _safe_float(value: Any) -> float:
     try:
         return float(value)
@@ -4687,6 +4908,7 @@ def _safe_float(value: Any) -> float:
         return 0.0
 
 
+# Helper for iso day.
 def _iso_day(value: Any) -> str:
     if isinstance(value, datetime):
         return value.date().isoformat()
@@ -4696,10 +4918,12 @@ def _iso_day(value: Any) -> str:
         return datetime.now(timezone.utc).date().isoformat()
 
 
+# Clamp window days.
 def _clamp_window_days(value: int) -> int:
     return max(1, min(int(value), 90))
 
 
+# Check whether uuid like.
 def _is_uuid_like(value: str) -> bool:
     try:
         uuid.UUID(str(value))
@@ -4708,6 +4932,7 @@ def _is_uuid_like(value: str) -> bool:
         return False
 
 
+# Calculate total tokens from usage.
 def _total_tokens_from_usage(usage: Optional[Dict[str, Any]]) -> int:
     if not usage:
         return 0
@@ -4717,6 +4942,7 @@ def _total_tokens_from_usage(usage: Optional[Dict[str, Any]]) -> int:
     return _safe_int(usage.get("input_tokens")) + _safe_int(usage.get("output_tokens"))
 
 
+# Extract response text.
 def _extract_response_text(response: Any) -> str:
     text = _get_attr(response, "output_text")
     if isinstance(text, str) and text.strip():
@@ -4739,6 +4965,7 @@ def _extract_response_text(response: Any) -> str:
     return ""
 
 
+# Extract usage.
 def _extract_usage(response: Any) -> Optional[dict]:
     usage = _get_attr(response, "usage")
     if usage is None:
@@ -4751,6 +4978,7 @@ def _extract_usage(response: Any) -> Optional[dict]:
     return None
 
 
+# Extract web results.
 def _extract_web_results(response: Any) -> list[Any]:
     output = _get_attr(response, "output", []) or []
     results: list[Any] = []
@@ -4764,6 +4992,7 @@ def _extract_web_results(response: Any) -> list[Any]:
     return results
 
 
+# Format web snippet.
 def _format_web_snippet(title: str, snippet: str, url: str) -> str:
     parts = []
     if title:
@@ -4775,6 +5004,7 @@ def _format_web_snippet(title: str, snippet: str, url: str) -> str:
     return " - ".join(parts)
 
 
+# Build web citations.
 def _build_web_citations(response: Any) -> List[Citation]:
     results = _extract_web_results(response)
     citations: List[Citation] = []

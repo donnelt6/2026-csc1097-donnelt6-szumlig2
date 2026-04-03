@@ -23,7 +23,10 @@ OWNER = HubMember(
 )
 
 
+# Verifies that list reminders returns reminders.
+# Endpoint behavior tests.
 def test_list_reminders_returns_reminders(client, monkeypatch) -> None:
+
     reminder = Reminder(
         id="rem-1",
         user_id="00000000-0000-0000-0000-000000000001",
@@ -39,6 +42,7 @@ def test_list_reminders_returns_reminders(client, monkeypatch) -> None:
     assert resp.json()[0]["id"] == "rem-1"
 
 
+# Verifies that create reminder rejects past due.
 def test_create_reminder_rejects_past_due(client) -> None:
     resp = client.post(
         "/reminders",
@@ -52,6 +56,7 @@ def test_create_reminder_rejects_past_due(client) -> None:
     assert resp.status_code == 400
 
 
+# Verifies that update reminder requires snooze minutes.
 def test_update_reminder_requires_snooze_minutes(client) -> None:
     resp = client.patch(
         "/reminders/11111111-1111-1111-1111-111111111111",
@@ -60,6 +65,7 @@ def test_update_reminder_requires_snooze_minutes(client) -> None:
     assert resp.status_code == 400
 
 
+# Verifies that accept candidate creates reminder.
 def test_accept_candidate_creates_reminder(client, monkeypatch) -> None:
     candidate = ReminderCandidate(
         id="22222222-2222-2222-2222-222222222222",
@@ -96,6 +102,7 @@ def test_accept_candidate_creates_reminder(client, monkeypatch) -> None:
     assert data["reminder"]["id"] == "rem-2"
 
 
+# Verifies that dismiss notification returns notification.
 def test_dismiss_notification_returns_notification(client, monkeypatch) -> None:
     due_at = datetime.now(timezone.utc) + timedelta(days=1)
     notification = NotificationEvent(
