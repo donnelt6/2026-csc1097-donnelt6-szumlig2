@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import "./members.css";
 import "./hub-dashboard.css";
+import "./admin-dashboard.css";
 import { Providers } from "../components/Providers";
 import { AppShell } from "../components/AppShell";
 import { ShellErrorBoundary } from "../components/ShellErrorBoundary";

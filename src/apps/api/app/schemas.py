@@ -873,6 +873,55 @@ class NotificationEvent(BaseModel):
     reminder: ReminderSummary
 
 
+class ContentFlagType(str, Enum):
+    faq = "faq"
+    guide = "guide"
+
+
+class ContentFlagStatus(str, Enum):
+    open = "open"
+    resolved = "resolved"
+    dismissed = "dismissed"
+
+
+class ContentFlagRequest(StrictModel):
+    reason: FlagReason
+    notes: Optional[str] = Field(default=None, max_length=1000)
+
+
+class ContentFlag(BaseModel):
+    id: str
+    hub_id: str
+    content_type: ContentFlagType
+    content_id: str
+    created_by: str
+    reason: FlagReason
+    notes: Optional[str] = None
+    status: ContentFlagStatus
+    reviewed_by: Optional[str] = None
+    reviewed_at: Optional[datetime] = None
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class ContentFlagResponse(BaseModel):
+    flag: ContentFlag
+    created: bool
+
+
+class FlaggedContentQueueItem(BaseModel):
+    id: str
+    hub_id: str
+    content_type: ContentFlagType
+    content_id: str
+    title: str
+    preview: str
+    reason: FlagReason
+    status: ContentFlagStatus
+    flagged_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    reviewed_at: Optional[datetime] = None
+
+
 class ActivityEvent(BaseModel):
     id: str
     hub_id: str

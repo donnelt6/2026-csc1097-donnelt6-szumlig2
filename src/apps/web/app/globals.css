@@ -1732,7 +1732,8 @@ a {
   padding: 0;
 }
 
-.page-content--no-hero .content-inner:has(.hub-dashboard) {
+.page-content--no-hero .content-inner:has(.hub-dashboard),
+.page-content--no-hero .content-inner:has(.admin) {
   display: flex;
   flex-direction: column;
   padding: 0;
@@ -1740,7 +1741,8 @@ a {
 
 .page-content--no-hero .content-inner:has(.sources) .hub-tab-content,
 .page-content--no-hero .content-inner:has(.members) .hub-tab-content,
-.page-content--no-hero .content-inner:has(.hub-dashboard) .hub-tab-content {
+.page-content--no-hero .content-inner:has(.hub-dashboard) .hub-tab-content,
+.page-content--no-hero .content-inner:has(.admin) .hub-tab-content {
   flex: 1;
   min-height: 0;
   display: flex;

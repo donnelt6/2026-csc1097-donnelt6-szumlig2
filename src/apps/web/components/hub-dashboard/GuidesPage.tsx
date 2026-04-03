@@ -21,6 +21,7 @@ import {
 import {
   PlusIcon,
   EllipsisVerticalIcon,
+  FlagIcon,
   TrashIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
@@ -33,6 +34,7 @@ import { StarIcon as StarSolid } from "@heroicons/react/24/solid";
 import {
   archiveGuide,
   createGuideStep,
+  flagGuide,
   generateGuide,
   listGuides,
   reorderGuideSteps,
@@ -40,7 +42,8 @@ import {
   updateGuideStep,
   updateGuideStepProgress,
 } from "../../lib/api";
-import type { Citation, GuideEntry, GuideStep, Source } from "../../lib/types";
+import type { Citation, FlagReason, GuideEntry, GuideStep, Source } from "../../lib/types";
+import { FlagModal } from "./FlagModal";
 import { formatRelativeTime } from "../../lib/utils";
 import { useSearch } from "../../lib/SearchContext";
 
@@ -187,6 +190,7 @@ export function GuidesPage({ hubId, sources, canEdit }: Props) {
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [flagTargetId, setFlagTargetId] = useState<string | null>(null);
   const [filterTab, setFilterTab] = useState<'recent' | 'favourites'>('recent');
 
   const [topic, setTopic] = useState("");
@@ -319,6 +323,16 @@ export function GuidesPage({ hubId, sources, canEdit }: Props) {
         });
       });
   };
+
+  const flagMutation = useMutation({
+    mutationFn: ({ guideId, reason, notes }: { guideId: string; reason: FlagReason; notes?: string }) =>
+      flagGuide(guideId, { reason, notes }),
+    onSuccess: () => {
+      setFlagTargetId(null);
+      setStatusMessage("Guide flagged for review.");
+    },
+    onError: (err) => setStatusMessage((err as Error).message),
+  });
 
   const favouriteMutation = useMutation({
     mutationFn: ({ guideId, is_favourited }: { guideId: string; is_favourited: boolean }) =>
@@ -618,6 +632,17 @@ export function GuidesPage({ hubId, sources, canEdit }: Props) {
                             Archive
                             <TrashIcon className="hub-card-menu__item-icon" />
                           </button>
+                          <button
+                            className="hub-card-menu__item hub-card-menu__item--danger"
+                            type="button"
+                            onClick={() => {
+                              setFlagTargetId(guide.id);
+                              setOpenMenuId(null);
+                            }}
+                          >
+                            Flag
+                            <FlagIcon className="hub-card-menu__item-icon" />
+                          </button>
                         </div>
                       )}
                     </div>
@@ -803,6 +828,14 @@ export function GuidesPage({ hubId, sources, canEdit }: Props) {
               <div className="gmodal__header">
                 <span className="gmodal__badge">GUIDE</span>
                 <div className="gmodal__header-actions">
+                  <button
+                    className="gmodal__icon-btn"
+                    type="button"
+                    title="Flag"
+                    onClick={() => setFlagTargetId(guide.id)}
+                  >
+                    <FlagIcon />
+                  </button>
                   {canEdit && (
                     <button
                       className="gmodal__icon-btn gmodal__icon-btn--danger"
@@ -953,6 +986,15 @@ export function GuidesPage({ hubId, sources, canEdit }: Props) {
             <p className="gmodal__citation-text">{activeCitation.snippet}</p>
           </div>
         </div>
+      )}
+
+      {flagTargetId && (
+        <FlagModal
+          label="Guide"
+          submitting={flagMutation.isPending}
+          onClose={() => setFlagTargetId(null)}
+          onSubmit={(reason, notes) => flagMutation.mutate({ guideId: flagTargetId, reason, notes })}
+        />
       )}
     </div>
   );

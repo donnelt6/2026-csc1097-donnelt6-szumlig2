@@ -15,6 +15,114 @@
 
 .modal-backdrop--raised { z-index: 210; }
 
+/* ===== Flag Modal (shared) ===== */
+
+.flag-modal__body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 4px 0;
+}
+
+.flag-modal__label {
+  display: block;
+  font-size: 0.6875rem;
+  font-weight: var(--font-semibold);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  margin: 0 0 6px;
+}
+
+.flag-modal__select {
+  width: 100%;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 0.8125rem;
+  font-family: inherit;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none' stroke='%239ca3af' stroke-width='1.5'%3E%3Cpath d='M3 4.5L6 7.5L9 4.5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: 36px;
+  transition: border-color var(--transition-fast, 0.15s ease);
+}
+
+.flag-modal__select:focus {
+  outline: none;
+  border-color: var(--border-focus);
+}
+
+.flag-modal__select option {
+  background: var(--card);
+  color: var(--text);
+}
+
+.flag-modal__textarea {
+  width: 100%;
+  min-height: 80px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 0.8125rem;
+  font-family: inherit;
+  line-height: 1.5;
+  resize: vertical;
+  transition: border-color var(--transition-fast, 0.15s ease);
+}
+
+.flag-modal__textarea:focus {
+  outline: none;
+  border-color: var(--border-focus);
+}
+
+.flag-modal__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.flag-modal__btn {
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 0.75rem;
+  font-weight: var(--font-medium);
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--text);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all var(--transition-fast, 0.15s ease);
+}
+
+.flag-modal__btn:hover {
+  border-color: var(--border-hover);
+  background: var(--bg-secondary);
+}
+
+.flag-modal__btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.flag-modal__btn--primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.flag-modal__btn--primary:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+
 /* ===== Hub Dashboard — Reminders Page ===== */
 
 /* ---------- Layout ---------- */

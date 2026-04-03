@@ -6,7 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { ChatPanel } from "../../../components/ChatPanel";
 import type { ChatPanelHandle } from "../../../components/ChatPanel";
 import { HubAnalyticsPanel } from "../../../components/HubAnalyticsPanel";
-import { HubModerationPanel } from "../../../components/HubModerationPanel";
+import { AdminDashboard } from "../../../components/AdminDashboard";
 import { UploadPanel } from "../../../components/UploadPanel";
 import { MembersPanel } from "../../../components/MembersPanel";
 import { DashboardOverview } from "../../../components/hub-dashboard/DashboardOverview";
@@ -250,19 +250,11 @@ export default function HubDetail({ params }: { params: { hubId: string } }) {
             </div>
           )}
           {activeTab === 'admin' && (
-            <div className="hub-dashboard">
-              <section className="hub-dashboard__section">
-                <h3 className="hub-dashboard__section-title">Moderation</h3>
-                <HubModerationPanel
-                  hubId={params.hubId}
-                  hubRole={hub?.role ?? undefined}
-                />
-              </section>
-              <section className="hub-dashboard__section">
-                <h3 className="hub-dashboard__section-title">AI Analytics</h3>
-                <HubAnalyticsPanel hubId={params.hubId} hubRole={hub?.role ?? undefined} />
-              </section>
-            </div>
+            <AdminDashboard
+              hubId={params.hubId}
+              hubRole={hub?.role ?? undefined}
+              onSwitchTab={setActiveTab}
+            />
           )}
         </div>
       </div>

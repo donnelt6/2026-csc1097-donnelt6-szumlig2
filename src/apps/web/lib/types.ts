@@ -5,6 +5,8 @@ export type FlagCaseStatus = "open" | "in_review" | "resolved" | "dismissed";
 export type MessageFlagStatus = "none" | FlagCaseStatus;
 export type FlagReason = "incorrect" | "unsupported" | "harmful" | "outdated" | "other";
 export type MessageRevisionType = "original" | "regenerated" | "manual_edit";
+export type ContentFlagType = "faq" | "guide";
+export type ContentFlagStatus = "open" | "resolved" | "dismissed";
 export type ChatFeedbackRating = "helpful" | "not_helpful";
 export type CitationFeedbackEventType = "opened" | "flagged_incorrect";
 export type ChatEventType =
@@ -15,6 +17,39 @@ export type ChatEventType =
   | "citation_opened"
   | "citation_flagged"
   | "source_filter_changed";
+
+export interface ContentFlag {
+  id: string;
+  hub_id: string;
+  content_type: ContentFlagType;
+  content_id: string;
+  created_by: string;
+  reason: FlagReason;
+  notes?: string | null;
+  status: ContentFlagStatus;
+  reviewed_by?: string | null;
+  reviewed_at?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ContentFlagResponse {
+  flag: ContentFlag;
+  created: boolean;
+}
+
+export interface FlaggedContentQueueItem {
+  id: string;
+  hub_id: string;
+  content_type: ContentFlagType;
+  content_id: string;
+  title: string;
+  preview: string;
+  reason: FlagReason;
+  status: ContentFlagStatus;
+  flagged_at: string;
+  reviewed_at?: string | null;
+}
 
 export interface Hub {
   id: string;

@@ -8,9 +8,15 @@ import httpx
 
 from ...schemas import (
     Citation,
+    ContentFlag,
+    ContentFlagRequest,
+    ContentFlagResponse,
+    ContentFlagStatus,
+    ContentFlagType,
     CreateRevisionRequest,
     FlagCase,
     FlagCaseStatus,
+    FlaggedContentQueueItem,
     FlagMessageRequest,
     FlagMessageResponse,
     FlaggedChatDetail,
@@ -422,3 +428,200 @@ class ModerationStoreMixin:
         if not updated.data:
             raise RuntimeError("Failed to dismiss flag case.")
         return self._serialize_flag_case(updated.data[0])
+
+    def flag_content(
+        self,
+        user_id: str,
+        content_type: ContentFlagType,
+        content_id: str,
+        payload: ContentFlagRequest,
+    ) -> ContentFlagResponse:
+        table = "faqs" if content_type == ContentFlagType.faq else "guides"
+        row = (
+            self.service_client.table(table)
+            .select("id, hub_id")
+            .eq("id", str(content_id))
+            .limit(1)
+            .execute()
+        )
+        if not row.data:
+            raise KeyError(f"{content_type.value.upper()} not found.")
+        hub_id = str(row.data[0]["hub_id"])
+        self._require_hub_access(user_id, hub_id)
+
+        existing = (
+            self.service_client.table("content_flags")
+            .select("*")
+            .eq("content_type", content_type.value)
+            .eq("content_id", str(content_id))
+            .eq("status", ContentFlagStatus.open.value)
+            .limit(1)
+            .execute()
+        )
+        if existing.data:
+            return ContentFlagResponse(
+                flag=self._serialize_content_flag(existing.data[0]),
+                created=False,
+            )
+
+        insert_row = {
+            "hub_id": hub_id,
+            "content_type": content_type.value,
+            "content_id": str(content_id),
+            "created_by": str(user_id),
+            "reason": payload.reason.value,
+            "notes": payload.notes,
+            "status": ContentFlagStatus.open.value,
+        }
+        result = (
+            self.service_client.table("content_flags")
+            .insert(insert_row)
+            .execute()
+        )
+        if not result.data:
+            raise RuntimeError("Failed to create content flag.")
+        return ContentFlagResponse(
+            flag=self._serialize_content_flag(result.data[0]),
+            created=True,
+        )
+
+    def list_flagged_content(
+        self,
+        user_id: str,
+        hub_id: str,
+        *,
+        status_filter: Optional[ContentFlagStatus] = None,
+        content_type_filter: Optional[ContentFlagType] = None,
+    ) -> List[FlaggedContentQueueItem]:
+        self._require_moderation_access(user_id, hub_id)
+        query = (
+            self.service_client.table("content_flags")
+            .select("*")
+            .eq("hub_id", str(hub_id))
+        )
+        if status_filter is not None:
+            query = query.eq("status", status_filter.value)
+        if content_type_filter is not None:
+            query = query.eq("content_type", content_type_filter.value)
+        response = query.order("created_at", desc=True).execute()
+        flag_rows = response.data or []
+
+        faq_ids = [str(r["content_id"]) for r in flag_rows if r["content_type"] == "faq"]
+        guide_ids = [str(r["content_id"]) for r in flag_rows if r["content_type"] == "guide"]
+
+        faq_map: Dict[str, Dict[str, Any]] = {}
+        if faq_ids:
+            faq_rows = (
+                self.service_client.table("faqs")
+                .select("id, question, answer")
+                .in_("id", faq_ids)
+                .execute()
+            )
+            faq_map = {str(r["id"]): r for r in (faq_rows.data or [])}
+
+        guide_map: Dict[str, Dict[str, Any]] = {}
+        if guide_ids:
+            guide_rows = (
+                self.service_client.table("guides")
+                .select("id, title, topic")
+                .in_("id", guide_ids)
+                .execute()
+            )
+            guide_map = {str(r["id"]): r for r in (guide_rows.data or [])}
+
+        items: List[FlaggedContentQueueItem] = []
+        for row in flag_rows:
+            cid = str(row["content_id"])
+            ctype = row["content_type"]
+            if ctype == "faq":
+                faq = faq_map.get(cid)
+                title = faq["question"][:80] if faq else "Deleted FAQ"
+                preview = faq["answer"][:200] if faq else ""
+            else:
+                guide = guide_map.get(cid)
+                title = guide["title"][:80] if guide else "Deleted Guide"
+                preview = (guide.get("topic") or "")[:200] if guide else ""
+            items.append(
+                FlaggedContentQueueItem(
+                    id=str(row["id"]),
+                    hub_id=str(row["hub_id"]),
+                    content_type=ctype,
+                    content_id=cid,
+                    title=title,
+                    preview=preview,
+                    reason=row["reason"],
+                    status=row["status"],
+                    flagged_at=row["created_at"],
+                    reviewed_at=row.get("reviewed_at"),
+                )
+            )
+        return items
+
+    def resolve_content_flag(self, user_id: str, hub_id: str, flag_id: str) -> ContentFlag:
+        self._require_moderation_access(user_id, hub_id)
+        flag_row = self._get_content_flag_row(flag_id, hub_id)
+        if flag_row["status"] != ContentFlagStatus.open.value:
+            raise ValueError("Flag is not open.")
+        now = datetime.now(timezone.utc).isoformat()
+        updated = (
+            self.service_client.table("content_flags")
+            .update({
+                "status": ContentFlagStatus.resolved.value,
+                "reviewed_by": str(user_id),
+                "reviewed_at": now,
+            })
+            .eq("id", str(flag_id))
+            .execute()
+        )
+        if not updated.data:
+            raise RuntimeError("Failed to resolve content flag.")
+        return self._serialize_content_flag(updated.data[0])
+
+    def dismiss_content_flag(self, user_id: str, hub_id: str, flag_id: str) -> ContentFlag:
+        self._require_moderation_access(user_id, hub_id)
+        flag_row = self._get_content_flag_row(flag_id, hub_id)
+        if flag_row["status"] != ContentFlagStatus.open.value:
+            raise ValueError("Flag is not open.")
+        now = datetime.now(timezone.utc).isoformat()
+        updated = (
+            self.service_client.table("content_flags")
+            .update({
+                "status": ContentFlagStatus.dismissed.value,
+                "reviewed_by": str(user_id),
+                "reviewed_at": now,
+            })
+            .eq("id", str(flag_id))
+            .execute()
+        )
+        if not updated.data:
+            raise RuntimeError("Failed to dismiss content flag.")
+        return self._serialize_content_flag(updated.data[0])
+
+    def _get_content_flag_row(self, flag_id: str, hub_id: str) -> Dict[str, Any]:
+        result = (
+            self.service_client.table("content_flags")
+            .select("*")
+            .eq("id", str(flag_id))
+            .eq("hub_id", str(hub_id))
+            .limit(1)
+            .execute()
+        )
+        if not result.data:
+            raise KeyError("Content flag not found.")
+        return result.data[0]
+
+    def _serialize_content_flag(self, row: Dict[str, Any]) -> ContentFlag:
+        return ContentFlag(
+            id=str(row["id"]),
+            hub_id=str(row["hub_id"]),
+            content_type=row["content_type"],
+            content_id=str(row["content_id"]),
+            created_by=str(row["created_by"]),
+            reason=row["reason"],
+            notes=row.get("notes"),
+            status=row["status"],
+            reviewed_by=row.get("reviewed_by"),
+            reviewed_at=row.get("reviewed_at"),
+            created_at=row["created_at"],
+            updated_at=row["updated_at"],
+        )

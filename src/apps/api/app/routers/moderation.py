@@ -9,6 +9,11 @@ from supabase import Client
 from ..dependencies import CurrentUser, get_current_user, get_supabase_user_client, rate_limit_user_ip
 from ..schemas import (
     ApplyRevisionRequest,
+    ContentFlag,
+    ContentFlagRequest,
+    ContentFlagResponse,
+    ContentFlagStatus,
+    ContentFlagType,
     CreateRevisionRequest,
     FlagCase,
     FlagCaseStatus,
@@ -16,6 +21,7 @@ from ..schemas import (
     FlagMessageResponse,
     FlaggedChatDetail,
     FlaggedChatQueueItem,
+    FlaggedContentQueueItem,
     MessageRevision,
 )
 from ..services.store import store
@@ -184,6 +190,120 @@ def dismiss_flagged_chat(
 ) -> FlagCase:
     try:
         return store.dismiss_flagged_chat(current_user.id, str(hub_id), str(flag_id))
+    except KeyError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except PermissionError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except APIError as exc:
+        raise_postgrest_error(exc)
+
+
+@router.post(
+    "/faqs/{faq_id}/flag",
+    response_model=ContentFlagResponse,
+    dependencies=[Depends(rate_limit_user_ip("moderation:write", "rate_limit_write_per_minute"))],
+)
+def flag_faq(
+    faq_id: UUID,
+    payload: ContentFlagRequest,
+    response: Response,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> ContentFlagResponse:
+    try:
+        result = store.flag_content(current_user.id, ContentFlagType.faq, str(faq_id), payload)
+        response.status_code = status.HTTP_201_CREATED if result.created else status.HTTP_200_OK
+        return result
+    except KeyError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except PermissionError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    except APIError as exc:
+        raise_postgrest_error(exc)
+
+
+@router.post(
+    "/guides/{guide_id}/flag",
+    response_model=ContentFlagResponse,
+    dependencies=[Depends(rate_limit_user_ip("moderation:write", "rate_limit_write_per_minute"))],
+)
+def flag_guide(
+    guide_id: UUID,
+    payload: ContentFlagRequest,
+    response: Response,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> ContentFlagResponse:
+    try:
+        result = store.flag_content(current_user.id, ContentFlagType.guide, str(guide_id), payload)
+        response.status_code = status.HTTP_201_CREATED if result.created else status.HTTP_200_OK
+        return result
+    except KeyError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except PermissionError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    except APIError as exc:
+        raise_postgrest_error(exc)
+
+
+@router.get(
+    "/hubs/{hub_id}/flagged-content",
+    response_model=list[FlaggedContentQueueItem],
+    dependencies=[Depends(rate_limit_user_ip("moderation:read", "rate_limit_read_per_minute"))],
+)
+def list_flagged_content(
+    hub_id: UUID,
+    status_filter: ContentFlagStatus | None = Query(default=None, alias="status"),
+    content_type_filter: ContentFlagType | None = Query(default=None, alias="content_type"),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> list[FlaggedContentQueueItem]:
+    try:
+        return store.list_flagged_content(
+            current_user.id,
+            str(hub_id),
+            status_filter=status_filter,
+            content_type_filter=content_type_filter,
+        )
+    except PermissionError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    except APIError as exc:
+        raise_postgrest_error(exc)
+
+
+@router.post(
+    "/hubs/{hub_id}/flagged-content/{flag_id}/resolve",
+    response_model=ContentFlag,
+    dependencies=[Depends(rate_limit_user_ip("moderation:write", "rate_limit_write_per_minute"))],
+)
+def resolve_content_flag(
+    hub_id: UUID,
+    flag_id: UUID,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> ContentFlag:
+    try:
+        return store.resolve_content_flag(current_user.id, str(hub_id), str(flag_id))
+    except KeyError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except PermissionError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except APIError as exc:
+        raise_postgrest_error(exc)
+
+
+@router.post(
+    "/hubs/{hub_id}/flagged-content/{flag_id}/dismiss",
+    response_model=ContentFlag,
+    dependencies=[Depends(rate_limit_user_ip("moderation:write", "rate_limit_write_per_minute"))],
+)
+def dismiss_content_flag(
+    hub_id: UUID,
+    flag_id: UUID,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> ContentFlag:
+    try:
+        return store.dismiss_content_flag(current_user.id, str(hub_id), str(flag_id))
     except KeyError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except PermissionError as exc:
