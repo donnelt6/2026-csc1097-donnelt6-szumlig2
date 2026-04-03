@@ -473,28 +473,17 @@ def _insert_chunks(
 
 # Deletes older chunk rows for the same source before new ones are inserted.
 def _clear_existing_chunks_before(client: Client, source_id: str, cutoff: str) -> None:
-    client.table("source_chunks").delete().eq("source_id", source_id).lt("created_at", cutoff).execute()
+    _storage._clear_existing_chunks_before(client, source_id, cutoff)
 
 
 # Checks whether the source row still exists before continuing ingestion work.
 def _source_exists(client: Client, source_id: str) -> bool:
-    response = client.table("sources").select("id").eq("id", source_id).limit(1).execute()
-    return bool(response.data)
+    return _storage._source_exists(client, source_id)
 
 
 # Loads source metadata fields that are needed during reminder detection.
 def _get_source_metadata(client: Client, source_id: str) -> dict:
-    response = (
-        client.table("sources")
-        .select("ingestion_metadata")
-        .eq("id", source_id)
-        .limit(1)
-        .execute()
-    )
-    if not response.data:
-        return {}
-    metadata = response.data[0].get("ingestion_metadata") or {}
-    return metadata if isinstance(metadata, dict) else {}
+    return _storage._get_source_metadata(client, source_id)
 
 
 # Updates the source status and related bookkeeping fields in the database.
@@ -1024,9 +1013,6 @@ def _looks_mathy(snippet: str) -> bool:
     if "mod " in lowered or "modulo" in lowered:
         return True
     return digit_ratio >= 0.6 or symbol_ratio > 0.05
-
-
-_SUGGESTION_YOUTUBE_ID_RE = re.compile(r"^[A-Za-z0-9_-]{11}$")
 
 
 # Source suggestion scanning and discovery helpers.

@@ -337,5 +337,6 @@ __all__ = [
     "_pick_caption_preferred",
     "_select_caption_format",
     "_select_caption_track",
+    "_strip_xml",
     "_strip_vtt_srt",
 ]

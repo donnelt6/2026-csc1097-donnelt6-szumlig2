@@ -328,7 +328,7 @@ class ModerationStoreMixin:
         case_row = self._get_flag_case_for_hub(user_id, hub_id, flag_case_id)
         self._ensure_flag_case_open(case_row)
         session_row, question_row, history_messages, retrieval_history, source_ids = self._flag_case_generation_context(case_row)
-        answer, citations, _usage = self._generate_chat_answer(
+        answer, citations, _usage, _generation_metadata = self._generate_chat_answer(
             self.service_client,
             hub_id=str(case_row["hub_id"]),
             question=str(question_row["content"]),

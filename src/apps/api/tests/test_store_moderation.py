@@ -459,6 +459,49 @@ def test_apply_flagged_chat_revision_rejects_revision_from_other_case(monkeypatc
         store_module.store.apply_flagged_chat_revision("user-1", "hub-1", "flag-1", "revision-2")
 
 
+# Verifies that regenerate flagged chat revision accepts the full answer tuple.
+def test_regenerate_flagged_chat_revision_accepts_generation_metadata(fake_service_client, monkeypatch) -> None:
+    monkeypatch.setattr(
+        store_module.store,
+        "_get_flag_case_for_hub",
+        lambda _user_id, _hub_id, _flag_case_id: {
+            "id": "flag-1",
+            "hub_id": "hub-1",
+            "session_id": "session-1",
+            "message_id": "message-1",
+            "status": "in_review",
+        },
+    )
+    monkeypatch.setattr(store_module.store, "_ensure_flag_case_open", lambda _case_row: None)
+    monkeypatch.setattr(
+        store_module.store,
+        "_flag_case_generation_context",
+        lambda _case_row: (
+            {"scope": "hub"},
+            {"content": "What changed?"},
+            [{"role": "user", "content": "What changed?"}],
+            [],
+            ["source-1"],
+        ),
+    )
+    monkeypatch.setattr(
+        store_module.store,
+        "_generate_chat_answer",
+        lambda *_args, **_kwargs: (
+            "Regenerated answer",
+            [],
+            {"total_tokens": 42},
+            {"path": "rag"},
+        ),
+    )
+
+    revision = store_module.store.regenerate_flagged_chat_revision("user-1", "hub-1", "flag-1")
+
+    assert revision.flag_case_id == "flag-1"
+    assert revision.revision_type == "regenerated"
+    assert fake_service_client.message_revision_inserts[0]["content"] == "Regenerated answer"
+
+
 # Verifies that apply flagged chat revision rejects original revision.
 def test_apply_flagged_chat_revision_rejects_original_revision(monkeypatch) -> None:
     monkeypatch.setattr(
