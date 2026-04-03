@@ -1,3 +1,5 @@
+"""tracing.py: Records chat trace steps and optionally forwards them to Langfuse."""
+
 from __future__ import annotations
 
 import time
@@ -13,6 +15,7 @@ except ImportError:  # pragma: no cover - optional dependency
     Langfuse = None
 
 
+# One recorded step within a traced chat request.
 @dataclass
 class TraceStep:
     name: str
@@ -23,7 +26,9 @@ class TraceStep:
     duration_ms: Optional[float] = None
 
 
+# Collects metadata and timed steps for one chat flow.
 class ChatTraceRecorder:
+    # Initialise tracing state and create the Langfuse client when tracing is enabled.
     def __init__(
         self,
         *,
@@ -53,11 +58,13 @@ class ChatTraceRecorder:
                 host=settings.langfuse_host,
             )
 
+    # Attach extra metadata that should be included with the trace.
     def annotate(self, **metadata: Any) -> None:
         for key, value in metadata.items():
             if value is not None:
                 self.metadata[key] = value
 
+    # Time one logical step of the chat pipeline and capture any error raised inside it.
     @contextmanager
     def step(self, name: str, **step_input: Any) -> Iterator[TraceStep]:
         step = TraceStep(name=name, started_at=time.perf_counter(), input=step_input or None)
@@ -70,6 +77,7 @@ class ChatTraceRecorder:
         finally:
             step.duration_ms = round((time.perf_counter() - step.started_at) * 1000, 2)
 
+    # Send the finished trace to Langfuse when tracing is configured.
     def flush(self, *, output: Optional[Dict[str, Any]] = None) -> None:
         if not self.enabled or self._client is None:
             return

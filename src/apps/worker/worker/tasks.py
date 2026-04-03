@@ -1,4 +1,6 @@
+"""tasks.py: Defines Celery worker tasks and helper functions for source ingestion, reminders, and source suggestions."""
 import hashlib
+
 import io
 import json
 import logging
@@ -46,6 +48,8 @@ celery_app.conf.beat_schedule = {
 }
 
 
+# Celery ingestion tasks.
+# Ingests an uploaded file source by downloading, extracting, chunking, and storing its content.
 @celery_app.task(bind=True, name="ingest_source", max_retries=3, default_retry_delay=15)
 def ingest_source(self, source_id: str, hub_id: str, storage_path: str) -> dict:
     """
@@ -81,6 +85,7 @@ def ingest_source(self, source_id: str, hub_id: str, storage_path: str) -> dict:
         raise
 
 
+# Ingests a web source by fetching the page, extracting text, and storing the resulting chunks.
 @celery_app.task(bind=True, name="ingest_web_source", max_retries=3, default_retry_delay=15)
 def ingest_web_source(self, source_id: str, hub_id: str, url: str, storage_path: str) -> dict:
     """
@@ -131,6 +136,7 @@ def ingest_web_source(self, source_id: str, hub_id: str, url: str, storage_path:
         raise
 
 
+# Ingests a YouTube source by downloading captions and storing the transcript content.
 @celery_app.task(bind=True, name="ingest_youtube_source", max_retries=3, default_retry_delay=15)
 def ingest_youtube_source(
     self,
@@ -195,6 +201,7 @@ def ingest_youtube_source(
         raise
 
 
+# Scans eligible hubs and generates any new source suggestions that should be queued.
 @celery_app.task(name="scan_source_suggestions")
 def scan_source_suggestions() -> dict:
     client = _get_supabase_client()
@@ -207,6 +214,7 @@ def scan_source_suggestions() -> dict:
         hub_id = str(hub.get("id") or "")
         if not hub_id:
             continue
+        # Use a short-lived Redis lock so multiple workers do not scan the same hub together.
         lock = _acquire_source_suggestion_lock(hub_id)
         if lock is None:
             logger.info("worker.source_suggestions.lock_held hub_id=%s", hub_id)
@@ -224,12 +232,16 @@ def scan_source_suggestions() -> dict:
     return {"eligible_hubs": len(eligible_hubs), "processed_hubs": processed, "generated": generated}
 
 
+# Shared storage and source-state helpers.
+# Creates a Supabase service client for worker-side database and storage operations.
 def _get_supabase_client() -> Client:
+
     if not settings.supabase_url or not settings.supabase_service_role_key:
         raise RuntimeError("Supabase credentials missing in worker environment")
     return create_client(settings.supabase_url, settings.supabase_service_role_key)
 
 
+# Downloads the raw file bytes for a source from Supabase Storage.
 def _download_from_storage(storage_path: str) -> bytes:
     if not settings.supabase_url or not settings.supabase_service_role_key:
         raise RuntimeError("Supabase credentials missing for storage download")
@@ -246,7 +258,10 @@ def _download_from_storage(storage_path: str) -> bytes:
     return resp.content
 
 
+# Web fetching and validation helpers.
+# Validates a URL and rejects unsupported schemes or private-network targets.
 def _validate_public_url(url: str) -> str:
+
     parsed = urlparse(url)
     if parsed.scheme not in {"http", "https"}:
         raise ValueError("URL scheme must be http or https")
@@ -259,6 +274,7 @@ def _validate_public_url(url: str) -> str:
     return parsed.geturl()
 
 
+# Resolves a hostname and rejects loopback, private, or otherwise unsafe IP addresses.
 def _ensure_public_host(hostname: str) -> None:
     ip_list: List[ipaddress.IPv4Address | ipaddress.IPv6Address] = []
     try:
@@ -279,6 +295,7 @@ def _ensure_public_host(hostname: str) -> None:
             raise ValueError("URL resolves to a private or non-public address")
 
 
+# Checks whether the worker is allowed to crawl the target URL under robots.txt rules.
 def _allowed_by_robots(url: str, user_agent: str) -> bool:
     parsed = urlparse(url)
     robots_url = f"{parsed.scheme}://{parsed.netloc}/robots.txt"
@@ -294,6 +311,7 @@ def _allowed_by_robots(url: str, user_agent: str) -> bool:
         return True
 
 
+# Fetches web content while enforcing the worker's size and timeout limits.
 def _fetch_url_content(url: str) -> tuple[bytes, str, str]:
     headers = {"User-Agent": settings.web_user_agent}
     max_bytes = max(1, settings.web_max_bytes)
@@ -326,6 +344,7 @@ def _fetch_url_content(url: str) -> tuple[bytes, str, str]:
     raise ValueError("Too many redirects")
 
 
+# Extracts readable text and an optional title from fetched web content.
 def _extract_web_text(raw: bytes, content_type: str) -> tuple[str, Optional[str]]:
     encoding = "utf-8"
     match = re.search(r"charset=([\w-]+)", content_type, re.IGNORECASE)
@@ -354,6 +373,7 @@ def _extract_web_text(raw: bytes, content_type: str) -> tuple[str, Optional[str]
     return cleaned, title
 
 
+# Converts HTML into plain text by removing tags, scripts, and repeated whitespace.
 def _html_to_text(html: str) -> str:
     try:
         from bs4 import BeautifulSoup
@@ -365,6 +385,7 @@ def _html_to_text(html: str) -> str:
     return soup.get_text(separator=" ")
 
 
+# Builds the stored pseudo-document wrapper used for ingested web pages.
 def _build_pseudo_doc(title: Optional[str], url: str, crawl_at: str, content_type: str, text: str) -> str:
     header_title = title or url
     lines = [
@@ -383,7 +404,10 @@ _CAPTION_TIMECODE_RE = re.compile(
 )
 
 
+# YouTube caption and transcript helpers.
+# Fetches transcript text and metadata for a YouTube video using available captions.
 def _fetch_youtube_transcript(
+
     url: str,
     language: Optional[str],
     allow_auto_captions: Optional[bool],
@@ -431,6 +455,7 @@ def _fetch_youtube_transcript(
     return transcript, info_payload, captions_meta
 
 
+# Chooses the best matching caption track based on language and caption availability.
 def _select_caption_track(
     info: dict,
     preferred_language: Optional[str],
@@ -491,6 +516,7 @@ def _select_caption_track(
     raise ValueError("No captions available for this video")
 
 
+# Finds the best caption track for the preferred language first.
 def _pick_caption_preferred(
     captions: dict,
     preferred_language: Optional[str],
@@ -517,6 +543,7 @@ def _pick_caption_preferred(
     return None
 
 
+# Falls back to the first usable caption track when no preferred match exists.
 def _pick_caption_any(
     captions: dict,
 ) -> Optional[tuple[str, str, str]]:
@@ -530,6 +557,7 @@ def _pick_caption_any(
     return None
 
 
+# Chooses the best download format for the selected caption track.
 def _select_caption_format(lang: str, formats: list[dict]) -> Optional[tuple[str, str, str]]:
     if not formats or not isinstance(formats, list):
         return None
@@ -544,6 +572,7 @@ def _select_caption_format(lang: str, formats: list[dict]) -> Optional[tuple[str
     return None
 
 
+# Downloads caption text bytes for the selected YouTube caption track.
 def _download_caption_text(url: str) -> bytes:
     max_bytes = max(1, settings.youtube_max_bytes)
     retry_statuses = {429, 500, 502, 503, 504}
@@ -587,6 +616,7 @@ def _download_caption_text(url: str) -> bytes:
     raise RuntimeError("Failed to download captions")
 
 
+# Parses downloaded caption content into plain transcript text.
 def _parse_caption_text(raw: bytes, ext: str) -> str:
     text = raw.decode("utf-8", errors="ignore")
     ext_lower = (ext or "").lower()
@@ -600,6 +630,7 @@ def _parse_caption_text(raw: bytes, ext: str) -> str:
     return cleaned or _strip_xml(text)
 
 
+# Removes timestamps and markup from VTT or SRT caption text.
 def _strip_vtt_srt(text: str) -> str:
     lines: list[str] = []
     for line in text.splitlines():
@@ -617,11 +648,13 @@ def _strip_vtt_srt(text: str) -> str:
     return " ".join(lines).strip()
 
 
+# Removes XML tags from caption payloads that still contain markup.
 def _strip_xml(text: str) -> str:
     cleaned = re.sub(r"<[^>]+>", " ", text)
     return " ".join(cleaned.split()).strip()
 
 
+# Extracts transcript text from YouTube's JSON3 caption format.
 def _parse_json3(text: str) -> str:
     try:
         payload = json.loads(text)
@@ -636,18 +669,21 @@ def _parse_json3(text: str) -> str:
     return " ".join(parts).strip()
 
 
+# Normalizes language codes into a simple lowercase value.
 def _normalize_language(value: Optional[str]) -> str:
     if not value:
         return ""
     return value.strip().lower().replace("_", "-")
 
 
+# Formats a compact YouTube upload date into an ISO-like calendar date.
 def _format_upload_date(value: Optional[str]) -> Optional[str]:
     if not value or len(value) != 8:
         return None
     return f"{value[:4]}-{value[4:6]}-{value[6:]}"
 
 
+# Formats a duration in seconds into a human-readable string.
 def _format_duration(seconds: Optional[int]) -> Optional[str]:
     if seconds is None:
         return None
@@ -663,6 +699,7 @@ def _format_duration(seconds: Optional[int]) -> Optional[str]:
     return f"{minutes:02d}:{secs:02d}"
 
 
+# Builds the stored pseudo-document wrapper used for ingested YouTube transcripts.
 def _build_youtube_pseudo_doc(info: dict, url: str, fetched_at: str, captions_meta: dict, text: str) -> str:
     title = info.get("title") or "YouTube Video"
     lines: list[str] = [f"# {title}"]
@@ -687,6 +724,7 @@ def _build_youtube_pseudo_doc(info: dict, url: str, fetched_at: str, captions_me
     return "\n".join(lines)
 
 
+# Uploads the generated pseudo-document back into Supabase Storage.
 def _upload_pseudo_doc(client: Client, storage_path: str, content: str) -> None:
     if not storage_path:
         raise ValueError("Storage path missing for pseudo document")
@@ -702,7 +740,10 @@ def _upload_pseudo_doc(client: Client, storage_path: str, content: str) -> None:
     )
 
 
+# Text extraction, chunking, and embedding helpers.
+# Routes raw file bytes to the correct text extractor based on file extension.
 def _extract_text(raw: bytes, storage_path: str) -> str:
+
     # Route by file extension to the right extractor.
     ext = Path(storage_path).suffix.lower()
     if ext == ".pdf":
@@ -714,8 +755,8 @@ def _extract_text(raw: bytes, storage_path: str) -> str:
     return raw.decode("utf-8", errors="ignore")
 
 
+# Extracts readable text from a PDF file.
 def _extract_pdf(raw: bytes) -> str:
-    # Best-effort extraction; skip pages that fail (e.g. scanned/malformed).
     try:
         reader = PdfReader(io.BytesIO(raw))
     except Exception as exc:
@@ -729,6 +770,7 @@ def _extract_pdf(raw: bytes) -> str:
     return "\n".join(pages)
 
 
+# Extracts readable text from a DOCX file.
 def _extract_docx(raw: bytes) -> str:
     import docx  # local import to avoid unused dependency warnings if not used
 
@@ -736,11 +778,12 @@ def _extract_docx(raw: bytes) -> str:
     return "\n".join(paragraph.text for paragraph in doc.paragraphs)
 
 
+# Normalizes extracted text into a cleaner single-space format.
 def _normalize_text(text: str) -> str:
-    # Collapse mixed whitespace into single spaces for cleaner chunks.
     return " ".join(text.replace("\r", "\n").split())
 
 
+# Trims text to a maximum length while preserving a readable ending.
 def _trim_text(text: str, max_chars: int) -> str:
     cleaned = _normalize_text(text)
     if len(cleaned) <= max_chars:
@@ -748,6 +791,7 @@ def _trim_text(text: str, max_chars: int) -> str:
     return f"{cleaned[:max_chars].rstrip()}..."
 
 
+# Chunks text, embeds it, stores the vectors, and triggers reminder detection for a source.
 def _ingest_text_for_source(
     client: Client,
     source_id: str,
@@ -787,8 +831,8 @@ def _ingest_text_for_source(
     return len(chunks)
 
 
+# Splits text into overlapping word chunks for embedding.
 def _chunk_text(text: str, chunk_size: int, overlap: int) -> List[str]:
-    # Sliding window with overlap for better semantic continuity.
     words = text.split()
     if not words:
         return []
@@ -804,6 +848,7 @@ def _chunk_text(text: str, chunk_size: int, overlap: int) -> List[str]:
     return chunks
 
 
+# Requests embeddings for the prepared text chunks from OpenAI.
 def _embed_chunks(chunks: List[str]) -> List[List[float]]:
     if not settings.openai_api_key:
         raise RuntimeError("OPENAI_API_KEY missing in worker environment")
@@ -816,6 +861,7 @@ def _embed_chunks(chunks: List[str]) -> List[List[float]]:
     return embeddings
 
 
+# Writes embedded chunk records into the database in batches.
 def _insert_chunks(
     client: Client,
     source_id: str,
@@ -842,16 +888,18 @@ def _insert_chunks(
         client.table("source_chunks").insert(batch).execute()
 
 
+# Deletes older chunk rows for the same source before new ones are inserted.
 def _clear_existing_chunks_before(client: Client, source_id: str, cutoff: str) -> None:
-    # Remove only chunks created before this ingest started to avoid deleting new inserts.
     client.table("source_chunks").delete().eq("source_id", source_id).lt("created_at", cutoff).execute()
 
 
+# Checks whether the source row still exists before continuing ingestion work.
 def _source_exists(client: Client, source_id: str) -> bool:
     response = client.table("sources").select("id").eq("id", source_id).limit(1).execute()
     return bool(response.data)
 
 
+# Loads source metadata fields that are needed during reminder detection.
 def _get_source_metadata(client: Client, source_id: str) -> dict:
     response = (
         client.table("sources")
@@ -866,6 +914,7 @@ def _get_source_metadata(client: Client, source_id: str) -> dict:
     return metadata if isinstance(metadata, dict) else {}
 
 
+# Updates the source status and related bookkeeping fields in the database.
 def _update_source(
     client: Client,
     source_id: str,
@@ -874,7 +923,6 @@ def _update_source(
     ingestion_metadata: Optional[dict] = None,
     clear_failure_reason: bool = False,
 ) -> None:
-    # Only include optional fields when present to avoid overwriting.
     payload: dict = {"status": status}
     if failure_reason is not None or clear_failure_reason:
         payload["failure_reason"] = failure_reason
@@ -883,8 +931,8 @@ def _update_source(
     client.table("sources").update(payload).eq("id", source_id).execute()
 
 
+# Yields items in fixed-size batches for APIs that expect chunked writes.
 def _batch(items: List, size: int) -> Iterable[List]:
-    # Yield successive slices for batched inserts/requests.
     for i in range(0, len(items), size):
         yield items[i : i + size]
 
@@ -931,9 +979,11 @@ DATE_REGEXES = [
 _NLP = None
 
 
+# Reminder detection and date parsing helpers.
+# Finds possible reminder dates in source text and stores any valid reminder candidates.
 def _detect_and_store_reminders(client: Client, source_id: str, hub_id: str, text: str) -> None:
+
     # Cap text length for deterministic runtime; candidates are deduped via upsert.
-    # Note: an optional LLM pass could run here (async) to re-rank/validate low-confidence candidates.
     cleaned = text[:MAX_TEXT_CHARS]
     candidates = _find_date_candidates(cleaned, settings.default_timezone)
     if not candidates:
@@ -960,8 +1010,8 @@ def _detect_and_store_reminders(client: Client, source_id: str, hub_id: str, tex
         ).execute()
 
 
+# Builds reminder date candidates from multiple date-detection strategies.
 def _find_date_candidates(text: str, timezone_name: str) -> List[dict]:
-    # Parse mentions into timestamps, score, and keep the top N unique snippets.
     mentions = _collect_date_mentions(text)
     now = datetime.now(timezone.utc)
     candidates: List[dict] = []
@@ -985,6 +1035,7 @@ def _find_date_candidates(text: str, timezone_name: str) -> List[dict]:
             continue
         time_hint = _extract_time_hint(text, mention["start"], mention["end"])
         parse_text = date_text
+        # Attach a nearby time to otherwise date-only mentions when one is available.
         if time_hint and not _has_time(date_text):
             parse_text = f"{date_text} {time_hint}"
         parsed = _parse_date_text(parse_text, timezone_name, now)
@@ -1004,6 +1055,7 @@ def _find_date_candidates(text: str, timezone_name: str) -> List[dict]:
         if confidence < MIN_CONFIDENCE:
             continue
         snippet_hash = _hash_snippet(snippet)
+        # Deduplicate by parsed due date plus snippet so repeated mentions do not create duplicate candidates.
         key = (parsed.isoformat(), snippet_hash)
         if key in seen_keys:
             continue
@@ -1024,8 +1076,8 @@ def _find_date_candidates(text: str, timezone_name: str) -> List[dict]:
     return _dedupe_best_candidates(candidates)
 
 
+# Collects standalone date mentions from the source text.
 def _collect_date_mentions(text: str) -> List[dict]:
-    # Combine regex matches with spaCy DATE entities.
     mentions: List[dict] = []
     mentions.extend(_collect_range_mentions(text))
     for regex in DATE_REGEXES:
@@ -1046,6 +1098,7 @@ def _collect_date_mentions(text: str) -> List[dict]:
     return mentions
 
 
+# Deduplicates reminder candidates and keeps the strongest match for each date.
 def _dedupe_best_candidates(candidates: List[dict]) -> List[dict]:
     best_by_snippet: dict[str, dict] = {}
     for candidate in candidates:
@@ -1070,8 +1123,8 @@ def _dedupe_best_candidates(candidates: List[dict]) -> List[dict]:
     return filtered
 
 
+# Collects date range mentions so start and end dates can be interpreted together.
 def _collect_range_mentions(text: str) -> List[dict]:
-    # Convert date ranges into a single end-date mention.
     mentions: List[dict] = []
     for match in RANGE_NUMERIC_RE.finditer(text):
         end_text = _normalize_numeric_range_end(match.group("start"), match.group("end"))
@@ -1090,6 +1143,7 @@ def _collect_range_mentions(text: str) -> List[dict]:
     return mentions
 
 
+# Lazily loads and caches the spaCy model used for date extraction support.
 def _get_nlp():
     global _NLP
     if _NLP is not None:
@@ -1102,8 +1156,8 @@ def _get_nlp():
     return _NLP
 
 
+# Parses a detected date phrase into a timezone-aware datetime.
 def _parse_date_text(date_text: str, timezone_name: str, now: datetime) -> Optional[datetime]:
-    # Interpret dates using DMY order and normalize to UTC.
     iso_match = re.fullmatch(r"\s*(\d{4}-\d{2}-\d{2})(?:[ T](\d{1,2}:\d{2})(?::\d{2})?)?\s*", date_text)
     if iso_match:
         base = iso_match.group(1)
@@ -1135,6 +1189,7 @@ def _parse_date_text(date_text: str, timezone_name: str, now: datetime) -> Optio
     return parsed.astimezone(timezone.utc)
 
 
+# Safely resolves a timezone name into a `ZoneInfo` object.
 def _safe_zoneinfo(name: str) -> Optional[ZoneInfo]:
     try:
         return ZoneInfo(name)
@@ -1142,8 +1197,8 @@ def _safe_zoneinfo(name: str) -> Optional[ZoneInfo]:
         return None
 
 
+# Extracts a local text snippet around a detected date for context and scoring.
 def _extract_snippet(text: str, start: int, end: int, radius: int = 120) -> str:
-    # Prefer sentence-bounded snippets around the mention to give context.
     snippet_start = max(0, start - radius)
     snippet_end = min(len(text), end + radius)
     window = text[snippet_start:snippet_end]
@@ -1162,6 +1217,7 @@ def _extract_snippet(text: str, start: int, end: int, radius: int = 120) -> str:
     return snippet[:280]
 
 
+# Builds a short reminder title from the surrounding source snippet.
 def _build_title(snippet: str) -> str:
     cleaned = snippet.strip()
     if len(cleaned) <= 80:
@@ -1169,12 +1225,13 @@ def _build_title(snippet: str) -> str:
     return f"{cleaned[:77].rstrip()}..."
 
 
+# Hashes a snippet so repeated reminder candidates can be deduplicated.
 def _hash_snippet(snippet: str) -> str:
     return hashlib.sha256(snippet.lower().encode("utf-8")).hexdigest()
 
 
+# Scores a reminder candidate so better matches can win during deduplication.
 def _score_candidate(method: str, snippet: str, date_text: str) -> float:
-    # Lightweight heuristic score to keep only strong candidates.
     score = 0.3
     if method == "regex":
         score += 0.35
@@ -1193,17 +1250,19 @@ def _score_candidate(method: str, snippet: str, date_text: str) -> float:
     return max(0.0, min(0.95, score))
 
 
+# Checks whether a snippet contains reminder-related keywords.
 def _has_keyword(snippet: str) -> bool:
     lowered = snippet.lower()
     return any(keyword in lowered for keyword in DATE_KEYWORDS)
 
 
+# Checks whether a date phrase also contains an explicit time.
 def _has_time(text: str) -> bool:
     return bool(DATE_TIME_RE.search(text))
 
 
+# Checks whether reminder keywords appear near a detected date mention.
 def _has_keyword_near(text: str, start: int, end: int, window: int = 120) -> bool:
-    # Look for deadline keywords near the mention without expanding the snippet too far.
     if start < 0 or end < 0:
         return False
     win_start = max(0, start - window)
@@ -1211,8 +1270,8 @@ def _has_keyword_near(text: str, start: int, end: int, window: int = 120) -> boo
     return _has_keyword(text[win_start:win_end])
 
 
+# Checks whether a date phrase is relative rather than a concrete scheduled date.
 def _looks_relative(date_text: str) -> bool:
-    # Flag relative phrases that need a nearby deadline keyword to be trusted.
     value = date_text.strip().lower()
     return bool(
         re.search(
@@ -1222,36 +1281,36 @@ def _looks_relative(date_text: str) -> bool:
     )
 
 
+# Checks whether a parsed phrase looks like a time without a date.
 def _is_time_only(date_text: str) -> bool:
-    # Ignore time-only mentions without an actual date.
     return bool(TIME_ONLY_RE.match(date_text.strip()))
 
 
+# Checks whether a phrase refers to a week rather than a specific event date.
 def _is_week_reference(date_text: str) -> bool:
-    # Skip week numbers unless a term calendar is configured elsewhere.
     return bool(re.search(r"\b(?:week|wk)\s*\d{1,2}\b", date_text.strip().lower()))
 
 
+# Checks whether a phrase names only a weekday without enough scheduling detail.
 def _is_day_only(date_text: str) -> bool:
-    # Avoid parsing bare day-of-month mentions like "15th".
     return bool(re.fullmatch(r"\d{1,2}(st|nd|rd|th)?", date_text.strip(), re.IGNORECASE))
 
 
+# Checks whether a phrase resembles a numeric calendar date.
 def _is_numeric_date(date_text: str) -> bool:
-    # Identify numeric-only date patterns that are prone to false positives.
     value = date_text.strip()
     if re.search(r"[a-zA-Z]", value):
         return False
     return bool(re.search(r"[/-]", value)) or value.isdigit()
 
 
+# Checks whether a phrase is only digits without enough date context.
 def _is_numeric_only(date_text: str) -> bool:
-    # Plain numeric tokens (e.g., "2026") should not be treated as due dates.
     return bool(re.fullmatch(r"\d+", date_text.strip()))
 
 
+# Extracts the trailing date text from a detected date range.
 def _extract_range_end(date_text: str) -> Optional[str]:
-    # If a range is detected, return the end date as the candidate.
     match = RANGE_NUMERIC_RE.search(date_text)
     if match:
         return _normalize_numeric_range_end(match.group("start"), match.group("end"))
@@ -1264,8 +1323,8 @@ def _extract_range_end(date_text: str) -> Optional[str]:
     return None
 
 
+# Normalizes short range endings so they can be parsed with the range start.
 def _normalize_numeric_range_end(start_text: str, end_text: str) -> Optional[str]:
-    # Fill in missing year from the range start when needed.
     start_parts = re.split(r"[/-]", start_text)
     end_parts = re.split(r"[/-]", end_text)
     if len(end_parts) == 2 and len(start_parts) >= 3:
@@ -1275,16 +1334,16 @@ def _normalize_numeric_range_end(start_text: str, end_text: str) -> Optional[str
     return None
 
 
+# Checks whether a date phrase appears too many times to be a useful reminder anchor.
 def _is_repeated_date(text: str, date_text: str) -> bool:
-    # Repeated dates are usually headers/footers, not deadlines.
     needle = date_text.strip().lower()
     if len(needle) < 4:
         return False
     return text.lower().count(needle) >= 3
 
 
+# Rejects dates that look historical, vague, or otherwise unsuitable for reminders.
 def _looks_historical_or_vague_date(date_text: str) -> bool:
-    # Filter out historical references like "1800s" or "circa 1553".
     value = date_text.strip().lower()
     if re.search(r"\b\d{3,4}s\b", value):
         return True
@@ -1297,6 +1356,7 @@ def _looks_historical_or_vague_date(date_text: str) -> bool:
     return False
 
 
+# Rejects numeric date phrases that are too ambiguous to trust.
 def _is_ambiguous_numeric(date_text: str) -> bool:
     match = re.match(r"\b(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})\b", date_text.strip())
     if not match:
@@ -1306,6 +1366,7 @@ def _is_ambiguous_numeric(date_text: str) -> bool:
     return first <= 12 and second <= 12 and first != second
 
 
+# Finds the start of the local sentence around a detected match.
 def _find_sentence_start(window: str, idx: int) -> int:
     start = 0
     for match in SENTENCE_BOUNDARY_RE.finditer(window[:idx]):
@@ -1315,6 +1376,7 @@ def _find_sentence_start(window: str, idx: int) -> int:
     return start
 
 
+# Finds the end of the local sentence around a detected match.
 def _find_sentence_end(window: str, idx: int) -> int:
     match = SENTENCE_BOUNDARY_RE.search(window[idx:])
     if match:
@@ -1326,8 +1388,8 @@ def _find_sentence_end(window: str, idx: int) -> int:
     return end
 
 
+# Extracts a nearby time expression that may refine the parsed reminder date.
 def _extract_time_hint(text: str, start: int, end: int, window: int = 60) -> Optional[str]:
-    # Attach the nearest time (e.g. "5pm") to date-only mentions.
     if start < 0 or end < 0:
         return None
     win_start = max(0, start - window)
@@ -1353,6 +1415,7 @@ def _extract_time_hint(text: str, start: int, end: int, window: int = 60) -> Opt
     return best
 
 
+# Checks whether a parsed reminder date falls within a sensible time range.
 def _is_reasonable_date(value: datetime, now: datetime) -> bool:
     if value < now - timedelta(days=30):
         return False
@@ -1361,6 +1424,7 @@ def _is_reasonable_date(value: datetime, now: datetime) -> bool:
     return True
 
 
+# Rejects snippets that look more like formulas than natural-language reminders.
 def _looks_mathy(snippet: str) -> bool:
     if not snippet:
         return False
@@ -1380,7 +1444,10 @@ def _looks_mathy(snippet: str) -> bool:
 _SUGGESTION_YOUTUBE_ID_RE = re.compile(r"^[A-Za-z0-9_-]{11}$")
 
 
+# Source suggestion scanning and discovery helpers.
+# Builds the Redis client used for worker locks and background coordination.
 def _get_redis_client() -> redis.Redis:
+
     redis_url = settings.redis_url
     client_kwargs: dict = {}
 
@@ -1419,6 +1486,7 @@ def _get_redis_client() -> redis.Redis:
     return redis.Redis.from_url(redis_url, **client_kwargs)
 
 
+# Claims a per-hub Redis lock so only one worker scans suggestions at a time.
 def _acquire_source_suggestion_lock(hub_id: str) -> Optional[tuple[redis.Redis, str, str]]:
     client = _get_redis_client()
     key = f"locks:source-suggestions:{hub_id}"
@@ -1434,6 +1502,7 @@ def _acquire_source_suggestion_lock(hub_id: str) -> Optional[tuple[redis.Redis, 
     return client, key, token
 
 
+# Releases a previously acquired source-suggestion Redis lock.
 def _release_source_suggestion_lock(lock: tuple[redis.Redis, str, str]) -> None:
     client, key, token = lock
     try:
@@ -1444,6 +1513,7 @@ def _release_source_suggestion_lock(lock: tuple[redis.Redis, str, str]) -> None:
         client.close()
 
 
+# Loads hubs that are eligible for a new source-suggestion scan.
 def _list_eligible_source_suggestion_hubs(client: Client, now: Optional[datetime] = None) -> list[dict]:
     now = now or datetime.now(timezone.utc)
     hubs_response = client.table("hubs").select("id,last_source_suggestion_scan_at").execute()
@@ -1485,6 +1555,7 @@ def _list_eligible_source_suggestion_hubs(client: Client, now: Optional[datetime
     )
 
 
+# Filters hubs down to those that are active, ready, and outside cooldown windows.
 def _filter_eligible_source_suggestion_hubs(
     hubs: list[dict],
     *,
@@ -1514,6 +1585,7 @@ def _filter_eligible_source_suggestion_hubs(
     return eligible
 
 
+# Generates and stores new source suggestions for a single eligible hub.
 def _generate_source_suggestions_for_hub(client: Client, hub_id: str, now: Optional[datetime] = None) -> dict:
     now = now or datetime.now(timezone.utc)
     seed_source_ids, context_text = _build_source_suggestion_context(client, hub_id)
@@ -1542,6 +1614,7 @@ def _generate_source_suggestions_for_hub(client: Client, hub_id: str, now: Optio
     return {"inserted": len(pending_rows)}
 
 
+# Builds the LLM context bundle used to discover new source suggestions.
 def _build_source_suggestion_context(client: Client, hub_id: str) -> tuple[list[str], str]:
     source_rows = (
         client.table("sources")
@@ -1603,6 +1676,7 @@ def _build_source_suggestion_context(client: Client, hub_id: str) -> tuple[list[
     return source_ids, "\n\n".join(blocks)
 
 
+# Calls the LLM and web search tools to discover candidate source suggestions.
 def _discover_source_suggestions(context_text: str) -> tuple[list[dict], dict]:
     if not settings.openai_api_key:
         logger.warning("Skipping source suggestions because OPENAI_API_KEY is missing")
@@ -1624,6 +1698,7 @@ def _discover_source_suggestions(context_text: str) -> tuple[list[dict], dict]:
     user_prompt = f"Hub context:\n{context_text}"
 
     try:
+        # Ask the model to use web search and return a strict JSON array of candidates.
         response = responses_client.create(
             model=settings.suggested_sources_model,
             input=[
@@ -1634,6 +1709,7 @@ def _discover_source_suggestions(context_text: str) -> tuple[list[dict], dict]:
             temperature=0.2,
         )
         raw_text = _extract_response_text(response)
+        # Parse defensively because the model can still wrap JSON in markdown or extra text.
         candidates = _parse_source_suggestion_candidates(raw_text)
         search_results = []
         for item in _extract_web_search_results(response)[:10]:
@@ -1654,6 +1730,7 @@ def _discover_source_suggestions(context_text: str) -> tuple[list[dict], dict]:
         return [], {"error": str(exc)[:500], "model": settings.suggested_sources_model}
 
 
+# Normalizes raw candidate objects into validated suggestion payloads.
 def _normalize_source_suggestion_candidates(
     candidates: list[dict],
     *,
@@ -1674,6 +1751,7 @@ def _normalize_source_suggestion_candidates(
     return normalized
 
 
+# Validates and reshapes a single discovered suggestion candidate.
 def _normalize_source_suggestion_candidate(
     candidate: dict,
     *,
@@ -1729,6 +1807,7 @@ def _normalize_source_suggestion_candidate(
     }
 
 
+# Loads existing suggestion targets so duplicates can be skipped.
 def _load_existing_source_suggestion_targets(client: Client, hub_id: str) -> set[tuple[str, str]]:
     rows = client.table("source_suggestions").select("type,canonical_url,video_id").eq("hub_id", hub_id).execute().data or []
     targets: set[tuple[str, str]] = set()
@@ -1739,6 +1818,7 @@ def _load_existing_source_suggestion_targets(client: Client, hub_id: str) -> set
     return targets
 
 
+# Loads existing source targets so already-added content is not suggested again.
 def _load_existing_source_targets(client: Client, hub_id: str) -> set[tuple[str, str]]:
     rows = client.table("sources").select("type,ingestion_metadata").eq("hub_id", hub_id).execute().data or []
     targets: set[tuple[str, str]] = set()
@@ -1758,6 +1838,7 @@ def _load_existing_source_targets(client: Client, hub_id: str) -> set[tuple[str,
     return targets
 
 
+# Deduplicates and caps candidate suggestions before insertion.
 def _filter_new_source_suggestions(
     candidates: list[dict],
     *,
@@ -1800,6 +1881,7 @@ def _filter_new_source_suggestions(
     return accepted
 
 
+# Builds a comparable key for a candidate's canonical target.
 def _source_suggestion_target_key(candidate: dict) -> Optional[tuple[str, str]]:
     suggestion_type = str(candidate.get("type") or "").strip().lower()
     if suggestion_type == "youtube":
@@ -1814,6 +1896,7 @@ def _source_suggestion_target_key(candidate: dict) -> Optional[tuple[str, str]]:
     return None
 
 
+# Updates the hub scan timestamp after a suggestion run finishes.
 def _mark_source_suggestion_scan(client: Client, hub_id: str, *, now: datetime, generated: bool) -> None:
     payload = {"last_source_suggestion_scan_at": now.isoformat()}
     if generated:
@@ -1821,6 +1904,7 @@ def _mark_source_suggestion_scan(client: Client, hub_id: str, *, now: datetime, 
     client.table("hubs").update(payload).eq("id", hub_id).execute()
 
 
+# Extracts a YouTube video identifier from a supported video URL.
 def _extract_youtube_video_id(url: str) -> Optional[str]:
     parsed = urlparse(url)
     host = (parsed.netloc or "").lower()
@@ -1838,6 +1922,7 @@ def _extract_youtube_video_id(url: str) -> Optional[str]:
     return None
 
 
+# Validates and normalizes a YouTube video identifier.
 def _normalize_youtube_id(value: str) -> Optional[str]:
     cleaned = (value or "").strip()
     if not _SUGGESTION_YOUTUBE_ID_RE.fullmatch(cleaned):
@@ -1845,10 +1930,12 @@ def _normalize_youtube_id(value: str) -> Optional[str]:
     return cleaned
 
 
+# Builds a canonical YouTube watch URL from a video identifier.
 def _canonicalize_youtube_url(video_id: str) -> str:
     return f"https://www.youtube.com/watch?v={video_id}"
 
 
+# Normalizes a web URL by removing noise such as fragments and tracking parameters.
 def _canonicalize_web_url(url: str) -> Optional[str]:
     cleaned = (url or "").strip()
     if not cleaned:
@@ -1882,6 +1969,7 @@ def _canonicalize_web_url(url: str) -> Optional[str]:
     return urlunparse((parsed.scheme.lower(), netloc, path, "", normalized_query, ""))
 
 
+# Trims optional suggestion text fields to a safe maximum length.
 def _trim_source_suggestion_text(value: object, max_chars: int) -> Optional[str]:
     cleaned = _normalize_text(str(value or ""))
     if not cleaned:
@@ -1891,6 +1979,7 @@ def _trim_source_suggestion_text(value: object, max_chars: int) -> Optional[str]
     return f"{cleaned[:max_chars].rstrip()}..."
 
 
+# Converts a suggestion confidence value into a bounded float.
 def _coerce_confidence(value: object) -> float:
     try:
         confidence = float(value)
@@ -1899,6 +1988,7 @@ def _coerce_confidence(value: object) -> float:
     return max(0.0, min(1.0, confidence))
 
 
+# Parses the LLM output into a list of candidate suggestion objects.
 def _parse_source_suggestion_candidates(raw: str) -> list[dict]:
     text = (raw or "").strip()
     if not text:
@@ -1923,12 +2013,14 @@ def _parse_source_suggestion_candidates(raw: str) -> list[dict]:
     return []
 
 
+# Reads an attribute from SDK response objects while keeping the caller defensive.
 def _get_attr(obj: object, name: str, default: object = None) -> object:
     if isinstance(obj, dict):
         return obj.get(name, default)
     return getattr(obj, name, default)
 
 
+# Extracts plain text content from an OpenAI response payload.
 def _extract_response_text(response: object) -> str:
     text = _get_attr(response, "output_text")
     if isinstance(text, str) and text.strip():
@@ -1950,6 +2042,7 @@ def _extract_response_text(response: object) -> str:
     return ""
 
 
+# Extracts token usage information from an OpenAI response payload.
 def _extract_usage(response: object) -> Optional[dict]:
     usage = _get_attr(response, "usage")
     if usage is None:
@@ -1962,6 +2055,7 @@ def _extract_usage(response: object) -> Optional[dict]:
     return None
 
 
+# Extracts any attached web-search result objects from an OpenAI response.
 def _extract_web_search_results(response: object) -> list[object]:
     output = _get_attr(response, "output", []) or []
     results: list[object] = []
@@ -1975,9 +2069,10 @@ def _extract_web_search_results(response: object) -> list[object]:
     return results
 
 
+# Reminder dispatch tasks and notification helpers.
+# Dispatches due reminders and records any notification updates that result.
 @celery_app.task(name="dispatch_reminders")
 def dispatch_reminders() -> dict:
-    # Find reminders due now or within the lead window; enqueue notifications once.
     client = _get_supabase_client()
     now = datetime.now(timezone.utc)
     lead_hours = max(1, settings.reminder_lead_hours)
@@ -1985,6 +2080,7 @@ def dispatch_reminders() -> dict:
     lead_start = now + timedelta(hours=lead_hours) - timedelta(minutes=window)
     lead_end = now + timedelta(hours=lead_hours) + timedelta(minutes=window)
 
+    # Fetch both upcoming lead reminders and already-due reminders in the same run.
     lead_candidates = (
         client.table("reminders")
         .select("*")
@@ -2023,11 +2119,13 @@ def dispatch_reminders() -> dict:
             now,
             hub_policy_cache,
         )
+        # Mark the reminder as sent only after the due notification path has been processed.
         _mark_reminder_sent(client, reminder["id"], now)
 
     return {"notifications_sent": sent}
 
 
+# Processes one reminder record and sends notifications through the enabled channels.
 def _dispatch_for_reminder(
     client: Client,
     reminder: dict,
@@ -2035,7 +2133,6 @@ def _dispatch_for_reminder(
     now: datetime,
     hub_policy_cache: dict[str, dict],
 ) -> int:
-    # Apply hub policy to schedule lead/due notifications
     hub_id = reminder.get("hub_id")
     if not hub_id:
         return 0
@@ -2065,6 +2162,7 @@ def _dispatch_for_reminder(
     return sent
 
 
+# Creates a reminder notification unless one already exists for the same dispatch window.
 def _create_notification_if_needed(
     client: Client,
     reminder: dict,
@@ -2073,7 +2171,6 @@ def _create_notification_if_needed(
     scheduled_for: datetime,
     now: datetime,
 ) -> bool:
-    # Idempotency key prevents duplicate notifications across repeated runs
     key = f"{reminder['id']}:{kind}:{scheduled_for.isoformat()}:{channel}"
     existing = (
         client.table("notifications")
@@ -2105,6 +2202,7 @@ def _create_notification_if_needed(
 
 
 
+# Updates an existing reminder notification with the latest dispatch outcome.
 def _update_notification(
     client: Client,
     notification_id: str,
@@ -2117,10 +2215,12 @@ def _update_notification(
     client.table("notifications").update(payload).eq("id", notification_id).execute()
 
 
+# Marks a reminder as sent after its dispatch completes successfully.
 def _mark_reminder_sent(client: Client, reminder_id: str, now: datetime) -> None:
     client.table("reminders").update({"status": "sent", "sent_at": now.isoformat()}).eq("id", reminder_id).execute()
 
 
+# Parses an ISO timestamp string into a timezone-aware datetime when possible.
 def _parse_iso(value: Optional[str]) -> Optional[datetime]:
     if not value:
         return None
@@ -2131,6 +2231,7 @@ def _parse_iso(value: Optional[str]) -> Optional[datetime]:
         return None
 
 
+# Loads and caches reminder policy settings for a hub.
 def _get_hub_policy(client: Client, hub_id: str, cache: dict[str, dict]) -> dict:
     cached = cache.get(hub_id)
     if cached is not None:
@@ -2145,8 +2246,8 @@ def _get_hub_policy(client: Client, hub_id: str, cache: dict[str, dict]) -> dict
     return policy
 
 
+# Normalizes a channel list into lowercase unique values.
 def _normalize_channels(value: Optional[list]) -> list[str]:
-    # Only allow supported channels; fall back to in-app.
     if not value:
         return ["in_app"]
     channels: list[str] = []

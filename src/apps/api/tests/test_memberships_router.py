@@ -7,7 +7,10 @@ from app.schemas import HubMember, MembershipRole, UserProfileSummary
 from app.services import store as store_module
 
 
+# Verifies that list members requires accepted invite.
+# Endpoint behavior tests.
 def test_list_members_requires_accepted_invite(client, monkeypatch) -> None:
+
     # Mocks a pending member; expect 403 for unaccepted invite.
     member = HubMember(
         hub_id="11111111-1111-1111-1111-111111111111",
@@ -21,6 +24,7 @@ def test_list_members_requires_accepted_invite(client, monkeypatch) -> None:
     assert resp.status_code == 403
 
 
+# Verifies that list members returns members for owner.
 def test_list_members_returns_members_for_owner(client, monkeypatch) -> None:
     # Mocks owner role; expect list of members returned.
     owner = HubMember(
@@ -47,6 +51,7 @@ def test_list_members_returns_members_for_owner(client, monkeypatch) -> None:
     assert len(resp.json()) == 2
 
 
+# Verifies that attach profiles includes metadata fields.
 def test_attach_profiles_includes_metadata_fields(client, monkeypatch) -> None:
     owner = HubMember(
         hub_id="11111111-1111-1111-1111-111111111111",
@@ -81,6 +86,7 @@ def test_attach_profiles_includes_metadata_fields(client, monkeypatch) -> None:
     assert payload["avatar_key"] == "rocket"
 
 
+# Verifies that invite member blocks self invite.
 def test_invite_member_blocks_self_invite(client) -> None:
     # Uses current user's email; expect 400 to prevent self-invite.
     resp = client.post(
@@ -90,6 +96,7 @@ def test_invite_member_blocks_self_invite(client) -> None:
     assert resp.status_code == 400
 
 
+# Verifies that invite member requires owner.
 def test_invite_member_requires_owner(client, monkeypatch) -> None:
     # Mocks viewer role; expect 403 when inviting without owner role.
     member = HubMember(
@@ -107,6 +114,7 @@ def test_invite_member_requires_owner(client, monkeypatch) -> None:
     assert resp.status_code == 403
 
 
+# Verifies that list invite notifications returns items.
 def test_list_invite_notifications_returns_items(client, monkeypatch) -> None:
     owner = {
         "hub": {
@@ -127,6 +135,7 @@ def test_list_invite_notifications_returns_items(client, monkeypatch) -> None:
     assert resp.json()[0]["hub"]["name"] == "Module Hub"
 
 
+# Verifies that dismiss invite notification returns 204.
 def test_dismiss_invite_notification_returns_204(client, monkeypatch) -> None:
     monkeypatch.setattr(store_module.store, "dismiss_invite_notification", lambda _client, hub_id, user_id: None)
 
@@ -135,6 +144,7 @@ def test_dismiss_invite_notification_returns_204(client, monkeypatch) -> None:
     assert resp.status_code == 204
 
 
+# Verifies that update member role rejects owner assignment.
 def test_update_member_role_rejects_owner_assignment(client) -> None:
     resp = client.patch(
         "/hubs/11111111-1111-1111-1111-111111111111/members/00000000-0000-0000-0000-000000000002",
@@ -143,6 +153,7 @@ def test_update_member_role_rejects_owner_assignment(client) -> None:
     assert resp.status_code == 422
 
 
+# Verifies that update member role rejects direct owner change.
 def test_update_member_role_rejects_direct_owner_change(client, monkeypatch) -> None:
     owner = HubMember(
         hub_id="11111111-1111-1111-1111-111111111111",
@@ -167,6 +178,7 @@ def test_update_member_role_rejects_direct_owner_change(client, monkeypatch) -> 
     assert resp.status_code == 400
 
 
+# Verifies that remove member rejects direct owner removal.
 def test_remove_member_rejects_direct_owner_removal(client, monkeypatch) -> None:
     owner = HubMember(
         hub_id="11111111-1111-1111-1111-111111111111",
@@ -190,6 +202,7 @@ def test_remove_member_rejects_direct_owner_removal(client, monkeypatch) -> None
     assert resp.status_code == 400
 
 
+# Verifies that transfer ownership requires admin target.
 def test_transfer_ownership_requires_admin_target(client, monkeypatch) -> None:
     owner = HubMember(
         hub_id="11111111-1111-1111-1111-111111111111",

@@ -9,12 +9,18 @@ from app.schemas import Source, SourceCreate, SourceStatus, SourceSuggestion, So
 from app.services import store as store_module
 
 
+# Simple response stub used by the surrounding tests.
+# Test helpers and fixtures.
 class FakeResponse:
+
+    # Initializes the test helper state used by this class.
     def __init__(self, data: list[dict]) -> None:
         self.data = data
 
 
+# Table stub used to emulate Supabase table calls in tests.
 class FakeTable:
+    # Initializes the test helper state used by this class.
     def __init__(self, client: "FakeClient", name: str) -> None:
         self.client = client
         self.name = name
@@ -24,34 +30,41 @@ class FakeTable:
         self._selected_fields: str | None = None
         self._limit: int | None = None
 
+    # Records an insert payload and returns the stub for chaining.
     def insert(self, payload: dict) -> "FakeTable":
         self._op = "insert"
         self._payload = payload
         self.client.inserted.append((self.name, payload))
         return self
 
+    # Captures an update payload for the current query stub.
     def update(self, payload: dict) -> "FakeTable":
         self._op = "update"
         self._payload = payload
         return self
 
+    # Captures the requested select clause for later execution.
     def select(self, fields: str) -> "FakeTable":
         self._op = "select"
         self._selected_fields = fields
         return self
 
+    # Marks the current query stub as a delete operation.
     def delete(self) -> "FakeTable":
         self._op = "delete"
         return self
 
+    # Captures an equality filter for the current query stub.
     def eq(self, column: str, value: str) -> "FakeTable":
         self._filters[column] = value
         return self
 
+    # Captures a result limit for the current query stub.
     def limit(self, value: int) -> "FakeTable":
         self._limit = value
         return self
 
+    # Returns the prepared fake response for the current operation.
     def execute(self) -> FakeResponse:
         if self._op == "insert":
             return FakeResponse([self._payload or {}])
@@ -76,24 +89,31 @@ class FakeTable:
         return FakeResponse([{}])
 
 
+# Simple client stub used by the surrounding tests.
 class FakeClient:
+    # Initializes the test helper state used by this class.
     def __init__(self) -> None:
         self.inserted: list[tuple[str, dict]] = []
         self.deleted: list[tuple[str, dict[str, str]]] = []
         self.updates: list[tuple[str, dict[str, str], dict]] = []
         self.source_suggestions: dict[str, dict] = {}
 
+    # Returns a stub table object for the requested table name.
     def table(self, name: str) -> FakeTable:
         return FakeTable(self, name)
 
 
+# Verifies that create source deletes row on upload url failure.
+# Store service tests.
 def test_create_source_deletes_row_on_upload_url_failure(monkeypatch) -> None:
+
     fake_client = FakeClient()
     source_id = uuid.UUID("11111111-1111-1111-1111-111111111111")
     hub_id = uuid.UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
 
     monkeypatch.setattr(store_module.uuid, "uuid4", lambda: source_id)
 
+    # Helper used by the surrounding test code.
     def raise_upload_url(_path: str) -> str:
         raise RuntimeError("Failed to create signed upload URL")
 
@@ -107,11 +127,13 @@ def test_create_source_deletes_row_on_upload_url_failure(monkeypatch) -> None:
     assert fake_client.deleted == [("sources", {"id": str(source_id)})]
 
 
+# Verifies that canonicalize web url strips tracking and fragment.
 def test_canonicalize_web_url_strips_tracking_and_fragment() -> None:
     canonical = store_module._canonicalize_web_url("https://www.Example.com/docs/?utm_source=test&topic=1#intro")
     assert canonical == "https://example.com/docs?topic=1"
 
 
+# Verifies that find existing source for web suggestion.
 def test_find_existing_source_for_web_suggestion(monkeypatch) -> None:
     suggestion = SourceSuggestion(
         id="suggestion-1",
@@ -140,6 +162,7 @@ def test_find_existing_source_for_web_suggestion(monkeypatch) -> None:
     assert matched.id == existing.id
 
 
+# Verifies that find existing source for youtube suggestion.
 def test_find_existing_source_for_youtube_suggestion(monkeypatch) -> None:
     suggestion = SourceSuggestion(
         id="suggestion-2",
@@ -168,6 +191,7 @@ def test_find_existing_source_for_youtube_suggestion(monkeypatch) -> None:
     assert matched.id == existing.id
 
 
+# Verifies that update source suggestion uses expected status guard.
 def test_update_source_suggestion_uses_expected_status_guard() -> None:
     fake_client = FakeClient()
     suggestion_id = "suggestion-guarded"
@@ -208,6 +232,7 @@ def test_update_source_suggestion_uses_expected_status_guard() -> None:
     ]
 
 
+# Verifies that update source suggestion raises conflict when expected status is stale.
 def test_update_source_suggestion_raises_conflict_when_expected_status_is_stale() -> None:
     fake_client = FakeClient()
     suggestion_id = "suggestion-conflict"

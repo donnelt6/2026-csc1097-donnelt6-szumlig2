@@ -1,4 +1,4 @@
-"""Dependency helpers for Supabase auth + per-request clients."""
+"""dependencies.py: Provides auth, client, and rate-limit dependencies for FastAPI routes."""
 
 from dataclasses import dataclass
 import logging
@@ -14,12 +14,14 @@ from .services.rate_limit import RateLimitResult, RateLimiter, rate_limiter
 logger = logging.getLogger(__name__)
 
 
+# Lightweight authenticated user context passed into routes.
 @dataclass
 class CurrentUser:
     id: str
     email: Optional[str]
 
 
+# Extract the bearer token from the Authorization header.
 def get_access_token(authorization: Optional[str] = Header(default=None)) -> str:
     if not authorization:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing Authorization header.")
@@ -28,6 +30,7 @@ def get_access_token(authorization: Optional[str] = Header(default=None)) -> str
     return authorization.split(" ", 1)[1]
 
 
+# Resolve the current Supabase user from the provided access token.
 def get_current_user(
     token: str = Depends(get_access_token),
     settings: Settings = Depends(get_settings),
@@ -56,6 +59,7 @@ def get_current_user(
     return CurrentUser(id=user_id, email=data.get("email"))
 
 
+# Create a Supabase client scoped to the current user's token.
 def get_supabase_user_client(
     token: str = Depends(get_access_token),
     settings: Settings = Depends(get_settings),
@@ -67,16 +71,19 @@ def get_supabase_user_client(
     return client
 
 
+# Create a service-role Supabase client for privileged operations.
 def get_supabase_service_client(settings: Settings = Depends(get_settings)) -> Client:
     if not settings.supabase_url or not settings.supabase_service_role_key:
         raise RuntimeError("Supabase credentials missing. Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.")
     return create_client(settings.supabase_url, settings.supabase_service_role_key)
 
 
+# Return the shared application rate limiter.
 def get_rate_limiter() -> RateLimiter:
     return rate_limiter
 
 
+# Determine the caller IP, optionally trusting proxy headers when enabled.
 def _get_client_ip(request: Request, settings: Settings) -> str:
     # Trust proxy headers only when explicitly enabled to avoid IP spoofing.
     if settings.trust_proxy_headers:
@@ -88,6 +95,7 @@ def _get_client_ip(request: Request, settings: Settings) -> str:
     return "unknown"
 
 
+# Build the rate-limit headers returned on successful and blocked requests.
 def _rate_limit_headers(limit: int, result: RateLimitResult, include_retry: bool) -> dict[str, str]:
     headers = {
         "X-RateLimit-Limit": str(limit),
@@ -99,6 +107,7 @@ def _rate_limit_headers(limit: int, result: RateLimitResult, include_retry: bool
     return headers
 
 
+# Pick the stricter user/IP result for response headers and retry timing.
 def _select_rate_limit_result(
     user_limit: int,
     user_result: RateLimitResult,
@@ -114,6 +123,7 @@ def _select_rate_limit_result(
     return user_limit, user_result
 
 
+# Apply both per-user and per-IP rate limits to a route.
 def rate_limit_user_ip(scope: str, limit_setting: str):
     def _rate_limit(
         request: Request,
@@ -142,6 +152,7 @@ def rate_limit_user_ip(scope: str, limit_setting: str):
     return _rate_limit
 
 
+# Apply IP-only rate limiting to routes that do not require authentication.
 def rate_limit_ip_only(scope: str, limit_setting: str):
     def _rate_limit(
         request: Request,

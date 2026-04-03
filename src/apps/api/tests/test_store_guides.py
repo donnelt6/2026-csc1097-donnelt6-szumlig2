@@ -4,42 +4,56 @@ from app.schemas import GuideGenerateRequest
 from app.services.store import store
 
 
+# Simple response stub used by the surrounding tests.
+# Test helpers and fixtures.
 class FakeResponse:
+
+    # Initializes the test helper state used by this class.
     def __init__(self, data: list[dict]) -> None:
         self.data = data
 
 
+# Table stub used to emulate Supabase table calls in tests.
 class FakeTable:
+    # Initializes the test helper state used by this class.
     def __init__(self, name: str) -> None:
         self.name = name
         self._payload = None
         self._action = None
 
+    # Captures the requested select clause for later execution.
     def select(self, *args, **kwargs) -> "FakeTable":
         return self
 
+    # Captures an equality filter for the current query stub.
     def eq(self, *args, **kwargs) -> "FakeTable":
         return self
 
+    # Helper used by the surrounding test code.
     def is_(self, *args, **kwargs) -> "FakeTable":
         return self
 
+    # Captures ordering details for the current query stub.
     def order(self, *args, **kwargs) -> "FakeTable":
         return self
 
+    # Captures a result limit for the current query stub.
     def limit(self, *args, **kwargs) -> "FakeTable":
         return self
 
+    # Captures an update payload for the current query stub.
     def update(self, payload: dict) -> "FakeTable":
         self._action = "update"
         self._payload = payload
         return self
 
+    # Records an insert payload and returns the stub for chaining.
     def insert(self, payload: list[dict] | dict) -> "FakeTable":
         self._action = "insert"
         self._payload = payload
         return self
 
+    # Returns the prepared fake response for the current operation.
     def execute(self) -> FakeResponse:
         if self._action == "insert":
             payloads = self._payload if isinstance(self._payload, list) else [self._payload]
@@ -57,11 +71,14 @@ class FakeTable:
         return FakeResponse([])
 
 
+# Simple client stub used by the surrounding tests.
 class FakeClient:
+    # Returns a stub table object for the requested table name.
     def table(self, name: str) -> FakeTable:
         return FakeTable(name)
 
 
+# Matches selected fields so nested payload assertions stay concise.
 def _match(
     source_id: str,
     similarity: float,
@@ -78,7 +95,10 @@ def _match(
     }
 
 
+# Verifies that generate guide skips steps without citations.
+# Store service tests.
 def test_generate_guide_skips_steps_without_citations(monkeypatch) -> None:
+
     fake_client = FakeClient()
     monkeypatch.setattr(
         store,
@@ -100,6 +120,7 @@ def test_generate_guide_skips_steps_without_citations(monkeypatch) -> None:
         [{"source_id": "src-1", "text": "Snippet", "chunk_index": 0, "similarity": 0.9}],
     ]
 
+    # Helper used by the surrounding test code.
     def fake_match(*_args, **_kwargs):
         return matches.pop(0)
 
@@ -117,6 +138,7 @@ def test_generate_guide_skips_steps_without_citations(monkeypatch) -> None:
     assert entry.steps[0].instruction == "Second"
 
 
+# Verifies that generate guide requires cited steps.
 def test_generate_guide_requires_cited_steps(monkeypatch) -> None:
     fake_client = FakeClient()
     monkeypatch.setattr(
@@ -141,6 +163,7 @@ def test_generate_guide_requires_cited_steps(monkeypatch) -> None:
     assert entry is None
 
 
+# Verifies that generate guide diversifies step citations for mixed sources.
 def test_generate_guide_diversifies_step_citations_for_mixed_sources(monkeypatch) -> None:
     fake_client = FakeClient()
     monkeypatch.setattr(
@@ -178,6 +201,7 @@ def test_generate_guide_diversifies_step_citations_for_mixed_sources(monkeypatch
     assert len({citation.source_id for citation in entry.steps[0].citations}) >= 2
 
 
+# Verifies that generate guide sparse fallback keeps best raw matches.
 def test_generate_guide_sparse_fallback_keeps_best_raw_matches(monkeypatch) -> None:
     fake_client = FakeClient()
     monkeypatch.setattr(

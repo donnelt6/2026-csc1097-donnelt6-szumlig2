@@ -1,3 +1,5 @@
+"""main.py: Creates the FastAPI app, registers middleware, and includes all API routers."""
+
 import logging
 
 import httpx
@@ -13,6 +15,7 @@ from .routers import activity, analytics, chat, faqs, guides, hubs, memberships,
 logger = logging.getLogger(__name__)
 
 
+# Build and configure the FastAPI application instance.
 def create_app() -> FastAPI:
     try:
         settings = get_settings()
@@ -34,6 +37,7 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    # Log the resolved startup configuration once the app is ready.
     @app.on_event("startup")
     def log_startup() -> None:
         logger.info(
@@ -47,6 +51,7 @@ def create_app() -> FastAPI:
 
     app.include_router(activity.router)
 
+    # Convert outbound HTTP client failures into a consistent API response.
     @app.exception_handler(httpx.HTTPError)
     def handle_upstream_http_error(_request: Request, exc: httpx.HTTPError) -> JSONResponse:
         try:
@@ -68,6 +73,7 @@ def create_app() -> FastAPI:
     app.include_router(reminders.router)
 
 
+    # Expose a lightweight health endpoint for checks and uptime monitors.
     @app.get("/health", dependencies=[Depends(rate_limit_ip_only("health", "rate_limit_health_per_minute"))])
     def health() -> dict[str, str]:
         return {"status": "ok"}
@@ -75,4 +81,5 @@ def create_app() -> FastAPI:
     return app
 
 
+# Create the module-level ASGI app used by the server.
 app = create_app()

@@ -5,7 +5,10 @@ from app.schemas import GuideEntry, HubMember, MembershipRole
 from app.services import store as store_module
 
 
+# Verifies that guide generate requires editor.
+# Endpoint behavior tests.
 def test_guide_generate_requires_editor(client, monkeypatch) -> None:
+
     member = HubMember(
         hub_id="11111111-1111-1111-1111-111111111111",
         user_id="00000000-0000-0000-0000-000000000001",
@@ -27,6 +30,7 @@ def test_guide_generate_requires_editor(client, monkeypatch) -> None:
     assert resp.status_code == 403
 
 
+# Verifies that guides list returns entries.
 def test_guides_list_returns_entries(client, monkeypatch) -> None:
     entry = GuideEntry(
         id="guide-1",
@@ -47,6 +51,7 @@ def test_guides_list_returns_entries(client, monkeypatch) -> None:
     assert data[0]["title"] == "Onboarding Guide"
 
 
+# Verifies that guides patch updates.
 def test_guides_patch_updates(client, monkeypatch) -> None:
     entry = GuideEntry(
         id="22222222-2222-2222-2222-222222222222",
@@ -77,6 +82,7 @@ def test_guides_patch_updates(client, monkeypatch) -> None:
     assert data["title"] == "New title"
 
 
+# Verifies that guide step create requires editor.
 def test_guide_step_create_requires_editor(client, monkeypatch) -> None:
     entry = GuideEntry(
         id="22222222-2222-2222-2222-222222222222",

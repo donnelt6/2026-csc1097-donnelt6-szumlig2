@@ -1,4 +1,6 @@
+"""test_moderation_router.py: Contains API tests for moderation router."""
 from datetime import datetime
+
 
 from app.schemas import (
     Citation,
@@ -15,7 +17,10 @@ from app.schemas import (
 from app.services import store as store_module
 
 
+# Verifies that flag message returns created case.
+# Endpoint behavior tests.
 def test_flag_message_returns_created_case(client, monkeypatch) -> None:
+
     flag_case = FlagCase(
         id="flag-1",
         hub_id="hub-1",
@@ -43,6 +48,7 @@ def test_flag_message_returns_created_case(client, monkeypatch) -> None:
     assert resp.json()["flag_case"]["id"] == "flag-1"
 
 
+# Verifies that flag message returns existing case with 200.
 def test_flag_message_returns_existing_case_with_200(client, monkeypatch) -> None:
     flag_case = FlagCase(
         id="flag-1",
@@ -71,6 +77,7 @@ def test_flag_message_returns_existing_case_with_200(client, monkeypatch) -> Non
     assert resp.json()["flag_case"]["id"] == "flag-1"
 
 
+# Verifies that flag message rejects user without hub access.
 def test_flag_message_rejects_user_without_hub_access(client, monkeypatch) -> None:
     monkeypatch.setattr(
         store_module.store,
@@ -87,6 +94,7 @@ def test_flag_message_rejects_user_without_hub_access(client, monkeypatch) -> No
     assert resp.json()["detail"] == "Hub access required."
 
 
+# Verifies that list flagged chats returns queue.
 def test_list_flagged_chats_returns_queue(client, monkeypatch) -> None:
     queue = [
         FlaggedChatQueueItem(
@@ -111,6 +119,7 @@ def test_list_flagged_chats_returns_queue(client, monkeypatch) -> None:
     assert resp.json()[0]["hub_name"] == "Hub One"
 
 
+# Verifies that get flagged chat rejects unauthorized user.
 def test_get_flagged_chat_rejects_unauthorized_user(client, monkeypatch) -> None:
     monkeypatch.setattr(
         store_module.store,
@@ -123,6 +132,7 @@ def test_get_flagged_chat_rejects_unauthorized_user(client, monkeypatch) -> None
     assert resp.status_code == 403
 
 
+# Verifies that get flagged chat returns 404 for missing case.
 def test_get_flagged_chat_returns_404_for_missing_case(client, monkeypatch) -> None:
     monkeypatch.setattr(
         store_module.store,
@@ -135,6 +145,7 @@ def test_get_flagged_chat_returns_404_for_missing_case(client, monkeypatch) -> N
     assert resp.status_code == 404
 
 
+# Verifies that get flagged chat returns detail.
 def test_get_flagged_chat_returns_detail(client, monkeypatch) -> None:
     detail = FlaggedChatDetail(
         case=FlagCase(

@@ -1,3 +1,5 @@
+"""schemas.py: Defines shared request and response models, enums, and validators for the API."""
+
 from datetime import datetime
 from enum import Enum
 from typing import List, Optional
@@ -40,6 +42,7 @@ DEFAULT_HUB_ICON_KEY = "stack"
 DEFAULT_HUB_COLOR_KEY = "slate"
 
 
+# Core enums and shared base models.
 class HubScope(str, Enum):
     hub = "hub"
     global_scope = "global"
@@ -62,6 +65,7 @@ class StrictModel(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
 
+# Trim optional strings and reject values that are only whitespace.
 def _trim_and_reject_blank(value: Optional[str]) -> Optional[str]:
     if value is None:
         return None
@@ -71,6 +75,7 @@ def _trim_and_reject_blank(value: Optional[str]) -> Optional[str]:
     return trimmed
 
 
+# Hub, user, and membership models.
 class UserProfileSummary(BaseModel):
     user_id: str
     email: Optional[str] = None
@@ -111,6 +116,7 @@ class HubUpdate(StrictModel):
     icon_key: Optional[str] = Field(default=None)
     color_key: Optional[str] = Field(default=None)
 
+    # Normalize the name field before standard validation runs.
     @field_validator("name", mode="before")
     @classmethod
     def validate_name(cls, value: Optional[str]) -> Optional[str]:
@@ -163,6 +169,7 @@ class PendingInvite(BaseModel):
     invited_at: Optional[datetime] = None
 
 
+# Source and ingestion models.
 class SourceStatus(str, Enum):
     queued = "queued"
     processing = "processing"
@@ -203,6 +210,7 @@ class SourceCreate(StrictModel):
     hub_id: UUID
     original_name: str = Field(..., min_length=1, max_length=255)
 
+    # Reject filenames that contain null bytes or path separators.
     @field_validator("original_name")
     @classmethod
     def validate_original_name(cls, value: str) -> str:
@@ -217,6 +225,7 @@ class WebSourceCreate(StrictModel):
     hub_id: UUID
     url: str = Field(..., min_length=1, max_length=2000)
 
+    # Require a normal HTTP(S) URL for generic web sources.
     @field_validator("url")
     @classmethod
     def validate_url(cls, value: str) -> str:
@@ -232,6 +241,7 @@ class YouTubeSourceCreate(StrictModel):
     language: Optional[str] = Field(default=None, min_length=2, max_length=16)
     allow_auto_captions: bool = False
 
+    # Require a supported YouTube-domain URL for YouTube sources.
     @field_validator("url")
     @classmethod
     def validate_url(cls, value: str) -> str:
@@ -248,6 +258,7 @@ class YouTubeSourceCreate(StrictModel):
             return lower
         raise ValueError("URL must be a YouTube domain")
 
+    # Normalize blank language values back to None.
     @field_validator("language")
     @classmethod
     def normalize_language(cls, value: Optional[str]) -> Optional[str]:
@@ -320,6 +331,7 @@ class Citation(BaseModel):
     paraphrased_quotes: Optional[List[str]] = None
 
 
+# Chat, citation, and analytics models.
 class ChatRequest(StrictModel):
     hub_id: UUID
     scope: HubScope = HubScope.hub
@@ -561,6 +573,7 @@ class CreateRevisionRequest(StrictModel):
     content: str = Field(..., min_length=1, max_length=12000)
     citations: List[Citation] = Field(default_factory=list)
 
+    # Trim the revision content and reject blank submissions.
     @field_validator("content", mode="before")
     @classmethod
     def validate_content(cls, value: str) -> str:
@@ -601,6 +614,7 @@ class FlaggedChatDetail(BaseModel):
 class ChatSessionRenameRequest(StrictModel):
     title: str = Field(..., min_length=1, max_length=80)
 
+    # Trim the chat title and reject blank submissions.
     @field_validator("title", mode="before")
     @classmethod
     def validate_title(cls, value: str) -> str:
@@ -650,6 +664,7 @@ class FaqUpdateRequest(StrictModel):
     archived: Optional[bool] = None
 
 
+# FAQ and guide content models.
 class GuideStep(BaseModel):
     id: str
     guide_id: str
@@ -732,6 +747,7 @@ class GuideStepProgressUpdate(StrictModel):
     is_complete: bool
 
 
+# Reminder, notification, and activity models.
 class ReminderStatus(str, Enum):
     scheduled = "scheduled"
     sent = "sent"
