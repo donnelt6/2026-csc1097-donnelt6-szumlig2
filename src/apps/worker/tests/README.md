@@ -10,7 +10,7 @@ What is tested
 - File extension routing for text extraction.
 
 How it works
-- Tests focus on functions in `worker/tasks.py`.
+- Tests focus on the compatibility-facing helper surface in `worker/tasks.py`, even though much of the implementation now lives in split worker modules.
 - Extraction helpers are patched so no real PDF or DOCX parsing is required.
 
 Run the tests

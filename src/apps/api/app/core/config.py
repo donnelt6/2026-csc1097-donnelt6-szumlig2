@@ -59,7 +59,7 @@ class Settings(BaseSettings):
     # Normalise the environment name so the rest of the config logic can rely on a consistent value.
     @field_validator("environment", mode="before")
     @classmethod
-    def normalize_environment(cls, value: object) -> str:
+    def normalise_environment(cls, value: object) -> str:
         cleaned = str(value or "local").strip().lower()
         return cleaned or "local"
 

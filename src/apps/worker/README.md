@@ -1,6 +1,7 @@
 # Caddie Worker (Celery)
 
 Celery worker that handles ingestion, parsing, chunking, and embedding, and writes chunks to Supabase/pgvector. Web URLs are crawled into a pseudo-document snapshot before chunking. YouTube ingestion pulls captions with `yt-dlp` and stores a transcript snapshot.
+The worker is now split into focused modules inside `worker/`, with `worker.tasks` kept as the compatibility layer and Celery task registration entrypoint.
 
 ## Run locally
 ```bash
@@ -26,6 +27,13 @@ For reminder detection, install a spaCy English model (e.g. `python -m spacy dow
 - `pyproject.toml` - Project metadata and dependency list.
 - `requirements.txt` - Editable install entrypoint for local dev.
 - `worker/__init__.py` - Marks the worker package.
+- `worker/app.py` - Shared Celery app, logger, and settings.
+- `worker/common.py` - Shared worker helpers such as text normalization, batching, and ISO parsing.
 - `worker/config.py` - Loads worker settings from env.
-- `worker/main.py` - Worker entrypoint placeholder.
-- `worker/tasks.py` - Ingestion tasks (download/crawl, extract, chunk, embed, insert), robots.txt enforcement, and reminder detection.
+- `worker/content.py` - File extraction helpers for PDF, DOCX, and text-like uploads.
+- `worker/response_utils.py` - Defensive helpers for parsing OpenAI SDK responses.
+- `worker/storage.py` - Supabase Storage and source-row helper functions.
+- `worker/web.py` - Public-URL validation, robots.txt checks, fetching, and HTML extraction helpers.
+- `worker/youtube.py` - YouTube caption selection, transcript parsing, and pseudo-document helpers.
+- `worker/main.py` - Minimal entrypoint that re-exports the shared Celery app.
+- `worker/tasks.py` - Celery task entrypoints plus the compatibility facade that preserves the historical `worker.tasks` helper surface for tests and startup commands.

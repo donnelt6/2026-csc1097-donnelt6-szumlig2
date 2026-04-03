@@ -42,7 +42,7 @@ Environment variables live in `.env.example`. Provide `SUPABASE_URL`, `SUPABASE_
 - `app/services/__init__.py` - Services package marker.
 - `app/services/queue.py` - Celery task enqueue helper.
 - `app/services/rate_limit.py` - Simple rate limiting utility.
-- `app/services/store.py` - Supabase-backed data store + chat logic.
+- `app/services/store/` - Split Supabase-backed store package with domain mixins, helper modules, and the compatibility facade exported from `app.services.store`.
 - `evals/` - Offline RAG eval runner and starter dataset.
 - FAQ generation runs synchronously in the API (no worker task). It reuses stored embeddings and citations and is triggered manually from the web UI.
 

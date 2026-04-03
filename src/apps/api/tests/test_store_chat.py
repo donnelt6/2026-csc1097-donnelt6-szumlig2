@@ -1503,6 +1503,69 @@ def test_create_chat_feedback_succeeds_when_analytics_event_insert_fails(monkeyp
 
     assert response.message_id == "message-1"
     assert response.rating == "helpful"
+    assert fake_client.inserted["activity_events"][0]["action"] == "submitted"
+    assert fake_client.inserted["activity_events"][0]["resource_type"] == "chat_feedback"
+
+
+# Verifies that citation feedback writes an activity event for auditing.
+def test_create_citation_feedback_logs_activity(monkeypatch) -> None:
+    fake_client = FakeClient()
+    monkeypatch.setattr(
+        store,
+        "_visible_message_for_user",
+        lambda client, message_id: {
+            "id": message_id,
+            "session_id": "session-1",
+            "role": "assistant",
+            "citations": [{"source_id": "src-1", "snippet": "Snippet", "chunk_index": 0}],
+        },
+    )
+    monkeypatch.setattr(
+        store,
+        "_get_chat_session_row",
+        lambda client, session_id, include_deleted=False: {
+            "id": session_id,
+            "hub_id": "11111111-1111-1111-1111-111111111111",
+        },
+    )
+
+    response = store.create_citation_feedback(
+        fake_client,
+        "user-1",
+        "message-1",
+        SimpleNamespace(
+            source_id="src-1",
+            chunk_index=0,
+            event_type=SimpleNamespace(value="opened"),
+            note=None,
+        ),
+    )
+
+    assert response.message_id == "message-1"
+    assert fake_client.inserted["activity_events"][0]["action"] == "submitted"
+    assert fake_client.inserted["activity_events"][0]["resource_type"] == "citation_feedback"
+
+
+# Verifies that explicit chat events also write to the activity feed.
+def test_create_chat_event_logs_activity(monkeypatch) -> None:
+    fake_client = FakeClient()
+    monkeypatch.setattr(store, "_require_hub_access", lambda user_id, hub_id: None)
+
+    response = store.create_chat_event(
+        fake_client,
+        "user-1",
+        SimpleNamespace(
+            hub_id="11111111-1111-1111-1111-111111111111",
+            session_id=None,
+            message_id=None,
+            event_type=SimpleNamespace(value="answer_copied"),
+            metadata={"answer_length": 42},
+        ),
+    )
+
+    assert response.event_type == "answer_copied"
+    assert fake_client.inserted["activity_events"][0]["action"] == "answer_copied"
+    assert fake_client.inserted["activity_events"][0]["resource_type"] == "chat_event"
 
 
 # Verifies that create chat event requires session owner.

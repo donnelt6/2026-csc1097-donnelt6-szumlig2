@@ -1,54 +1,34 @@
-"""tasks.py: Defines Celery worker tasks and helper functions for source ingestion, reminders, and source suggestions."""
-import hashlib
+"""tasks.py: Compatibility facade plus worker task orchestration."""
 
-import io
+import hashlib
 import json
-import logging
-import time
 import re
-import ipaddress
-import socket
 import ssl
 import uuid
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 from typing import Iterable, List, Optional
-from urllib.parse import parse_qs, quote, urlencode, urljoin, urlparse, urlunparse
-from urllib.robotparser import RobotFileParser
+from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 from zoneinfo import ZoneInfo
 
-import httpx
-import redis
-from celery import Celery
-from celery.schedules import crontab
 import dateparser
+import redis
 import spacy
 from openai import OpenAI
-from pypdf import PdfReader
-from supabase import Client, create_client
+from supabase import Client
 
-from .config import get_settings
-
-logger = logging.getLogger(__name__)
-settings = get_settings()
-
-# Shared Celery app for ingestion and reminder dispatch.
-celery_app = Celery("caddie-worker", broker=settings.redis_url, backend=settings.redis_url)
-# Beat schedule triggers reminder dispatch on a rolling window.
-celery_app.conf.beat_schedule = {
-    "dispatch-reminders": {
-        "task": "dispatch_reminders",
-        "schedule": crontab(minute=f"*/{max(1, settings.reminder_dispatch_window_minutes)}"),
-    },
-    "scan-source-suggestions": {
-        "task": "scan_source_suggestions",
-        "schedule": crontab(minute=f"*/{max(1, settings.suggested_sources_scan_interval_minutes)}"),
-    },
-}
+from . import common as _common
+from . import content as _content
+from . import response_utils as _response_utils
+from . import storage as _storage
+from . import web as _web
+from . import youtube as _youtube
+from .app import celery_app, logger, settings
 
 
 # Celery ingestion tasks.
+# These task entrypoints stay in `worker.tasks` so existing Celery commands
+# and task names keep working while helper logic lives in split modules.
 # Ingests an uploaded file source by downloading, extracting, chunking, and storing its content.
 @celery_app.task(bind=True, name="ingest_source", max_retries=3, default_retry_delay=15)
 def ingest_source(self, source_id: str, hub_id: str, storage_path: str) -> dict:
@@ -235,173 +215,48 @@ def scan_source_suggestions() -> dict:
 # Shared storage and source-state helpers.
 # Creates a Supabase service client for worker-side database and storage operations.
 def _get_supabase_client() -> Client:
-
-    if not settings.supabase_url or not settings.supabase_service_role_key:
-        raise RuntimeError("Supabase credentials missing in worker environment")
-    return create_client(settings.supabase_url, settings.supabase_service_role_key)
+    return _common._get_supabase_client()
 
 
 # Downloads the raw file bytes for a source from Supabase Storage.
 def _download_from_storage(storage_path: str) -> bytes:
-    if not settings.supabase_url or not settings.supabase_service_role_key:
-        raise RuntimeError("Supabase credentials missing for storage download")
-    # Use service key to fetch the object directly from Supabase Storage.
-    safe_path = quote(storage_path, safe="/")
-    storage_url = f"{settings.supabase_url}/storage/v1/object/{settings.storage_bucket}/{safe_path}"
-    headers = {
-        "Authorization": f"Bearer {settings.supabase_service_role_key}",
-        "apikey": settings.supabase_service_role_key,
-    }
-    with httpx.Client(timeout=60) as client:
-        resp = client.get(storage_url, headers=headers)
-        resp.raise_for_status()
-    return resp.content
+    return _storage._download_from_storage(storage_path)
 
 
 # Web fetching and validation helpers.
 # Validates a URL and rejects unsupported schemes or private-network targets.
 def _validate_public_url(url: str) -> str:
-
-    parsed = urlparse(url)
-    if parsed.scheme not in {"http", "https"}:
-        raise ValueError("URL scheme must be http or https")
-    if not parsed.netloc:
-        raise ValueError("URL must include a host")
-    hostname = parsed.hostname or ""
-    if not hostname:
-        raise ValueError("URL must include a host")
-    _ensure_public_host(hostname)
-    return parsed.geturl()
+    return _web._validate_public_url(url)
 
 
 # Resolves a hostname and rejects loopback, private, or otherwise unsafe IP addresses.
 def _ensure_public_host(hostname: str) -> None:
-    ip_list: List[ipaddress.IPv4Address | ipaddress.IPv6Address] = []
-    try:
-        ip_list.append(ipaddress.ip_address(hostname))
-    except ValueError:
-        try:
-            infos = socket.getaddrinfo(hostname, None)
-        except OSError as exc:
-            raise ValueError("Unable to resolve host") from exc
-        for info in infos:
-            addr = info[4][0]
-            try:
-                ip_list.append(ipaddress.ip_address(addr))
-            except ValueError:
-                continue
-    for addr in ip_list:
-        if addr.is_private or addr.is_loopback or addr.is_link_local or addr.is_reserved or addr.is_multicast or addr.is_unspecified:
-            raise ValueError("URL resolves to a private or non-public address")
+    _web._ensure_public_host(hostname)
 
 
 # Checks whether the worker is allowed to crawl the target URL under robots.txt rules.
 def _allowed_by_robots(url: str, user_agent: str) -> bool:
-    parsed = urlparse(url)
-    robots_url = f"{parsed.scheme}://{parsed.netloc}/robots.txt"
-    try:
-        with httpx.Client(timeout=settings.web_timeout_seconds) as client:
-            resp = client.get(robots_url, headers={"User-Agent": user_agent}, follow_redirects=True)
-            if resp.status_code >= 400:
-                return True
-            parser = RobotFileParser()
-            parser.parse(resp.text.splitlines())
-            return parser.can_fetch(user_agent, url)
-    except Exception:
-        return True
+    return _web._allowed_by_robots(url, user_agent)
 
 
 # Fetches web content while enforcing the worker's size and timeout limits.
 def _fetch_url_content(url: str) -> tuple[bytes, str, str]:
-    headers = {"User-Agent": settings.web_user_agent}
-    max_bytes = max(1, settings.web_max_bytes)
-    current_url = url
-    max_redirects = 5
-    with httpx.Client(timeout=settings.web_timeout_seconds, follow_redirects=False) as client:
-        for _ in range(max_redirects + 1):
-            with client.stream("GET", current_url, headers=headers) as resp:
-                if 300 <= resp.status_code < 400:
-                    location = resp.headers.get("location")
-                    if not location:
-                        raise ValueError("Redirect without location header")
-                    next_url = urljoin(current_url, location)
-                    parsed = urlparse(next_url)
-                    if not parsed.scheme or not parsed.netloc:
-                        raise ValueError("Invalid redirect URL")
-                    _ensure_public_host(parsed.hostname or "")
-                    current_url = next_url
-                    continue
-                resp.raise_for_status()
-                content_type = resp.headers.get("content-type", "")
-                total = 0
-                chunks: list[bytes] = []
-                for chunk in resp.iter_bytes():
-                    total += len(chunk)
-                    if total > max_bytes:
-                        raise ValueError("Web content exceeds size limit")
-                    chunks.append(chunk)
-                return b"".join(chunks), content_type, current_url
-    raise ValueError("Too many redirects")
+    return _web._fetch_url_content(url)
 
 
 # Extracts readable text and an optional title from fetched web content.
 def _extract_web_text(raw: bytes, content_type: str) -> tuple[str, Optional[str]]:
-    encoding = "utf-8"
-    match = re.search(r"charset=([\w-]+)", content_type, re.IGNORECASE)
-    if match:
-        encoding = match.group(1)
-    html = raw.decode(encoding, errors="ignore")
-    lowered = content_type.lower()
-    if "text/html" not in lowered and "application/xhtml" not in lowered and "<html" not in html.lower():
-        cleaned = " ".join(html.split())
-        return cleaned, None
-
-    title = None
-    text = ""
-    try:
-        from readability import Document
-
-        doc = Document(html)
-        title = doc.short_title() or doc.title()
-        content_html = doc.summary()
-        text = _html_to_text(content_html)
-    except Exception:
-        text = ""
-    if not text:
-        text = _html_to_text(html)
-    cleaned = " ".join(text.split())
-    return cleaned, title
+    return _web._extract_web_text(raw, content_type)
 
 
 # Converts HTML into plain text by removing tags, scripts, and repeated whitespace.
 def _html_to_text(html: str) -> str:
-    try:
-        from bs4 import BeautifulSoup
-    except Exception:
-        return re.sub(r"<[^>]+>", " ", html)
-    soup = BeautifulSoup(html, "html.parser")
-    for tag in soup(["script", "style", "noscript"]):
-        tag.decompose()
-    return soup.get_text(separator=" ")
+    return _web._html_to_text(html)
 
 
 # Builds the stored pseudo-document wrapper used for ingested web pages.
 def _build_pseudo_doc(title: Optional[str], url: str, crawl_at: str, content_type: str, text: str) -> str:
-    header_title = title or url
-    lines = [
-        f"# {header_title}",
-        f"Source: {url}",
-        f"Crawled: {crawl_at}",
-        f"Content-Type: {content_type or 'unknown'}",
-        "",
-        text,
-    ]
-    return "\n".join(lines)
-
-
-_CAPTION_TIMECODE_RE = re.compile(
-    r"^\d{1,2}:\d{2}(?::\d{2})?[.,]\d{3}\s-->\s\d{1,2}:\d{2}(?::\d{2})?[.,]\d{3}"
-)
+    return _web._build_pseudo_doc(title, url, crawl_at, content_type, text)
 
 
 # YouTube caption and transcript helpers.
@@ -412,47 +267,7 @@ def _fetch_youtube_transcript(
     language: Optional[str],
     allow_auto_captions: Optional[bool],
 ) -> tuple[str, dict, dict]:
-    try:
-        from yt_dlp import YoutubeDL
-    except Exception as exc:
-        raise RuntimeError("yt-dlp is required for YouTube ingestion") from exc
-
-    preferred_language = (language or settings.youtube_default_language or "").strip() or None
-    allow_auto = settings.youtube_allow_auto_captions if allow_auto_captions is None else bool(allow_auto_captions)
-
-    ydl_opts = {
-        "quiet": True,
-        "no_warnings": True,
-        "skip_download": True,
-        "noplaylist": True,
-    }
-    with YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(url, download=False)
-    if not info:
-        raise ValueError("Unable to fetch YouTube metadata")
-
-    captions_source, lang, caption_url, caption_ext = _select_caption_track(
-        info, preferred_language, allow_auto
-    )
-    raw = _download_caption_text(caption_url)
-    transcript = _parse_caption_text(raw, caption_ext)
-    if not transcript:
-        raise ValueError("Caption track was empty")
-
-    info_payload = {
-        "video_id": info.get("id"),
-        "title": info.get("title") or info.get("fulltitle"),
-        "channel": info.get("channel") or info.get("uploader"),
-        "channel_id": info.get("channel_id") or info.get("uploader_id"),
-        "duration_seconds": info.get("duration"),
-        "published_at": _format_upload_date(info.get("upload_date")),
-    }
-    captions_meta = {
-        "language": lang,
-        "captions_source": captions_source,
-        "ext": caption_ext,
-    }
-    return transcript, info_payload, captions_meta
+    return _youtube._fetch_youtube_transcript(url, language, allow_auto_captions)
 
 
 # Chooses the best matching caption track based on language and caption availability.
@@ -461,59 +276,7 @@ def _select_caption_track(
     preferred_language: Optional[str],
     allow_auto: bool,
 ) -> tuple[str, str, str, str]:
-    """Select the best caption track, prioritising language match over source.
-
-    Priority order:
-      1. Manual captions in preferred language
-      2. Auto captions in preferred language (if allowed)
-      3. Manual captions in English (if preferred wasn't English)
-      4. Auto captions in English (if allowed, and preferred wasn't English)
-      5. Manual captions in any language
-      6. Auto captions in any language (if allowed)
-    """
-    subtitles = info.get("subtitles") or {}
-    auto_caps = (info.get("automatic_captions") or {}) if allow_auto else {}
-
-    preferred_norm = _normalize_language(preferred_language) if preferred_language else None
-    preferred_is_english = preferred_norm in (None, "en") or (preferred_norm or "").startswith("en")
-
-    # Tier 1 — preferred language, manual then auto
-    selected = _pick_caption_preferred(subtitles, preferred_language)
-    if selected:
-        lang, url, ext = selected
-        return "manual", lang, url, ext
-    if auto_caps:
-        selected = _pick_caption_preferred(auto_caps, preferred_language)
-        if selected:
-            lang, url, ext = selected
-            return "auto", lang, url, ext
-
-    # Tier 2 — English fallback (skip if preferred was already English)
-    if not preferred_is_english:
-        selected = _pick_caption_preferred(subtitles, "en")
-        if selected:
-            lang, url, ext = selected
-            return "manual", lang, url, ext
-        if auto_caps:
-            selected = _pick_caption_preferred(auto_caps, "en")
-            if selected:
-                lang, url, ext = selected
-                return "auto", lang, url, ext
-
-    # Tier 3 — any language, manual then auto
-    selected = _pick_caption_any(subtitles)
-    if selected:
-        lang, url, ext = selected
-        return "manual", lang, url, ext
-    if auto_caps:
-        selected = _pick_caption_any(auto_caps)
-        if selected:
-            lang, url, ext = selected
-            return "auto", lang, url, ext
-
-    if not allow_auto and (info.get("automatic_captions") or {}):
-        raise ValueError("No manual captions found. Try enabling auto-captions.")
-    raise ValueError("No captions available for this video")
+    return _youtube._select_caption_track(info, preferred_language, allow_auto)
 
 
 # Finds the best caption track for the preferred language first.
@@ -521,275 +284,95 @@ def _pick_caption_preferred(
     captions: dict,
     preferred_language: Optional[str],
 ) -> Optional[tuple[str, str, str]]:
-    """Try to find a caption track matching the preferred language (or English if none set)."""
-    if not captions:
-        return None
-    preferred_norm = _normalize_language(preferred_language) if preferred_language else None
-    candidates: list[str] = []
-    if preferred_norm:
-        candidates.append(preferred_norm)
-        if "-" in preferred_norm:
-            candidates.append(preferred_norm.split("-", 1)[0])
-    else:
-        candidates.extend(["en", "en-us", "en-gb"])
-
-    for candidate in candidates:
-        for lang_key, formats in captions.items():
-            key_norm = _normalize_language(lang_key)
-            if key_norm == candidate or key_norm.startswith(candidate):
-                selected = _select_caption_format(lang_key, formats)
-                if selected:
-                    return selected
-    return None
+    return _youtube._pick_caption_preferred(captions, preferred_language)
 
 
 # Falls back to the first usable caption track when no preferred match exists.
 def _pick_caption_any(
     captions: dict,
 ) -> Optional[tuple[str, str, str]]:
-    """Pick the first available caption track regardless of language."""
-    if not captions:
-        return None
-    for lang_key, formats in captions.items():
-        selected = _select_caption_format(lang_key, formats)
-        if selected:
-            return selected
-    return None
+    return _youtube._pick_caption_any(captions)
 
 
 # Chooses the best download format for the selected caption track.
 def _select_caption_format(lang: str, formats: list[dict]) -> Optional[tuple[str, str, str]]:
-    if not formats or not isinstance(formats, list):
-        return None
-    preferred_exts = ["vtt", "srt", "json3", "srv1", "srv2", "srv3", "ttml"]
-    for ext in preferred_exts:
-        for item in formats:
-            if item.get("ext") == ext and item.get("url"):
-                return lang, item["url"], ext
-    for item in formats:
-        if item.get("url"):
-            return lang, item["url"], item.get("ext") or "vtt"
-    return None
+    return _youtube._select_caption_format(lang, formats)
 
 
 # Downloads caption text bytes for the selected YouTube caption track.
 def _download_caption_text(url: str) -> bytes:
-    max_bytes = max(1, settings.youtube_max_bytes)
-    retry_statuses = {429, 500, 502, 503, 504}
-    max_attempts = 3
-    base_delay = 1.5
-    last_exc: Optional[Exception] = None
-    with httpx.Client(timeout=settings.web_timeout_seconds, follow_redirects=True) as client:
-        for attempt in range(1, max_attempts + 1):
-            try:
-                with client.stream("GET", url) as resp:
-                    resp.raise_for_status()
-                    total = 0
-                    chunks: list[bytes] = []
-                    for chunk in resp.iter_bytes():
-                        total += len(chunk)
-                        if total > max_bytes:
-                            raise ValueError("Caption file exceeds size limit")
-                        chunks.append(chunk)
-                    return b"".join(chunks)
-            except httpx.HTTPStatusError as exc:
-                last_exc = exc
-                status = exc.response.status_code
-                if status in retry_statuses and attempt < max_attempts:
-                    delay = base_delay * (2 ** (attempt - 1))
-                    logger.warning("Caption fetch got %s, retrying in %.1fs", status, delay)
-                    time.sleep(delay)
-                    continue
-                if status == 429:
-                    raise ValueError("YouTube rate limit hit; try again later") from exc
-                raise
-            except httpx.RequestError as exc:
-                last_exc = exc
-                if attempt < max_attempts:
-                    delay = base_delay * (2 ** (attempt - 1))
-                    logger.warning("Caption fetch failed, retrying in %.1fs: %s", delay, exc)
-                    time.sleep(delay)
-                    continue
-                raise
-    if last_exc:
-        raise last_exc
-    raise RuntimeError("Failed to download captions")
+    return _youtube._download_caption_text(url)
 
 
 # Parses downloaded caption content into plain transcript text.
 def _parse_caption_text(raw: bytes, ext: str) -> str:
-    text = raw.decode("utf-8", errors="ignore")
-    ext_lower = (ext or "").lower()
-    if ext_lower in {"vtt", "srt"}:
-        return _strip_vtt_srt(text)
-    if ext_lower in {"srv1", "srv2", "srv3", "ttml", "xml"}:
-        return _strip_xml(text)
-    if ext_lower == "json3":
-        return _parse_json3(text)
-    cleaned = _strip_vtt_srt(text)
-    return cleaned or _strip_xml(text)
+    return _youtube._parse_caption_text(raw, ext)
 
 
 # Removes timestamps and markup from VTT or SRT caption text.
 def _strip_vtt_srt(text: str) -> str:
-    lines: list[str] = []
-    for line in text.splitlines():
-        cleaned = line.strip()
-        if not cleaned:
-            continue
-        if cleaned.startswith("WEBVTT") or cleaned.startswith("NOTE"):
-            continue
-        if cleaned.isdigit():
-            continue
-        if _CAPTION_TIMECODE_RE.match(cleaned):
-            continue
-        cleaned = re.sub(r"<[^>]+>", "", cleaned)
-        lines.append(cleaned)
-    return " ".join(lines).strip()
+    return _youtube._strip_vtt_srt(text)
 
 
 # Removes XML tags from caption payloads that still contain markup.
 def _strip_xml(text: str) -> str:
-    cleaned = re.sub(r"<[^>]+>", " ", text)
-    return " ".join(cleaned.split()).strip()
+    return _youtube._strip_xml(text)
 
 
 # Extracts transcript text from YouTube's JSON3 caption format.
 def _parse_json3(text: str) -> str:
-    try:
-        payload = json.loads(text)
-    except json.JSONDecodeError:
-        return ""
-    parts: list[str] = []
-    for event in payload.get("events", []) or []:
-        for seg in event.get("segs", []) or []:
-            seg_text = seg.get("utf8")
-            if seg_text:
-                parts.append(seg_text)
-    return " ".join(parts).strip()
+    return _youtube._parse_json3(text)
 
 
 # Normalizes language codes into a simple lowercase value.
 def _normalize_language(value: Optional[str]) -> str:
-    if not value:
-        return ""
-    return value.strip().lower().replace("_", "-")
+    return _youtube._normalize_language(value)
 
 
 # Formats a compact YouTube upload date into an ISO-like calendar date.
 def _format_upload_date(value: Optional[str]) -> Optional[str]:
-    if not value or len(value) != 8:
-        return None
-    return f"{value[:4]}-{value[4:6]}-{value[6:]}"
+    return _youtube._format_upload_date(value)
 
 
 # Formats a duration in seconds into a human-readable string.
 def _format_duration(seconds: Optional[int]) -> Optional[str]:
-    if seconds is None:
-        return None
-    try:
-        total = int(seconds)
-    except (TypeError, ValueError):
-        return None
-    hours = total // 3600
-    minutes = (total % 3600) // 60
-    secs = total % 60
-    if hours:
-        return f"{hours:02d}:{minutes:02d}:{secs:02d}"
-    return f"{minutes:02d}:{secs:02d}"
+    return _youtube._format_duration(seconds)
 
 
 # Builds the stored pseudo-document wrapper used for ingested YouTube transcripts.
 def _build_youtube_pseudo_doc(info: dict, url: str, fetched_at: str, captions_meta: dict, text: str) -> str:
-    title = info.get("title") or "YouTube Video"
-    lines: list[str] = [f"# {title}"]
-    if url:
-        lines.append(f"Source: {url}")
-    if info.get("video_id"):
-        lines.append(f"Video ID: {info['video_id']}")
-    if info.get("channel"):
-        lines.append(f"Channel: {info['channel']}")
-    if info.get("published_at"):
-        lines.append(f"Published: {info['published_at']}")
-    duration = _format_duration(info.get("duration_seconds"))
-    if duration:
-        lines.append(f"Duration: {duration}")
-    if captions_meta.get("language"):
-        lines.append(f"Language: {captions_meta['language']}")
-    if captions_meta.get("captions_source"):
-        lines.append(f"Captions: {captions_meta['captions_source']}")
-    lines.append(f"Fetched: {fetched_at}")
-    lines.append("")
-    lines.append(text)
-    return "\n".join(lines)
+    return _youtube._build_youtube_pseudo_doc(info, url, fetched_at, captions_meta, text)
 
 
 # Uploads the generated pseudo-document back into Supabase Storage.
 def _upload_pseudo_doc(client: Client, storage_path: str, content: str) -> None:
-    if not storage_path:
-        raise ValueError("Storage path missing for pseudo document")
-    payload = content.encode("utf-8")
-    try:
-        client.storage.from_(settings.storage_bucket).remove([storage_path])
-    except Exception:
-        pass
-    client.storage.from_(settings.storage_bucket).upload(
-        storage_path,
-        payload,
-        {"content-type": "text/markdown"},
-    )
+    _storage._upload_pseudo_doc(client, storage_path, content)
 
 
 # Text extraction, chunking, and embedding helpers.
 # Routes raw file bytes to the correct text extractor based on file extension.
 def _extract_text(raw: bytes, storage_path: str) -> str:
-
-    # Route by file extension to the right extractor.
-    ext = Path(storage_path).suffix.lower()
-    if ext == ".pdf":
-        return _extract_pdf(raw)
-    if ext == ".docx":
-        return _extract_docx(raw)
-    if ext in {".md", ".txt"}:
-        return raw.decode("utf-8", errors="ignore")
-    return raw.decode("utf-8", errors="ignore")
+    return _content._extract_text(raw, storage_path)
 
 
 # Extracts readable text from a PDF file.
 def _extract_pdf(raw: bytes) -> str:
-    try:
-        reader = PdfReader(io.BytesIO(raw))
-    except Exception as exc:
-        raise ValueError(f"Could not read PDF: {exc}") from exc
-    pages: list[str] = []
-    for page in reader.pages:
-        try:
-            pages.append(page.extract_text() or "")
-        except Exception:
-            pages.append("")
-    return "\n".join(pages)
+    return _content._extract_pdf(raw)
 
 
 # Extracts readable text from a DOCX file.
 def _extract_docx(raw: bytes) -> str:
-    import docx  # local import to avoid unused dependency warnings if not used
-
-    doc = docx.Document(io.BytesIO(raw))
-    return "\n".join(paragraph.text for paragraph in doc.paragraphs)
+    return _content._extract_docx(raw)
 
 
 # Normalizes extracted text into a cleaner single-space format.
 def _normalize_text(text: str) -> str:
-    return " ".join(text.replace("\r", "\n").split())
+    return _common._normalize_text(text)
 
 
 # Trims text to a maximum length while preserving a readable ending.
 def _trim_text(text: str, max_chars: int) -> str:
-    cleaned = _normalize_text(text)
-    if len(cleaned) <= max_chars:
-        return cleaned
-    return f"{cleaned[:max_chars].rstrip()}..."
-
+    return _common._trim_text(text, max_chars)
 
 # Chunks text, embeds it, stores the vectors, and triggers reminder detection for a source.
 def _ingest_text_for_source(
@@ -890,28 +473,17 @@ def _insert_chunks(
 
 # Deletes older chunk rows for the same source before new ones are inserted.
 def _clear_existing_chunks_before(client: Client, source_id: str, cutoff: str) -> None:
-    client.table("source_chunks").delete().eq("source_id", source_id).lt("created_at", cutoff).execute()
+    _storage._clear_existing_chunks_before(client, source_id, cutoff)
 
 
 # Checks whether the source row still exists before continuing ingestion work.
 def _source_exists(client: Client, source_id: str) -> bool:
-    response = client.table("sources").select("id").eq("id", source_id).limit(1).execute()
-    return bool(response.data)
+    return _storage._source_exists(client, source_id)
 
 
 # Loads source metadata fields that are needed during reminder detection.
 def _get_source_metadata(client: Client, source_id: str) -> dict:
-    response = (
-        client.table("sources")
-        .select("ingestion_metadata")
-        .eq("id", source_id)
-        .limit(1)
-        .execute()
-    )
-    if not response.data:
-        return {}
-    metadata = response.data[0].get("ingestion_metadata") or {}
-    return metadata if isinstance(metadata, dict) else {}
+    return _storage._get_source_metadata(client, source_id)
 
 
 # Updates the source status and related bookkeeping fields in the database.
@@ -923,18 +495,20 @@ def _update_source(
     ingestion_metadata: Optional[dict] = None,
     clear_failure_reason: bool = False,
 ) -> None:
-    payload: dict = {"status": status}
-    if failure_reason is not None or clear_failure_reason:
-        payload["failure_reason"] = failure_reason
-    if ingestion_metadata is not None:
-        payload["ingestion_metadata"] = ingestion_metadata
-    client.table("sources").update(payload).eq("id", source_id).execute()
+    _storage._update_source(
+        client,
+        source_id,
+        status,
+        failure_reason=failure_reason,
+        ingestion_metadata=ingestion_metadata,
+        clear_failure_reason=clear_failure_reason,
+    )
 
 
 # Yields items in fixed-size batches for APIs that expect chunked writes.
 def _batch(items: List, size: int) -> Iterable[List]:
-    for i in range(0, len(items), size):
-        yield items[i : i + size]
+    return _common._batch(items, size)
+
 
 # Reminder detection pipeline (regex + spaCy) and dispatch.
 
@@ -1441,9 +1015,6 @@ def _looks_mathy(snippet: str) -> bool:
     return digit_ratio >= 0.6 or symbol_ratio > 0.05
 
 
-_SUGGESTION_YOUTUBE_ID_RE = re.compile(r"^[A-Za-z0-9_-]{11}$")
-
-
 # Source suggestion scanning and discovery helpers.
 # Builds the Redis client used for worker locks and background coordination.
 def _get_redis_client() -> redis.Redis:
@@ -1906,68 +1477,22 @@ def _mark_source_suggestion_scan(client: Client, hub_id: str, *, now: datetime, 
 
 # Extracts a YouTube video identifier from a supported video URL.
 def _extract_youtube_video_id(url: str) -> Optional[str]:
-    parsed = urlparse(url)
-    host = (parsed.netloc or "").lower()
-    if host.startswith("www."):
-        host = host[4:]
-    if host == "youtu.be":
-        return _normalize_youtube_id(parsed.path.strip("/").split("/", 1)[0])
-    if host.endswith("youtube.com") or host.endswith("youtube-nocookie.com"):
-        query = parse_qs(parsed.query)
-        if "v" in query and query["v"]:
-            return _normalize_youtube_id(query["v"][0])
-        parts = [part for part in parsed.path.split("/") if part]
-        if len(parts) >= 2 and parts[0] in {"shorts", "embed", "live", "v"}:
-            return _normalize_youtube_id(parts[1])
-    return None
+    return _youtube._extract_youtube_video_id(url)
 
 
 # Validates and normalizes a YouTube video identifier.
 def _normalize_youtube_id(value: str) -> Optional[str]:
-    cleaned = (value or "").strip()
-    if not _SUGGESTION_YOUTUBE_ID_RE.fullmatch(cleaned):
-        return None
-    return cleaned
+    return _youtube._normalize_youtube_id(value)
 
 
 # Builds a canonical YouTube watch URL from a video identifier.
 def _canonicalize_youtube_url(video_id: str) -> str:
-    return f"https://www.youtube.com/watch?v={video_id}"
+    return _youtube._canonicalize_youtube_url(video_id)
 
 
 # Normalizes a web URL by removing noise such as fragments and tracking parameters.
 def _canonicalize_web_url(url: str) -> Optional[str]:
-    cleaned = (url or "").strip()
-    if not cleaned:
-        return None
-    parsed = urlparse(cleaned)
-    if parsed.scheme not in {"http", "https"}:
-        return None
-    host = (parsed.hostname or "").lower()
-    if not host:
-        return None
-    if host.startswith("www."):
-        host = host[4:]
-    port = parsed.port
-    if (parsed.scheme == "http" and port == 80) or (parsed.scheme == "https" and port == 443):
-        port = None
-    netloc = host if port is None else f"{host}:{port}"
-    path = parsed.path or "/"
-    path = re.sub(r"/{2,}", "/", path)
-    if path != "/" and path.endswith("/"):
-        path = path.rstrip("/")
-    query = parse_qs(parsed.query, keep_blank_values=False)
-    filtered_items: list[tuple[str, str]] = []
-    for key, values in sorted(query.items()):
-        normalized_key = key.lower()
-        if normalized_key.startswith("utm_") or normalized_key in {"fbclid", "gclid"}:
-            continue
-        for value in values:
-            if value:
-                filtered_items.append((key, value))
-    normalized_query = "&".join(f"{key}={value}" for key, value in filtered_items)
-    return urlunparse((parsed.scheme.lower(), netloc, path, "", normalized_query, ""))
-
+    return _web._canonicalize_web_url(url)
 
 # Trims optional suggestion text fields to a safe maximum length.
 def _trim_source_suggestion_text(value: object, max_chars: int) -> Optional[str]:
@@ -2015,58 +1540,22 @@ def _parse_source_suggestion_candidates(raw: str) -> list[dict]:
 
 # Reads an attribute from SDK response objects while keeping the caller defensive.
 def _get_attr(obj: object, name: str, default: object = None) -> object:
-    if isinstance(obj, dict):
-        return obj.get(name, default)
-    return getattr(obj, name, default)
+    return _response_utils._get_attr(obj, name, default)
 
 
 # Extracts plain text content from an OpenAI response payload.
 def _extract_response_text(response: object) -> str:
-    text = _get_attr(response, "output_text")
-    if isinstance(text, str) and text.strip():
-        return text
-    output = _get_attr(response, "output", []) or []
-    for item in output:
-        if _get_attr(item, "type") != "message":
-            continue
-        content = _get_attr(item, "content", [])
-        if isinstance(content, list):
-            for part in content:
-                if _get_attr(part, "type") in {"output_text", "text"}:
-                    part_text = _get_attr(part, "text")
-                    if isinstance(part_text, str) and part_text.strip():
-                        return part_text
-        item_text = _get_attr(item, "text")
-        if isinstance(item_text, str) and item_text.strip():
-            return item_text
-    return ""
+    return _response_utils._extract_response_text(response)
 
 
 # Extracts token usage information from an OpenAI response payload.
 def _extract_usage(response: object) -> Optional[dict]:
-    usage = _get_attr(response, "usage")
-    if usage is None:
-        return None
-    if isinstance(usage, dict):
-        return usage
-    model_dump = getattr(usage, "model_dump", None)
-    if callable(model_dump):
-        return model_dump()
-    return None
+    return _response_utils._extract_usage(response)
 
 
 # Extracts any attached web-search result objects from an OpenAI response.
 def _extract_web_search_results(response: object) -> list[object]:
-    output = _get_attr(response, "output", []) or []
-    results: list[object] = []
-    for item in output:
-        if _get_attr(item, "type") != "web_search_call":
-            continue
-        call = _get_attr(item, "web_search_call", item)
-        call_results = _get_attr(call, "results", None)
-        if call_results:
-            results.extend(call_results)
-    return results
+    return _response_utils._extract_web_search_results(response)
 
 
 # Reminder dispatch tasks and notification helpers.
@@ -2222,13 +1711,7 @@ def _mark_reminder_sent(client: Client, reminder_id: str, now: datetime) -> None
 
 # Parses an ISO timestamp string into a timezone-aware datetime when possible.
 def _parse_iso(value: Optional[str]) -> Optional[datetime]:
-    if not value:
-        return None
-    cleaned = value.replace("Z", "+00:00")
-    try:
-        return datetime.fromisoformat(cleaned)
-    except ValueError:
-        return None
+    return _common._parse_iso(value)
 
 
 # Loads and caches reminder policy settings for a hub.
@@ -2258,3 +1741,7 @@ def _normalize_channels(value: Optional[list]) -> list[str]:
         if key == "in_app":
             channels.append(key)
     return channels or ["in_app"]
+
+
+
+

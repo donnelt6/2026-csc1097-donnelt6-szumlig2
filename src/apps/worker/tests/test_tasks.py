@@ -71,8 +71,8 @@ def test_batch_splits_items() -> None:
 # Verifies that file extraction dispatches to the correct parser for each supported extension.
 def test_extract_text_routes_by_extension(monkeypatch) -> None:
     # Mocks extractors; expect extension-based routing and decoded text.
-    monkeypatch.setattr(tasks, "_extract_pdf", lambda raw: "pdf-text")
-    monkeypatch.setattr(tasks, "_extract_docx", lambda raw: "docx-text")
+    monkeypatch.setattr(tasks._content, "_extract_pdf", lambda raw: "pdf-text")
+    monkeypatch.setattr(tasks._content, "_extract_docx", lambda raw: "docx-text")
 
     assert tasks._extract_text(b"pdf-bytes", "file.pdf") == "pdf-text"
     assert tasks._extract_text(b"docx-bytes", "file.docx") == "docx-text"

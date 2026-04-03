@@ -33,6 +33,8 @@ def test_hub_analytics_summary_requires_owner_or_admin(client, monkeypatch) -> N
 
 # Verifies that hub analytics summary success.
 def test_hub_analytics_summary_success(client, monkeypatch) -> None:
+    logged: list[tuple] = []
+
     monkeypatch.setattr(store_module.store, "get_member_role", lambda _client, hub_id, user_id: _member(MembershipRole.owner))
     monkeypatch.setattr(
         store_module.store,
@@ -56,15 +58,23 @@ def test_hub_analytics_summary_success(client, monkeypatch) -> None:
             "top_sources": [],
         },
     )
+    monkeypatch.setattr(
+        store_module.store,
+        "log_activity",
+        lambda *args: logged.append(args),
+    )
 
     resp = client.get("/hubs/11111111-1111-1111-1111-111111111111/analytics/summary")
 
     assert resp.status_code == 200
     assert resp.json()["total_questions"] == 10
+    assert logged[0][3:6] == ("viewed", "analytics_summary", "11111111-1111-1111-1111-111111111111")
 
 
 # Verifies that hub analytics trends success.
 def test_hub_analytics_trends_success(client, monkeypatch) -> None:
+    logged: list[tuple] = []
+
     monkeypatch.setattr(store_module.store, "get_member_role", lambda _client, hub_id, user_id: _member(MembershipRole.admin))
     monkeypatch.setattr(
         store_module.store,
@@ -76,8 +86,14 @@ def test_hub_analytics_trends_success(client, monkeypatch) -> None:
             ],
         },
     )
+    monkeypatch.setattr(
+        store_module.store,
+        "log_activity",
+        lambda *args: logged.append(args),
+    )
 
     resp = client.get("/hubs/11111111-1111-1111-1111-111111111111/analytics/trends")
 
     assert resp.status_code == 200
     assert resp.json()["points"][0]["questions"] == 1
+    assert logged[0][3:6] == ("viewed", "analytics_trends", "11111111-1111-1111-1111-111111111111")
