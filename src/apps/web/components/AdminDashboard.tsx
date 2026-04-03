@@ -3,9 +3,11 @@
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
+  ArrowPathIcon,
   CheckIcon,
   FlagIcon,
   FolderIcon,
+  PencilSquareIcon,
   ShieldCheckIcon,
   XMarkIcon,
 } from '@heroicons/react/24/outline';
@@ -47,6 +49,7 @@ export function AdminDashboard({ hubId, hubRole, onSwitchTab }: AdminDashboardPr
   const canModerate = hubRole === 'owner' || hubRole === 'admin';
 
   const [modTab, setModTab] = useState<ModTab>('chats');
+  const [sugTab, setSugTab] = useState<'pending' | 'reviewed'>('pending');
   const [showResolved, setShowResolved] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [editFlagId, setEditFlagId] = useState<string | null>(null);
@@ -67,6 +70,27 @@ export function AdminDashboard({ hubId, hubRole, onSwitchTab }: AdminDashboardPr
     staleTime: 0,
     refetchInterval: 10000,
   });
+
+  const { data: acceptedSuggestions = [] } = useQuery({
+    queryKey: ['source-suggestions', hubId, 'accepted'],
+    queryFn: () => listSourceSuggestions({ hubId, status: 'accepted' }),
+    enabled: canModerate && sugTab === 'reviewed',
+    staleTime: 0,
+  });
+
+  const { data: declinedSuggestions = [] } = useQuery({
+    queryKey: ['source-suggestions', hubId, 'declined'],
+    queryFn: () => listSourceSuggestions({ hubId, status: 'declined' }),
+    enabled: canModerate && sugTab === 'reviewed',
+    staleTime: 0,
+  });
+
+  const reviewedSuggestions = useMemo(
+    () => [...acceptedSuggestions, ...declinedSuggestions].sort(
+      (a, b) => new Date(b.reviewed_at ?? b.created_at).getTime() - new Date(a.reviewed_at ?? a.created_at).getTime(),
+    ),
+    [acceptedSuggestions, declinedSuggestions],
+  );
 
   const { data: openFlags = [] } = useQuery({
     queryKey: ['flagged-chats', hubId, 'open'],
@@ -246,7 +270,6 @@ export function AdminDashboard({ hubId, hubRole, onSwitchTab }: AdminDashboardPr
       ) : (
       <>
       <h2 className="admin__title">Admin Console</h2>
-      <p className="admin__description">Manage sources, moderate content, and review flagged items.</p>
 
       <div className="admin__stats">
         <div
@@ -302,31 +325,68 @@ export function AdminDashboard({ hubId, hubRole, onSwitchTab }: AdminDashboardPr
       </div>
 
       <div className="admin__main">
-        <div className="admin__section">
-          <div className="admin__section-header">
-            <h3 className="admin__section-title">Suggested Sources</h3>
-            {suggestions.length > 0 && (
-              <span className="admin__section-badge">{suggestions.length}</span>
-            )}
+        <div className="admin__column">
+          <div className="admin__panel-header">
+            <h3 className="admin__panel-title">Suggested Sources</h3>
           </div>
-          <div className="admin__section-body">
-            {suggestions.length === 0 ? (
-              <p className="admin__section-empty">No pending source suggestions.</p>
-            ) : (
-              suggestions.map((s) => (
-                <SuggestionRow
-                  key={s.id}
-                  suggestion={s}
-                  onAccept={() => decideSuggestionMutation.mutate({ id: s.id, action: 'accepted' })}
-                  onDecline={() => decideSuggestionMutation.mutate({ id: s.id, action: 'declined' })}
-                  disabled={decideSuggestionMutation.isPending}
-                />
-              ))
+          <div className="admin__mod-tabs">
+            <button
+              type="button"
+              className={`admin__mod-tab${sugTab === 'pending' ? ' admin__mod-tab--active' : ''}`}
+              onClick={() => setSugTab('pending')}
+            >
+              Pending
+              {suggestions.length > 0 && (
+                <span className="admin__mod-tab-badge">{suggestions.length}</span>
+              )}
+            </button>
+            <button
+              type="button"
+              className={`admin__mod-tab${sugTab === 'reviewed' ? ' admin__mod-tab--active' : ''}`}
+              onClick={() => setSugTab('reviewed')}
+            >
+              Reviewed
+            </button>
+          </div>
+          <div className="admin__panel-body">
+            {sugTab === 'pending' && (
+              suggestions.length === 0 ? (
+                <p className="admin__section-empty">No pending source suggestions.</p>
+              ) : (
+                suggestions.map((s) => (
+                  <SuggestionRow
+                    key={s.id}
+                    suggestion={s}
+                    onAccept={() => decideSuggestionMutation.mutate({ id: s.id, action: 'accepted' })}
+                    onDecline={() => decideSuggestionMutation.mutate({ id: s.id, action: 'declined' })}
+                    disabled={decideSuggestionMutation.isPending}
+                  />
+                ))
+              )
+            )}
+            {sugTab === 'reviewed' && (
+              reviewedSuggestions.length === 0 ? (
+                <p className="admin__section-empty">No reviewed suggestions yet.</p>
+              ) : (
+                reviewedSuggestions.map((s) => (
+                  <SuggestionRow
+                    key={s.id}
+                    suggestion={s}
+                    onAccept={() => {}}
+                    onDecline={() => {}}
+                    disabled
+                    reviewed
+                  />
+                ))
+              )
             )}
           </div>
         </div>
 
-        <div className="admin__section">
+        <div className="admin__column">
+          <div className="admin__panel-header">
+            <h3 className="admin__panel-title">Chat Moderation</h3>
+          </div>
           <div className="admin__mod-tabs">
             {modTabs.map((tab) => (
               <button
@@ -469,55 +529,91 @@ export function AdminDashboard({ hubId, hubRole, onSwitchTab }: AdminDashboardPr
   );
 }
 
-function SuggestionRow({ suggestion, onAccept, onDecline, disabled }: {
-  suggestion: SourceSuggestion; onAccept: () => void; onDecline: () => void; disabled: boolean;
+function SuggestionRow({ suggestion, onAccept, onDecline, disabled, reviewed }: {
+  suggestion: SourceSuggestion; onAccept: () => void; onDecline: () => void; disabled: boolean; reviewed?: boolean;
 }) {
   const displayUrl = suggestion.canonical_url || suggestion.url;
-  const shortUrl = displayUrl.replace(/^https?:\/\//, '').slice(0, 50);
+  const shortUrl = displayUrl.replace(/^https?:\/\//, '').slice(0, 60);
+  const typeLabel = suggestion.type === 'youtube' ? 'YouTube' : 'Article';
   return (
-    <div className="admin__suggestion">
-      <div className={`admin__suggestion-icon admin__suggestion-icon--${suggestion.type}`}>
+    <div className={`admin__sug-row admin__sug-row--${suggestion.type}`}>
+      <div className="admin__sug-row-icon">
         {suggestion.type === 'youtube' ? 'YT' : 'WEB'}
       </div>
-      <div className="admin__suggestion-info">
-        <p className="admin__suggestion-title">{suggestion.title || shortUrl}</p>
-        <p className="admin__suggestion-url">{shortUrl}</p>
-        {suggestion.rationale && <p className="admin__suggestion-rationale">{suggestion.rationale}</p>}
+      <div className="admin__sug-row-content">
+        <div className="admin__sug-row-header">
+          <span className="admin__sug-row-title">{suggestion.title || shortUrl}</span>
+          <span className={`admin__sug-row-badge admin__sug-row-badge--${suggestion.type}`}>{typeLabel}</span>
+        </div>
+        <a className="admin__sug-row-url" href={displayUrl} target="_blank" rel="noopener noreferrer">{shortUrl}</a>
+        {suggestion.rationale && (
+          <p className="admin__sug-row-reason">AI Reasoning: {suggestion.rationale}</p>
+        )}
       </div>
-      <div className="admin__suggestion-actions">
-        <button className="admin__suggestion-btn admin__suggestion-btn--accept" type="button" title="Accept" onClick={onAccept} disabled={disabled}><CheckIcon /></button>
-        <button className="admin__suggestion-btn admin__suggestion-btn--decline" type="button" title="Decline" onClick={onDecline} disabled={disabled}><XMarkIcon /></button>
-      </div>
+      {reviewed ? (
+        <span className={`admin__sug-row-status admin__sug-row-status--${suggestion.status}`}>
+          {suggestion.status === 'accepted' ? <CheckIcon /> : <XMarkIcon />}
+          {suggestion.status === 'accepted' ? 'Accepted' : 'Declined'}
+        </span>
+      ) : (
+        <div className="admin__sug-row-actions">
+          <button className="admin__sug-row-btn admin__sug-row-btn--accept" type="button" title="Accept" onClick={onAccept} disabled={disabled}><CheckIcon /></button>
+          <button className="admin__sug-row-btn admin__sug-row-btn--decline" type="button" title="Decline" onClick={onDecline} disabled={disabled}><XMarkIcon /></button>
+        </div>
+      )}
     </div>
   );
 }
+
+const REASON_LABELS: Record<string, string> = {
+  incorrect: 'Hallucination',
+  unsupported: 'Unsupported Claim',
+  harmful: 'Harmful Content',
+  outdated: 'Outdated Information',
+  other: 'Other',
+};
 
 function ChatFlagRow({ item, onRegenerate, onEdit, onDismiss, regenerating, dismissing }: {
   item: FlaggedChatQueueItem; onRegenerate: () => void; onEdit: () => void; onDismiss: () => void; regenerating: boolean; dismissing: boolean;
 }) {
   const isActive = ['open', 'in_review'].includes(item.status);
+  const reasonLabel = REASON_LABELS[item.reason] || item.reason;
   return (
-    <div className="admin__mod-row">
-      <div className="admin__mod-row-top">
-        <span className={`admin__mod-status admin__mod-status--${item.status}`}>
-          <span className="admin__mod-status-dot" />
-          {item.status === 'in_review' ? 'In review' : item.status}
+    <div className="admin__flag-card">
+      <div className="admin__flag-card-top">
+        <span className={`admin__flag-badge admin__flag-badge--${item.status}`}>
+          Flagged: {reasonLabel}
         </span>
-        <span className="admin__mod-session">{item.session_title}</span>
-        <span className="admin__mod-time">{new Date(item.flagged_at).toLocaleDateString('en-IE')}</span>
+        <span className="admin__flag-time">{new Date(item.flagged_at).toLocaleDateString('en-IE')}</span>
       </div>
-      <div className="admin__mod-row-body">
-        <div className="admin__mod-row-content">
-          <p className="admin__mod-row-q"><strong>Q:</strong> {item.question_preview}</p>
-          <p className="admin__mod-row-a"><strong>A:</strong> {item.answer_preview}</p>
-        </div>
-        <div className="admin__mod-row-actions">
-          <button className="admin__mod-btn admin__mod-btn--primary" type="button" onClick={onRegenerate} disabled={regenerating || !isActive}>
-            {regenerating ? 'Regenerating...' : 'Regenerate'}
-          </button>
-          <button className="admin__mod-btn" type="button" onClick={onEdit} disabled={!isActive}>Edit</button>
-          <button className="admin__mod-btn admin__mod-btn--danger" type="button" onClick={onDismiss} disabled={dismissing || !isActive}>Dismiss</button>
-        </div>
+
+      <div className="admin__flag-section">
+        <p className="admin__flag-label">Original Prompt</p>
+        <p className="admin__flag-text">&ldquo;{item.question_preview}&rdquo;</p>
+      </div>
+
+      <div className="admin__flag-section">
+        <p className="admin__flag-label">AI Response</p>
+        <p className="admin__flag-text">&ldquo;{item.answer_preview}&rdquo;</p>
+      </div>
+
+      <div className="admin__flag-section">
+        <p className="admin__flag-label">Flag Reasons</p>
+        <p className="admin__flag-reason-text">{reasonLabel}</p>
+      </div>
+
+      <div className="admin__flag-actions">
+        <button className="admin__flag-btn admin__flag-btn--primary" type="button" onClick={onRegenerate} disabled={regenerating || !isActive}>
+          <ArrowPathIcon />
+          {regenerating ? 'Regenerating...' : 'Regenerate'}
+        </button>
+        <button className="admin__flag-btn" type="button" onClick={onEdit} disabled={!isActive}>
+          <PencilSquareIcon />
+          Edit Manually
+        </button>
+        <button className="admin__flag-btn admin__flag-btn--danger" type="button" onClick={onDismiss} disabled={dismissing || !isActive}>
+          Ignore
+        </button>
       </div>
     </div>
   );
