@@ -1,3 +1,5 @@
+"""hubs.py: Lists, creates, updates, favourites, and archives hub records."""
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from postgrest.exceptions import APIError
 from supabase import Client
@@ -11,16 +13,23 @@ from .errors import raise_postgrest_error
 router = APIRouter(prefix="/hubs", tags=["hubs"])
 
 
+# Hub permission helpers.
+
+# Restrict management actions to owners and admins.
 def _require_owner_or_admin(member: HubMember) -> None:
     if member.role not in (MembershipRole.owner, MembershipRole.admin):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Owner or admin role required.")
 
 
+# Restrict sensitive hub actions to the owner only.
 def _require_owner(member: HubMember) -> None:
     if member.role != MembershipRole.owner:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Owner role required.")
 
 
+# Hub routes.
+
+# Return all hubs available to the current user.
 @router.get(
     "",
     response_model=list[Hub],
@@ -36,6 +45,7 @@ def list_hubs(
         raise_postgrest_error(exc)
 
 
+# Create a new hub and log the creation event.
 @router.post(
     "",
     response_model=Hub,
@@ -57,6 +67,7 @@ def create_hub(
         raise_postgrest_error(exc)
 
 
+# Update editable hub fields.
 @router.patch(
     "/{hub_id}",
     response_model=Hub,
@@ -81,6 +92,7 @@ def update_hub(
         raise_postgrest_error(exc)
 
 
+# Track that a user opened or accessed a hub.
 @router.post(
     "/{hub_id}/access",
     status_code=status.HTTP_204_NO_CONTENT,
@@ -99,6 +111,7 @@ def track_hub_access(
         raise_postgrest_error(exc)
 
 
+# Mark or unmark a hub as a favourite for the current user.
 @router.patch(
     "/{hub_id}/favourite",
     status_code=status.HTTP_204_NO_CONTENT,
@@ -118,6 +131,7 @@ def toggle_hub_favourite(
         raise_postgrest_error(exc)
 
 
+# Archive a hub so it is no longer actively used.
 @router.post(
     "/{hub_id}/archive",
     response_model=Hub,
@@ -139,6 +153,7 @@ def archive_hub(
         raise_postgrest_error(exc)
 
 
+# Restore an archived hub.
 @router.post(
     "/{hub_id}/unarchive",
     response_model=Hub,

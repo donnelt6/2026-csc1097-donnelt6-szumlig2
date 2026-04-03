@@ -1,3 +1,5 @@
+"""sources.py: Creates, queues, refreshes, reviews, and deletes source ingestion records."""
+
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from uuid import UUID
@@ -30,6 +32,9 @@ from .errors import raise_postgrest_error
 router = APIRouter(prefix="/sources", tags=["sources"])
 
 
+# Source creation and ingestion routes.
+
+# Create a file-based source record and return an upload URL when needed.
 @router.post(
     "",
     response_model=SourceEnqueueResponse,
@@ -51,6 +56,7 @@ def create_source(
     return SourceEnqueueResponse(source=source, upload_url=upload_url)
 
 
+# Create a web source and queue background ingestion.
 @router.post(
     "/web",
     response_model=Source,
@@ -76,6 +82,7 @@ def create_web_source(
     return source
 
 
+# Create a YouTube source and queue background ingestion.
 @router.post(
     "/youtube",
     response_model=Source,
@@ -97,6 +104,7 @@ def create_youtube_source(
     if not source.storage_path:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Source storage path missing")
     video_id = None
+    # Video metadata may already contain a parsed YouTube video ID for the worker.
     if isinstance(source.ingestion_metadata, dict):
         video_id = source.ingestion_metadata.get("video_id")
     celery_app.send_task(
@@ -115,6 +123,9 @@ def create_youtube_source(
     return source
 
 
+# Suggestion review routes.
+
+# Return pending or reviewed source suggestions for a hub.
 @router.get(
     "/suggestions",
     response_model=list[SourceSuggestion],
@@ -133,6 +144,7 @@ def list_source_suggestions(
         raise_postgrest_error(exc)
 
 
+# Accept or decline a source suggestion and ingest it when accepted.
 @router.patch(
     "/suggestions/{suggestion_id}",
     response_model=SourceSuggestionDecisionResponse,
@@ -197,6 +209,7 @@ def decide_source_suggestion(
     task_name: str | None = None
     task_args: list[object] | None = None
     try:
+        # Reuse an existing source first so accepted suggestions do not create duplicates.
         accepted_source = store.find_existing_source_for_suggestion(client, suggestion)
         if accepted_source is None:
             if suggestion.type == SourceSuggestionType.web:
@@ -247,6 +260,9 @@ def decide_source_suggestion(
     return SourceSuggestionDecisionResponse(suggestion=suggestion, source=accepted_source)
 
 
+# Source read and status routes.
+
+# Return all sources for a hub.
 @router.get(
     "/{hub_id}",
     response_model=list[Source],
@@ -264,6 +280,7 @@ def list_sources(
         raise_postgrest_error(exc)
 
 
+# Return a signed upload URL for an existing source record.
 @router.post(
     "/{source_id}/upload-url",
     response_model=SourceUploadUrlResponse,
@@ -292,6 +309,7 @@ def create_upload_url(
     return SourceUploadUrlResponse(upload_url=upload_url)
 
 
+# Return the current ingestion status for a source.
 @router.get(
     "/{source_id}/status",
     response_model=SourceStatusResponse,
@@ -311,6 +329,7 @@ def get_source_status(
         raise_postgrest_error(exc)
 
 
+# Return stored text chunks for a source after verifying the source exists.
 @router.get(
     "/{source_id}/chunks",
     response_model=list[SourceChunk],
@@ -335,6 +354,7 @@ def list_source_chunks(
     return [SourceChunk(**row) for row in rows]
 
 
+# Queue a file-based source for ingestion.
 @router.post(
     "/{source_id}/enqueue",
     dependencies=[Depends(rate_limit_user_ip("sources:write", "rate_limit_sources_per_minute"))],
@@ -365,6 +385,7 @@ def enqueue_source(
     return {"status": "queued"}
 
 
+# Requeue a refresh for an existing web or YouTube source.
 @router.post(
     "/{source_id}/refresh",
     dependencies=[Depends(rate_limit_user_ip("sources:write", "rate_limit_sources_per_minute"))],
@@ -411,6 +432,7 @@ def refresh_web_source(
     return {"status": "queued"}
 
 
+# Delete a source and log the removal.
 @router.delete(
     "/{source_id}",
     status_code=status.HTTP_204_NO_CONTENT,
@@ -436,6 +458,7 @@ def delete_source(
     store.log_activity(client, source.hub_id, current_user.id, "deleted", "source", source.id, {"name": source.original_name})
 
 
+# Mark a source as failed with a recorded reason.
 @router.post(
     "/{source_id}/fail",
     response_model=SourceStatusResponse,

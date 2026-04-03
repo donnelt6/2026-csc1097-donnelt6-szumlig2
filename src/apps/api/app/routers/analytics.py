@@ -1,3 +1,5 @@
+"""analytics.py: Exposes hub chat analytics summaries and trend data for admins and owners."""
+
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -13,6 +15,9 @@ from .errors import raise_postgrest_error
 router = APIRouter(prefix="/hubs/{hub_id}/analytics", tags=["analytics"])
 
 
+# Analytics permission helpers.
+
+# Restrict analytics access to elevated hub roles.
 def _require_owner_or_admin(role: MembershipRole) -> None:
     if role not in {MembershipRole.owner, MembershipRole.admin}:
         raise HTTPException(
@@ -21,6 +26,9 @@ def _require_owner_or_admin(role: MembershipRole) -> None:
         )
 
 
+# Analytics routes.
+
+# Return the aggregate analytics summary for a hub.
 @router.get(
     "/summary",
     response_model=ChatAnalyticsSummary,
@@ -33,6 +41,7 @@ def get_summary(
     current_user: CurrentUser = Depends(get_current_user),
 ) -> ChatAnalyticsSummary:
     try:
+        # Validate both membership and role before exposing analytics data.
         member = require_hub_member(client, str(hub_id), current_user.id)
         require_accepted(member)
         _require_owner_or_admin(member.role)
@@ -45,6 +54,7 @@ def get_summary(
         raise_postgrest_error(exc)
 
 
+# Return time-based analytics trends for a hub.
 @router.get(
     "/trends",
     response_model=ChatAnalyticsTrends,

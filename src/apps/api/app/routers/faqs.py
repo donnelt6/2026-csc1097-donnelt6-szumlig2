@@ -1,3 +1,5 @@
+"""faqs.py: Lists, creates, generates, updates, and archives FAQ entries for hubs."""
+
 from datetime import datetime, timezone
 from uuid import UUID
 
@@ -14,11 +16,17 @@ from .errors import raise_postgrest_error
 router = APIRouter(prefix="/faqs", tags=["faqs"])
 
 
+# FAQ permission helpers.
+
+# Restrict FAQ editing to roles that can manage hub content.
 def _require_editor(role: MembershipRole) -> None:
     if role not in (MembershipRole.owner, MembershipRole.admin, MembershipRole.editor):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Owner, admin, or editor role required.")
 
 
+# FAQ routes.
+
+# Return all FAQ entries for a hub.
 @router.get(
     "",
     response_model=list[FaqEntry],
@@ -37,6 +45,7 @@ def list_faqs(
         raise_postgrest_error(exc)
 
 
+# Create a single FAQ entry manually.
 @router.post(
     "",
     response_model=FaqEntry,
@@ -49,6 +58,7 @@ def create_faq(
     current_user: CurrentUser = Depends(get_current_user),
 ) -> FaqEntry:
     try:
+        # Re-check membership directly from the payload's hub before creating content.
         member = store.get_member_role(client, payload.hub_id, current_user.id)
         if not member.accepted_at:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invite not accepted yet.")
@@ -62,6 +72,7 @@ def create_faq(
         raise_postgrest_error(exc)
 
 
+# Generate FAQ entries from selected source documents.
 @router.post(
     "/generate",
     response_model=FaqGenerateResponse,
@@ -91,6 +102,7 @@ def generate_faqs(
         raise_postgrest_error(exc)
 
 
+# Update an FAQ's content or archive/pin state.
 @router.patch(
     "/{faq_id}",
     response_model=FaqEntry,
@@ -103,6 +115,7 @@ def update_faq(
     current_user: CurrentUser = Depends(get_current_user),
 ) -> FaqEntry:
     updates: dict = {}
+    # Only include fields the caller actually wants to change.
     if payload.question is not None:
         updates["question"] = payload.question
     if payload.answer is not None:
@@ -139,6 +152,7 @@ def update_faq(
         raise_postgrest_error(exc)
 
 
+# Archive an FAQ entry.
 @router.delete(
     "/{faq_id}",
     status_code=status.HTTP_204_NO_CONTENT,
