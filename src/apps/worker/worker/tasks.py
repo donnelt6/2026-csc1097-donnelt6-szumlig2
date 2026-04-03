@@ -1,54 +1,34 @@
-"""tasks.py: Defines Celery worker tasks and helper functions for source ingestion, reminders, and source suggestions."""
-import hashlib
+"""tasks.py: Compatibility facade plus worker task orchestration."""
 
-import io
+import hashlib
 import json
-import logging
-import time
 import re
-import ipaddress
-import socket
 import ssl
 import uuid
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 from typing import Iterable, List, Optional
-from urllib.parse import parse_qs, quote, urlencode, urljoin, urlparse, urlunparse
-from urllib.robotparser import RobotFileParser
+from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 from zoneinfo import ZoneInfo
 
-import httpx
-import redis
-from celery import Celery
-from celery.schedules import crontab
 import dateparser
+import redis
 import spacy
 from openai import OpenAI
-from pypdf import PdfReader
-from supabase import Client, create_client
+from supabase import Client
 
-from .config import get_settings
-
-logger = logging.getLogger(__name__)
-settings = get_settings()
-
-# Shared Celery app for ingestion and reminder dispatch.
-celery_app = Celery("caddie-worker", broker=settings.redis_url, backend=settings.redis_url)
-# Beat schedule triggers reminder dispatch on a rolling window.
-celery_app.conf.beat_schedule = {
-    "dispatch-reminders": {
-        "task": "dispatch_reminders",
-        "schedule": crontab(minute=f"*/{max(1, settings.reminder_dispatch_window_minutes)}"),
-    },
-    "scan-source-suggestions": {
-        "task": "scan_source_suggestions",
-        "schedule": crontab(minute=f"*/{max(1, settings.suggested_sources_scan_interval_minutes)}"),
-    },
-}
+from . import common as _common
+from . import content as _content
+from . import response_utils as _response_utils
+from . import storage as _storage
+from . import web as _web
+from . import youtube as _youtube
+from .app import celery_app, logger, settings
 
 
 # Celery ingestion tasks.
+# These task entrypoints stay in `worker.tasks` so existing Celery commands
+# and task names keep working while helper logic lives in split modules.
 # Ingests an uploaded file source by downloading, extracting, chunking, and storing its content.
 @celery_app.task(bind=True, name="ingest_source", max_retries=3, default_retry_delay=15)
 def ingest_source(self, source_id: str, hub_id: str, storage_path: str) -> dict:
@@ -2258,3 +2238,206 @@ def _normalize_channels(value: Optional[list]) -> list[str]:
         if key == "in_app":
             channels.append(key)
     return channels or ["in_app"]
+
+
+# Compatibility overrides for the split worker modules.
+# These definitions preserve the old `worker.tasks` surface for Celery startup and tests.
+# They intentionally come last so they override the legacy helper bodies above
+# until the dead implementations are removed in a later cleanup pass.
+def _get_supabase_client() -> Client:
+    return _common._get_supabase_client()
+
+
+def _download_from_storage(storage_path: str) -> bytes:
+    return _storage._download_from_storage(storage_path)
+
+
+def _validate_public_url(url: str) -> str:
+    return _web._validate_public_url(url)
+
+
+def _ensure_public_host(hostname: str) -> None:
+    return _web._ensure_public_host(hostname)
+
+
+def _allowed_by_robots(url: str, user_agent: str) -> bool:
+    return _web._allowed_by_robots(url, user_agent)
+
+
+def _fetch_url_content(url: str) -> tuple[bytes, str, str]:
+    return _web._fetch_url_content(url)
+
+
+def _extract_web_text(raw: bytes, content_type: str) -> tuple[str, Optional[str]]:
+    return _web._extract_web_text(raw, content_type)
+
+
+def _html_to_text(html: str) -> str:
+    return _web._html_to_text(html)
+
+
+def _build_pseudo_doc(title: Optional[str], url: str, crawl_at: str, content_type: str, text: str) -> str:
+    return _web._build_pseudo_doc(title, url, crawl_at, content_type, text)
+
+
+def _fetch_youtube_transcript(
+    url: str,
+    language: Optional[str],
+    allow_auto_captions: Optional[bool],
+) -> tuple[str, dict, dict]:
+    return _youtube._fetch_youtube_transcript(url, language, allow_auto_captions)
+
+
+def _select_caption_track(
+    info: dict,
+    preferred_language: Optional[str],
+    allow_auto: bool,
+) -> tuple[str, str, str, str]:
+    return _youtube._select_caption_track(info, preferred_language, allow_auto)
+
+
+def _pick_caption_preferred(captions: dict, preferred_language: Optional[str]) -> Optional[tuple[str, str, str]]:
+    return _youtube._pick_caption_preferred(captions, preferred_language)
+
+
+def _pick_caption_any(captions: dict) -> Optional[tuple[str, str, str]]:
+    return _youtube._pick_caption_any(captions)
+
+
+def _select_caption_format(lang: str, formats: list[dict]) -> Optional[tuple[str, str, str]]:
+    return _youtube._select_caption_format(lang, formats)
+
+
+def _download_caption_text(url: str) -> bytes:
+    return _youtube._download_caption_text(url)
+
+
+def _parse_caption_text(raw: bytes, ext: str) -> str:
+    return _youtube._parse_caption_text(raw, ext)
+
+
+def _strip_vtt_srt(text: str) -> str:
+    return _youtube._strip_vtt_srt(text)
+
+
+def _strip_xml(text: str) -> str:
+    return _youtube._strip_xml(text)
+
+
+def _parse_json3(text: str) -> str:
+    return _youtube._parse_json3(text)
+
+
+def _normalize_language(value: Optional[str]) -> str:
+    return _youtube._normalize_language(value)
+
+
+def _format_upload_date(value: Optional[str]) -> Optional[str]:
+    return _youtube._format_upload_date(value)
+
+
+def _format_duration(seconds: Optional[int]) -> Optional[str]:
+    return _youtube._format_duration(seconds)
+
+
+def _build_youtube_pseudo_doc(info: dict, url: str, fetched_at: str, captions_meta: dict, text: str) -> str:
+    return _youtube._build_youtube_pseudo_doc(info, url, fetched_at, captions_meta, text)
+
+
+def _upload_pseudo_doc(client: Client, storage_path: str, content: str) -> None:
+    _storage._upload_pseudo_doc(client, storage_path, content)
+
+
+def _extract_text(raw: bytes, storage_path: str) -> str:
+    ext = storage_path.lower()
+    if ext.endswith(".pdf"):
+        return _extract_pdf(raw)
+    if ext.endswith(".docx"):
+        return _extract_docx(raw)
+    return _content._extract_text(raw, storage_path)
+
+
+def _extract_pdf(raw: bytes) -> str:
+    return _content._extract_pdf(raw)
+
+
+def _extract_docx(raw: bytes) -> str:
+    return _content._extract_docx(raw)
+
+
+def _normalize_text(text: str) -> str:
+    return _common._normalize_text(text)
+
+
+def _trim_text(text: str, max_chars: int) -> str:
+    return _common._trim_text(text, max_chars)
+
+
+def _clear_existing_chunks_before(client: Client, source_id: str, cutoff: str) -> None:
+    _storage._clear_existing_chunks_before(client, source_id, cutoff)
+
+
+def _source_exists(client: Client, source_id: str) -> bool:
+    return _storage._source_exists(client, source_id)
+
+
+def _get_source_metadata(client: Client, source_id: str) -> dict:
+    return _storage._get_source_metadata(client, source_id)
+
+
+def _update_source(
+    client: Client,
+    source_id: str,
+    status: str,
+    failure_reason: Optional[str] = None,
+    ingestion_metadata: Optional[dict] = None,
+    clear_failure_reason: bool = False,
+) -> None:
+    _storage._update_source(
+        client,
+        source_id,
+        status,
+        failure_reason=failure_reason,
+        ingestion_metadata=ingestion_metadata,
+        clear_failure_reason=clear_failure_reason,
+    )
+
+
+def _batch(items: List, size: int) -> Iterable[List]:
+    return _common._batch(items, size)
+
+
+def _extract_youtube_video_id(url: str) -> Optional[str]:
+    return _youtube._extract_youtube_video_id(url)
+
+
+def _normalize_youtube_id(value: str) -> Optional[str]:
+    return _youtube._normalize_youtube_id(value)
+
+
+def _canonicalize_youtube_url(video_id: str) -> str:
+    return _youtube._canonicalize_youtube_url(video_id)
+
+
+def _canonicalize_web_url(url: str) -> Optional[str]:
+    return _web._canonicalize_web_url(url)
+
+
+def _get_attr(obj: object, name: str, default: object = None) -> object:
+    return _response_utils._get_attr(obj, name, default)
+
+
+def _extract_response_text(response: object) -> str:
+    return _response_utils._extract_response_text(response)
+
+
+def _extract_usage(response: object) -> Optional[dict]:
+    return _response_utils._extract_usage(response)
+
+
+def _extract_web_search_results(response: object) -> list[object]:
+    return _response_utils._extract_web_search_results(response)
+
+
+def _parse_iso(value: Optional[str]) -> Optional[datetime]:
+    return _common._parse_iso(value)

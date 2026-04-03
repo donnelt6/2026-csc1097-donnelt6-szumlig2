@@ -8,9 +8,9 @@ What is tested
 - Rate limiting behavior in `app/services/rate_limit.py`.
 - PostgREST error mapping in `app/routers/errors.py`.
 - Router behavior for hubs, sources, chat, FAQs, memberships, and users.
-- Chat flow in `app/services/store.py` with stubbed matches and LLM output.
-- FAQ generation logic in `app/services/store.py` with stubbed LLM output.
-- Source creation cleanup in `app/services/store.py` when upload URL generation fails.
+- Chat flow in `app/services/store/` with stubbed matches and LLM output.
+- FAQ generation logic in `app/services/store/` with stubbed LLM output.
+- Source creation cleanup in `app/services/store/` when upload URL generation fails.
 
 How it works
 - `tests/conftest.py` sets safe env defaults and overrides FastAPI dependencies.

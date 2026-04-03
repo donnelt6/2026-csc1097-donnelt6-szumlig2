@@ -53,7 +53,7 @@ A lot of the route functions use shared helpers from:
 - `dependencies.py` for auth, clients, and rate limiting
 - `access.py` for shared membership checks
 - `errors.py` for mapping backend errors into HTTP responses
-- `services/store.py` for most data access and business logic
+- `services/store/` for most data access and business logic, exposed through the compatibility import path `app.services.store`
 
 So the routers are mainly the API boundary layer, not the main place where database logic lives.
 

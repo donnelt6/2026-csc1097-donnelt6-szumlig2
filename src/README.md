@@ -5,7 +5,7 @@ This `src/` folder contains the scaffold for Caddie: a Next.js frontend, FastAPI
 ## Structure
 - `apps/web/` - Next.js frontend with hubs list, hub detail, file/URL upload widget, and chat flow.
 - `apps/api/` - FastAPI service exposing hubs, sources, and chat endpoints backed by Supabase + OpenAI.
-- `apps/worker/` - Celery ingestion worker that downloads from Supabase Storage, crawls web URLs, or fetches YouTube transcripts; extracts text, chunks, embeds, and writes to pgvector.
+- `apps/worker/` - Celery ingestion worker package that downloads from Supabase Storage, crawls web URLs, or fetches YouTube transcripts; extracts text, chunks, embeds, and writes to pgvector.
 - `packages/shared/` - Shared TypeScript and Pydantic models to keep contracts aligned.
 - `Makefile` - Convenience commands for running services locally.
 
@@ -21,6 +21,7 @@ Supabase/OpenAI/Redis env placeholders live in each app's `.env.example`. The AP
 Note: the API expects Supabase Auth JWTs for user-scoped access and uses the service role key only for storage/admin tasks.
 Reminder detection uses spaCy; install `en_core_web_sm` in the worker env for due-date suggestions.
 Web URL ingestion respects robots.txt by default; set `WEB_RESPECT_ROBOTS=false` in the worker env to override.
+The worker is split into focused modules under `apps/worker/worker/`; `worker.tasks` remains the Celery-facing compatibility entrypoint for task registration and existing imports.
 
 ## How URL ingestion works
 - The user submits a URL from the hub upload panel.
