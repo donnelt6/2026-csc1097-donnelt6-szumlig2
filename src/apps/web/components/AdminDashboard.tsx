@@ -7,6 +7,7 @@ import {
   CheckIcon,
   FlagIcon,
   FolderIcon,
+  LightBulbIcon,
   PencilSquareIcon,
   ShieldCheckIcon,
   XMarkIcon,
@@ -55,6 +56,7 @@ export function AdminDashboard({ hubId, hubRole, onSwitchTab }: AdminDashboardPr
   const [editFlagId, setEditFlagId] = useState<string | null>(null);
   const [draftContent, setDraftContent] = useState('');
   const [draftCitations, setDraftCitations] = useState('[]');
+  const [busySugIds, setBusySugIds] = useState<Map<string, 'accepted' | 'declined'>>(new Map());
 
   const { data: sources = [] } = useQuery({
     queryKey: ['sources', hubId],
@@ -167,9 +169,19 @@ export function AdminDashboard({ hubId, hubRole, onSwitchTab }: AdminDashboardPr
   const decideSuggestionMutation = useMutation({
     mutationFn: ({ id, action }: { id: string; action: 'accepted' | 'declined' }) =>
       decideSourceSuggestion(id, { action }),
+    onMutate: ({ id, action }) => {
+      setBusySugIds((prev) => new Map(prev).set(id, action));
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['source-suggestions', hubId] });
       queryClient.invalidateQueries({ queryKey: ['sources', hubId] });
+    },
+    onSettled: (_data, _err, variables) => {
+      setBusySugIds((prev) => {
+        const next = new Map(prev);
+        next.delete(variables.id);
+        return next;
+      });
     },
   });
 
@@ -351,7 +363,11 @@ export function AdminDashboard({ hubId, hubRole, onSwitchTab }: AdminDashboardPr
           <div className="admin__panel-body">
             {sugTab === 'pending' && (
               suggestions.length === 0 ? (
-                <p className="admin__section-empty">No pending source suggestions.</p>
+                <div className="admin__section-empty">
+                  <LightBulbIcon className="admin__empty-icon" />
+                  <p className="admin__empty-title">No pending suggestions</p>
+                  <p className="admin__empty-subtitle">AI-generated source suggestions will appear here for review.</p>
+                </div>
               ) : (
                 suggestions.map((s) => (
                   <SuggestionRow
@@ -359,14 +375,19 @@ export function AdminDashboard({ hubId, hubRole, onSwitchTab }: AdminDashboardPr
                     suggestion={s}
                     onAccept={() => decideSuggestionMutation.mutate({ id: s.id, action: 'accepted' })}
                     onDecline={() => decideSuggestionMutation.mutate({ id: s.id, action: 'declined' })}
-                    disabled={decideSuggestionMutation.isPending}
+                    disabled={busySugIds.has(s.id)}
+                    busyAction={busySugIds.get(s.id)}
                   />
                 ))
               )
             )}
             {sugTab === 'reviewed' && (
               reviewedSuggestions.length === 0 ? (
-                <p className="admin__section-empty">No reviewed suggestions yet.</p>
+                <div className="admin__section-empty">
+                  <CheckIcon className="admin__empty-icon" />
+                  <p className="admin__empty-title">No reviewed suggestions yet</p>
+                  <p className="admin__empty-subtitle">Accepted and declined suggestions will appear here.</p>
+                </div>
               ) : (
                 reviewedSuggestions.map((s) => (
                   <SuggestionRow
@@ -529,8 +550,8 @@ export function AdminDashboard({ hubId, hubRole, onSwitchTab }: AdminDashboardPr
   );
 }
 
-function SuggestionRow({ suggestion, onAccept, onDecline, disabled, reviewed }: {
-  suggestion: SourceSuggestion; onAccept: () => void; onDecline: () => void; disabled: boolean; reviewed?: boolean;
+function SuggestionRow({ suggestion, onAccept, onDecline, disabled, reviewed, busyAction }: {
+  suggestion: SourceSuggestion; onAccept: () => void; onDecline: () => void; disabled: boolean; reviewed?: boolean; busyAction?: 'accepted' | 'declined';
 }) {
   const displayUrl = suggestion.canonical_url || suggestion.url;
   const shortUrl = displayUrl.replace(/^https?:\/\//, '').slice(0, 60);
@@ -557,8 +578,12 @@ function SuggestionRow({ suggestion, onAccept, onDecline, disabled, reviewed }: 
         </span>
       ) : (
         <div className="admin__sug-row-actions">
-          <button className="admin__sug-row-btn admin__sug-row-btn--accept" type="button" title="Accept" onClick={onAccept} disabled={disabled}><CheckIcon /></button>
-          <button className="admin__sug-row-btn admin__sug-row-btn--decline" type="button" title="Decline" onClick={onDecline} disabled={disabled}><XMarkIcon /></button>
+          <button className="admin__sug-row-btn admin__sug-row-btn--accept" type="button" title="Accept" onClick={onAccept} disabled={disabled}>
+            {busyAction === 'accepted' ? <span className="admin__sug-row-spinner" /> : <CheckIcon />}
+          </button>
+          <button className="admin__sug-row-btn admin__sug-row-btn--decline" type="button" title="Decline" onClick={onDecline} disabled={disabled}>
+            {busyAction === 'declined' ? <span className="admin__sug-row-spinner" /> : <XMarkIcon />}
+          </button>
         </div>
       )}
     </div>

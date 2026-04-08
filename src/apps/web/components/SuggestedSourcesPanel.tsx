@@ -21,7 +21,7 @@ interface Props {
 export function SuggestedSourcesPanel({ hubId, canReview, onAccepted }: Props) {
   const queryClient = useQueryClient();
   const [expanded, setExpanded] = useState(false);
-  const [busySuggestionId, setBusySuggestionId] = useState<string | null>(null);
+  const [busyIds, setBusyIds] = useState<Set<string>>(new Set());
   const containerRef = useRef<HTMLDivElement>(null);
   const { data, isLoading, error } = useQuery({
     queryKey: ["source-suggestions", hubId],
@@ -33,7 +33,7 @@ export function SuggestedSourcesPanel({ hubId, canReview, onAccepted }: Props) {
     mutationFn: ({ suggestionId, action }: { suggestionId: string; action: "accepted" | "declined" }) =>
       decideSourceSuggestion(suggestionId, { action }),
     onMutate: ({ suggestionId }) => {
-      setBusySuggestionId(suggestionId);
+      setBusyIds((prev) => new Set(prev).add(suggestionId));
     },
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["source-suggestions", hubId] });
@@ -42,8 +42,12 @@ export function SuggestedSourcesPanel({ hubId, canReview, onAccepted }: Props) {
         onAccepted?.();
       }
     },
-    onSettled: () => {
-      setBusySuggestionId(null);
+    onSettled: (_data, _err, variables) => {
+      setBusyIds((prev) => {
+        const next = new Set(prev);
+        next.delete(variables.suggestionId);
+        return next;
+      });
     },
   });
 
@@ -85,7 +89,7 @@ export function SuggestedSourcesPanel({ hubId, canReview, onAccepted }: Props) {
           {error && <p className="suggested-sources__error">Failed to load suggestions.</p>}
 
           {suggestions.map((suggestion) => {
-            const isBusy = busySuggestionId === suggestion.id;
+            const isBusy = busyIds.has(suggestion.id);
             return (
               <div key={suggestion.id} className="suggested-sources__item">
                 <div className={`sources__resource-icon sources__resource-icon--${suggestion.type}`}>
