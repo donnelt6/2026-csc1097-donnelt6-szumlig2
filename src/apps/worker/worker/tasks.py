@@ -1,4 +1,4 @@
-"""tasks.py: Compatibility facade plus worker task orchestration."""
+"""tasks.py: Celery task entrypoints plus worker task orchestration."""
 
 import hashlib
 import json
@@ -7,7 +7,7 @@ import ssl
 import uuid
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
-from typing import Iterable, List, Optional
+from typing import List, Optional
 from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 from zoneinfo import ZoneInfo
 
@@ -27,8 +27,8 @@ from .app import celery_app, logger, settings
 
 
 # Celery ingestion tasks.
-# These task entrypoints stay in `worker.tasks` so existing Celery commands
-# and task names keep working while helper logic lives in split modules.
+# These task entrypoints stay in `worker.tasks` so Celery commands and task
+# names keep working while helper logic lives in focused worker modules.
 # Ingests an uploaded file source by downloading, extracting, chunking, and storing its content.
 @celery_app.task(bind=True, name="ingest_source", max_retries=3, default_retry_delay=15)
 def ingest_source(self, source_id: str, hub_id: str, storage_path: str) -> dict:
@@ -41,18 +41,18 @@ def ingest_source(self, source_id: str, hub_id: str, storage_path: str) -> dict:
     - Update source status
     """
     logger.info("worker.ingest.start source_id=%s", source_id)
-    client = _get_supabase_client()
+    client = _common._get_supabase_client()
     _update_source(client, source_id, status="processing", clear_failure_reason=True)
 
     try:
-        raw = _download_from_storage(storage_path)
+        raw = _storage._download_from_storage(storage_path)
     except Exception as exc:
         logger.warning("worker.ingest.download_retry storage_path=%s error=%s", storage_path, exc)
         raise self.retry(exc=exc)
 
     try:
-        text = _extract_text(raw, storage_path)
-        text = _normalize_text(text)
+        text = _content._extract_text(raw, storage_path)
+        text = _common._normalize_text(text)
         if not text:
             raise ValueError("No text extracted from source")
 
@@ -77,21 +77,21 @@ def ingest_web_source(self, source_id: str, hub_id: str, url: str, storage_path:
     - Chunk + embed + persist to pgvector
     """
     logger.info("worker.web_ingest.start source_id=%s url=%s", source_id, url)
-    client = _get_supabase_client()
+    client = _common._get_supabase_client()
     _update_source(client, source_id, status="processing", clear_failure_reason=True)
 
     try:
-        safe_url = _validate_public_url(url)
-        if settings.web_respect_robots and not _allowed_by_robots(safe_url, settings.web_user_agent):
+        safe_url = _web._validate_public_url(url)
+        if settings.web_respect_robots and not _web._allowed_by_robots(safe_url, settings.web_user_agent):
             raise ValueError("Blocked by robots.txt")
-        raw, content_type, final_url = _fetch_url_content(safe_url)
-        text, title = _extract_web_text(raw, content_type)
-        text = _normalize_text(text)
+        raw, content_type, final_url = _web._fetch_url_content(safe_url)
+        text, title = _web._extract_web_text(raw, content_type)
+        text = _common._normalize_text(text)
         if not text:
             raise ValueError("No text extracted from web page")
         crawl_at = datetime.now(timezone.utc).isoformat()
-        pseudo_doc = _build_pseudo_doc(title, final_url or safe_url, crawl_at, content_type, text)
-        _upload_pseudo_doc(client, storage_path, pseudo_doc)
+        pseudo_doc = _web._build_pseudo_doc(title, final_url or safe_url, crawl_at, content_type, text)
+        _storage._upload_pseudo_doc(client, storage_path, pseudo_doc)
         extra_metadata = {
             "source_type": "web",
             "url": safe_url,
@@ -135,23 +135,23 @@ def ingest_youtube_source(
     - Chunk + embed + persist to pgvector
     """
     logger.info("worker.youtube_ingest.start source_id=%s url=%s", source_id, url)
-    client = _get_supabase_client()
+    client = _common._get_supabase_client()
     _update_source(client, source_id, status="processing", clear_failure_reason=True)
 
     try:
-        transcript, info, captions_meta = _fetch_youtube_transcript(
+        transcript, info, captions_meta = _youtube._fetch_youtube_transcript(
             url,
             language=language,
             allow_auto_captions=allow_auto_captions,
         )
         if video_id:
             info["video_id"] = video_id
-        text = _normalize_text(transcript)
+        text = _common._normalize_text(transcript)
         if not text:
             raise ValueError("No transcript text extracted from YouTube captions")
         fetched_at = datetime.now(timezone.utc).isoformat()
-        pseudo_doc = _build_youtube_pseudo_doc(info, url, fetched_at, captions_meta, text)
-        _upload_pseudo_doc(client, storage_path, pseudo_doc)
+        pseudo_doc = _youtube._build_youtube_pseudo_doc(info, url, fetched_at, captions_meta, text)
+        _storage._upload_pseudo_doc(client, storage_path, pseudo_doc)
         extra_metadata = {
             "source_type": "youtube",
             "url": url,
@@ -184,7 +184,7 @@ def ingest_youtube_source(
 # Scans eligible hubs and generates any new source suggestions that should be queued.
 @celery_app.task(name="scan_source_suggestions")
 def scan_source_suggestions() -> dict:
-    client = _get_supabase_client()
+    client = _common._get_supabase_client()
     now = datetime.now(timezone.utc)
     eligible_hubs = _list_eligible_source_suggestion_hubs(client, now=now)
     processed = 0
@@ -211,169 +211,6 @@ def scan_source_suggestions() -> dict:
 
     return {"eligible_hubs": len(eligible_hubs), "processed_hubs": processed, "generated": generated}
 
-
-# Shared storage and source-state helpers.
-# Creates a Supabase service client for worker-side database and storage operations.
-def _get_supabase_client() -> Client:
-    return _common._get_supabase_client()
-
-
-# Downloads the raw file bytes for a source from Supabase Storage.
-def _download_from_storage(storage_path: str) -> bytes:
-    return _storage._download_from_storage(storage_path)
-
-
-# Web fetching and validation helpers.
-# Validates a URL and rejects unsupported schemes or private-network targets.
-def _validate_public_url(url: str) -> str:
-    return _web._validate_public_url(url)
-
-
-# Resolves a hostname and rejects loopback, private, or otherwise unsafe IP addresses.
-def _ensure_public_host(hostname: str) -> None:
-    _web._ensure_public_host(hostname)
-
-
-# Checks whether the worker is allowed to crawl the target URL under robots.txt rules.
-def _allowed_by_robots(url: str, user_agent: str) -> bool:
-    return _web._allowed_by_robots(url, user_agent)
-
-
-# Fetches web content while enforcing the worker's size and timeout limits.
-def _fetch_url_content(url: str) -> tuple[bytes, str, str]:
-    return _web._fetch_url_content(url)
-
-
-# Extracts readable text and an optional title from fetched web content.
-def _extract_web_text(raw: bytes, content_type: str) -> tuple[str, Optional[str]]:
-    return _web._extract_web_text(raw, content_type)
-
-
-# Converts HTML into plain text by removing tags, scripts, and repeated whitespace.
-def _html_to_text(html: str) -> str:
-    return _web._html_to_text(html)
-
-
-# Builds the stored pseudo-document wrapper used for ingested web pages.
-def _build_pseudo_doc(title: Optional[str], url: str, crawl_at: str, content_type: str, text: str) -> str:
-    return _web._build_pseudo_doc(title, url, crawl_at, content_type, text)
-
-
-# YouTube caption and transcript helpers.
-# Fetches transcript text and metadata for a YouTube video using available captions.
-def _fetch_youtube_transcript(
-
-    url: str,
-    language: Optional[str],
-    allow_auto_captions: Optional[bool],
-) -> tuple[str, dict, dict]:
-    return _youtube._fetch_youtube_transcript(url, language, allow_auto_captions)
-
-
-# Chooses the best matching caption track based on language and caption availability.
-def _select_caption_track(
-    info: dict,
-    preferred_language: Optional[str],
-    allow_auto: bool,
-) -> tuple[str, str, str, str]:
-    return _youtube._select_caption_track(info, preferred_language, allow_auto)
-
-
-# Finds the best caption track for the preferred language first.
-def _pick_caption_preferred(
-    captions: dict,
-    preferred_language: Optional[str],
-) -> Optional[tuple[str, str, str]]:
-    return _youtube._pick_caption_preferred(captions, preferred_language)
-
-
-# Falls back to the first usable caption track when no preferred match exists.
-def _pick_caption_any(
-    captions: dict,
-) -> Optional[tuple[str, str, str]]:
-    return _youtube._pick_caption_any(captions)
-
-
-# Chooses the best download format for the selected caption track.
-def _select_caption_format(lang: str, formats: list[dict]) -> Optional[tuple[str, str, str]]:
-    return _youtube._select_caption_format(lang, formats)
-
-
-# Downloads caption text bytes for the selected YouTube caption track.
-def _download_caption_text(url: str) -> bytes:
-    return _youtube._download_caption_text(url)
-
-
-# Parses downloaded caption content into plain transcript text.
-def _parse_caption_text(raw: bytes, ext: str) -> str:
-    return _youtube._parse_caption_text(raw, ext)
-
-
-# Removes timestamps and markup from VTT or SRT caption text.
-def _strip_vtt_srt(text: str) -> str:
-    return _youtube._strip_vtt_srt(text)
-
-
-# Removes XML tags from caption payloads that still contain markup.
-def _strip_xml(text: str) -> str:
-    return _youtube._strip_xml(text)
-
-
-# Extracts transcript text from YouTube's JSON3 caption format.
-def _parse_json3(text: str) -> str:
-    return _youtube._parse_json3(text)
-
-
-# Normalizes language codes into a simple lowercase value.
-def _normalize_language(value: Optional[str]) -> str:
-    return _youtube._normalize_language(value)
-
-
-# Formats a compact YouTube upload date into an ISO-like calendar date.
-def _format_upload_date(value: Optional[str]) -> Optional[str]:
-    return _youtube._format_upload_date(value)
-
-
-# Formats a duration in seconds into a human-readable string.
-def _format_duration(seconds: Optional[int]) -> Optional[str]:
-    return _youtube._format_duration(seconds)
-
-
-# Builds the stored pseudo-document wrapper used for ingested YouTube transcripts.
-def _build_youtube_pseudo_doc(info: dict, url: str, fetched_at: str, captions_meta: dict, text: str) -> str:
-    return _youtube._build_youtube_pseudo_doc(info, url, fetched_at, captions_meta, text)
-
-
-# Uploads the generated pseudo-document back into Supabase Storage.
-def _upload_pseudo_doc(client: Client, storage_path: str, content: str) -> None:
-    _storage._upload_pseudo_doc(client, storage_path, content)
-
-
-# Text extraction, chunking, and embedding helpers.
-# Routes raw file bytes to the correct text extractor based on file extension.
-def _extract_text(raw: bytes, storage_path: str) -> str:
-    return _content._extract_text(raw, storage_path)
-
-
-# Extracts readable text from a PDF file.
-def _extract_pdf(raw: bytes) -> str:
-    return _content._extract_pdf(raw)
-
-
-# Extracts readable text from a DOCX file.
-def _extract_docx(raw: bytes) -> str:
-    return _content._extract_docx(raw)
-
-
-# Normalizes extracted text into a cleaner single-space format.
-def _normalize_text(text: str) -> str:
-    return _common._normalize_text(text)
-
-
-# Trims text to a maximum length while preserving a readable ending.
-def _trim_text(text: str, max_chars: int) -> str:
-    return _common._trim_text(text, max_chars)
-
 # Chunks text, embeds it, stores the vectors, and triggers reminder detection for a source.
 def _ingest_text_for_source(
     client: Client,
@@ -385,18 +222,18 @@ def _ingest_text_for_source(
     chunks = _chunk_text(text, settings.chunk_size, settings.chunk_overlap)
     if not chunks:
         raise ValueError("No chunks produced from extracted text")
-    if not _source_exists(client, source_id):
+    if not _storage._source_exists(client, source_id):
         logger.info("Source %s deleted before ingest; skipping.", source_id)
         return 0
     ingest_started_at = datetime.now(timezone.utc)
     ingest_timestamp = ingest_started_at.isoformat()
     embeddings = _embed_chunks(chunks)
-    if not _source_exists(client, source_id):
+    if not _storage._source_exists(client, source_id):
         logger.info("Source %s deleted during embed; skipping insert.", source_id)
         return 0
     _insert_chunks(client, source_id, hub_id, chunks, embeddings, ingest_timestamp)
     _clear_existing_chunks_before(client, source_id, ingest_timestamp)
-    existing_metadata = _get_source_metadata(client, source_id)
+    existing_metadata = _storage._get_source_metadata(client, source_id)
     metadata = {
         "chunk_count": len(chunks),
         "embedding_model": settings.embedding_model,
@@ -437,7 +274,7 @@ def _embed_chunks(chunks: List[str]) -> List[List[float]]:
         raise RuntimeError("OPENAI_API_KEY missing in worker environment")
     client = OpenAI(api_key=settings.openai_api_key)
     embeddings: List[List[float]] = []
-    for batch in _batch(chunks, 64):
+    for batch in _common._batch(chunks, 64):
         # Batch requests to keep payload size under API limits.
         response = client.embeddings.create(model=settings.embedding_model, input=batch)
         embeddings.extend([item.embedding for item in response.data])
@@ -467,23 +304,13 @@ def _insert_chunks(
                 "created_at": created_at,
             }
         )
-    for batch in _batch(rows, 100):
+    for batch in _common._batch(rows, 100):
         client.table("source_chunks").insert(batch).execute()
 
 
 # Deletes older chunk rows for the same source before new ones are inserted.
 def _clear_existing_chunks_before(client: Client, source_id: str, cutoff: str) -> None:
     _storage._clear_existing_chunks_before(client, source_id, cutoff)
-
-
-# Checks whether the source row still exists before continuing ingestion work.
-def _source_exists(client: Client, source_id: str) -> bool:
-    return _storage._source_exists(client, source_id)
-
-
-# Loads source metadata fields that are needed during reminder detection.
-def _get_source_metadata(client: Client, source_id: str) -> dict:
-    return _storage._get_source_metadata(client, source_id)
 
 
 # Updates the source status and related bookkeeping fields in the database.
@@ -503,11 +330,6 @@ def _update_source(
         ingestion_metadata=ingestion_metadata,
         clear_failure_reason=clear_failure_reason,
     )
-
-
-# Yields items in fixed-size batches for APIs that expect chunked writes.
-def _batch(items: List, size: int) -> Iterable[List]:
-    return _common._batch(items, size)
 
 
 # Reminder detection pipeline (regex + spaCy) and dispatch.
@@ -578,7 +400,7 @@ def _detect_and_store_reminders(client: Client, source_id: str, hub_id: str, tex
                 "status": "pending",
             }
         )
-    for batch in _batch(rows, 50):
+    for batch in _common._batch(rows, 50):
         client.table("reminder_candidates").upsert(
             batch, on_conflict="source_id,due_at,snippet_hash"
         ).execute()
@@ -1149,7 +971,7 @@ def _filter_eligible_source_suggestion_hubs(
             continue
         if hub_id not in active_hub_ids:
             continue
-        last_scan = _parse_iso(hub.get("last_source_suggestion_scan_at"))
+        last_scan = _common._parse_iso(hub.get("last_source_suggestion_scan_at"))
         if last_scan is not None and last_scan > now - cooldown:
             continue
         eligible.append(hub)
@@ -1218,10 +1040,10 @@ def _build_source_suggestion_context(client: Client, hub_id: str) -> tuple[list[
     max_chunks = max(1, settings.suggested_sources_chunks_per_source)
     for row in chunk_rows:
         source_id = str(row.get("source_id") or "")
-        text = _normalize_text(str(row.get("text") or ""))
+        text = _common._normalize_text(str(row.get("text") or ""))
         if not source_id or not text or len(excerpts[source_id]) >= max_chunks:
             continue
-        excerpts[source_id].append(_trim_text(text, 500))
+        excerpts[source_id].append(_common._trim_text(text, 500))
 
     blocks: list[str] = []
     for row in source_rows:
@@ -1279,20 +1101,20 @@ def _discover_source_suggestions(context_text: str) -> tuple[list[dict], dict]:
             tools=[{"type": "web_search_preview"}],
             temperature=0.2,
         )
-        raw_text = _extract_response_text(response)
+        raw_text = _response_utils._extract_response_text(response)
         # Parse defensively because the model can still wrap JSON in markdown or extra text.
         candidates = _parse_source_suggestion_candidates(raw_text)
         search_results = []
-        for item in _extract_web_search_results(response)[:10]:
+        for item in _response_utils._extract_web_search_results(response)[:10]:
             search_results.append(
                 {
-                    "title": _get_attr(item, "title", "") or "",
-                    "url": _get_attr(item, "url", "") or _get_attr(item, "link", "") or "",
+                    "title": _response_utils._get_attr(item, "title", "") or "",
+                    "url": _response_utils._get_attr(item, "url", "") or _response_utils._get_attr(item, "link", "") or "",
                 }
             )
         metadata = {
             "model": settings.suggested_sources_model,
-            "usage": _extract_usage(response),
+            "usage": _response_utils._extract_usage(response),
             "search_results": search_results,
         }
         return candidates, metadata
@@ -1335,12 +1157,12 @@ def _normalize_source_suggestion_candidate(
         return None
 
     try:
-        safe_url = _validate_public_url(raw_url)
+        safe_url = _web._validate_public_url(raw_url)
     except Exception:
         return None
 
     suggested_type = str(candidate.get("type") or "web").strip().lower()
-    video_id = _extract_youtube_video_id(safe_url)
+    video_id = _youtube._extract_youtube_video_id(safe_url)
     if suggested_type == "youtube" or video_id:
         if not video_id:
             return None
@@ -1348,7 +1170,7 @@ def _normalize_source_suggestion_candidate(
             "hub_id": hub_id,
             "type": "youtube",
             "status": "pending",
-            "url": _canonicalize_youtube_url(video_id),
+            "url": _youtube._canonicalize_youtube_url(video_id),
             "canonical_url": None,
             "video_id": video_id,
             "title": _trim_source_suggestion_text(candidate.get("title"), 255),
@@ -1359,7 +1181,7 @@ def _normalize_source_suggestion_candidate(
             "search_metadata": search_metadata,
         }
 
-    canonical_url = _canonicalize_web_url(safe_url)
+    canonical_url = _web._canonicalize_web_url(safe_url)
     if suggested_type != "web" or not canonical_url:
         return None
     return {
@@ -1399,11 +1221,11 @@ def _load_existing_source_targets(client: Client, hub_id: str) -> set[tuple[str,
         if source_type == "youtube":
             video_id = str(metadata.get("video_id") or "")
             if not video_id:
-                video_id = _extract_youtube_video_id(str(metadata.get("url") or ""))
+                video_id = _youtube._extract_youtube_video_id(str(metadata.get("url") or ""))
             if video_id:
                 targets.add(("youtube", video_id))
         elif source_type == "web":
-            canonical_url = _canonicalize_web_url(str(metadata.get("final_url") or metadata.get("url") or ""))
+            canonical_url = _web._canonicalize_web_url(str(metadata.get("final_url") or metadata.get("url") or ""))
             if canonical_url:
                 targets.add(("web", canonical_url))
     return targets
@@ -1474,29 +1296,9 @@ def _mark_source_suggestion_scan(client: Client, hub_id: str, *, now: datetime, 
         payload["last_source_suggestion_generated_at"] = now.isoformat()
     client.table("hubs").update(payload).eq("id", hub_id).execute()
 
-
-# Extracts a YouTube video identifier from a supported video URL.
-def _extract_youtube_video_id(url: str) -> Optional[str]:
-    return _youtube._extract_youtube_video_id(url)
-
-
-# Validates and normalizes a YouTube video identifier.
-def _normalize_youtube_id(value: str) -> Optional[str]:
-    return _youtube._normalize_youtube_id(value)
-
-
-# Builds a canonical YouTube watch URL from a video identifier.
-def _canonicalize_youtube_url(video_id: str) -> str:
-    return _youtube._canonicalize_youtube_url(video_id)
-
-
-# Normalizes a web URL by removing noise such as fragments and tracking parameters.
-def _canonicalize_web_url(url: str) -> Optional[str]:
-    return _web._canonicalize_web_url(url)
-
 # Trims optional suggestion text fields to a safe maximum length.
 def _trim_source_suggestion_text(value: object, max_chars: int) -> Optional[str]:
-    cleaned = _normalize_text(str(value or ""))
+    cleaned = _common._normalize_text(str(value or ""))
     if not cleaned:
         return None
     if len(cleaned) <= max_chars:
@@ -1537,32 +1339,11 @@ def _parse_source_suggestion_candidates(raw: str) -> list[dict]:
             return [item for item in parsed if isinstance(item, dict)]
     return []
 
-
-# Reads an attribute from SDK response objects while keeping the caller defensive.
-def _get_attr(obj: object, name: str, default: object = None) -> object:
-    return _response_utils._get_attr(obj, name, default)
-
-
-# Extracts plain text content from an OpenAI response payload.
-def _extract_response_text(response: object) -> str:
-    return _response_utils._extract_response_text(response)
-
-
-# Extracts token usage information from an OpenAI response payload.
-def _extract_usage(response: object) -> Optional[dict]:
-    return _response_utils._extract_usage(response)
-
-
-# Extracts any attached web-search result objects from an OpenAI response.
-def _extract_web_search_results(response: object) -> list[object]:
-    return _response_utils._extract_web_search_results(response)
-
-
 # Reminder dispatch tasks and notification helpers.
 # Dispatches due reminders and records any notification updates that result.
 @celery_app.task(name="dispatch_reminders")
 def dispatch_reminders() -> dict:
-    client = _get_supabase_client()
+    client = _common._get_supabase_client()
     now = datetime.now(timezone.utc)
     lead_hours = max(1, settings.reminder_lead_hours)
     window = max(1, settings.reminder_dispatch_window_minutes)
@@ -1629,7 +1410,7 @@ def _dispatch_for_reminder(
     channels = _normalize_channels(policy.get("channels"))
     if not channels:
         return 0
-    due_at = _parse_iso(reminder.get("due_at"))
+    due_at = _common._parse_iso(reminder.get("due_at"))
     if not due_at:
         return 0
     scheduled_for = due_at
@@ -1707,12 +1488,6 @@ def _update_notification(
 # Marks a reminder as sent after its dispatch completes successfully.
 def _mark_reminder_sent(client: Client, reminder_id: str, now: datetime) -> None:
     client.table("reminders").update({"status": "sent", "sent_at": now.isoformat()}).eq("id", reminder_id).execute()
-
-
-# Parses an ISO timestamp string into a timezone-aware datetime when possible.
-def _parse_iso(value: Optional[str]) -> Optional[datetime]:
-    return _common._parse_iso(value)
-
 
 # Loads and caches reminder policy settings for a hub.
 def _get_hub_policy(client: Client, hub_id: str, cache: dict[str, dict]) -> dict:

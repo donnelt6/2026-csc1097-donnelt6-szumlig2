@@ -21,7 +21,7 @@ Supabase/OpenAI/Redis env placeholders live in each app's `.env.example`. The AP
 Note: the API expects Supabase Auth JWTs for user-scoped access and uses the service role key only for storage/admin tasks.
 Reminder detection uses spaCy; install `en_core_web_sm` in the worker env for due-date suggestions.
 Web URL ingestion respects robots.txt by default; set `WEB_RESPECT_ROBOTS=false` in the worker env to override.
-The worker is split into focused modules under `apps/worker/worker/`; `worker.tasks` remains the Celery-facing compatibility entrypoint for task registration and existing imports.
+The worker is split into focused modules under `apps/worker/worker/`; `worker.tasks` now stays focused on Celery task registration and task-level orchestration.
 
 ## How URL ingestion works
 - The user submits a URL from the hub upload panel.

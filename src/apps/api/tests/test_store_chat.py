@@ -5,6 +5,9 @@ from types import SimpleNamespace
 import pytest
 
 from app.schemas import ChatRequest, Citation, HubScope, Source, SourceStatus, SourceType
+from app.services.store import chat_helpers
+from app.services.store import common_helpers
+from app.services.store import source_helpers
 from app.services.store import (
     _fallback_chat_session_title,
     _normalize_chat_session_title,
@@ -82,6 +85,14 @@ class FakeClient:
     # Returns a stub table object for the requested table name.
     def table(self, name: str) -> FakeTable:
         return FakeTable(self, name)
+
+
+def test_store_facade_reexports_helper_symbols() -> None:
+    assert _fallback_chat_session_title is chat_helpers._fallback_chat_session_title
+    assert _normalize_chat_session_title is chat_helpers._normalize_chat_session_title
+    assert _is_vague_follow_up is chat_helpers._is_vague_follow_up
+    assert common_helpers._extract_response_text is not None
+    assert source_helpers._canonicalize_web_url is not None
 
 
 # Replaces chat session helpers with deterministic test doubles.
