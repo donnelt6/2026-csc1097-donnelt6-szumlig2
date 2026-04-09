@@ -6,3 +6,9 @@ hosting.md
 
 # artifact that doesn't need to be staged 
 deno.lock
+
+# Generated API evaluation reports
+src/apps/api/eval-results/
+
+# Local copies of aplied Supabase migrations 
+src/apps/api/migrations/
