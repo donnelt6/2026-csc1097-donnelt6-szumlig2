@@ -1,6 +1,6 @@
-"""test_tasks.py: Exercises worker task helpers for text ingestion, extraction, and suggestion logic."""
+"""test_tasks.py: Exercises worker task flows plus helpers from their owning modules."""
 
-from worker import tasks
+from worker import common, content, tasks, web, youtube
 
 
 # Text cleanup helpers.
@@ -9,12 +9,12 @@ from worker import tasks
 def test_normalize_text_collapses_whitespace() -> None:
     # Normalizes mixed whitespace; expect single-space output.
     raw = "Line one\r\nLine two\n\nLine\tthree"
-    assert tasks._normalize_text(raw) == "Line one Line two Line three"
+    assert common._normalize_text(raw) == "Line one Line two Line three"
 
 
 # Verifies that long text is trimmed and suffixed once it exceeds the limit.
 def test_trim_text_truncates_long_content() -> None:
-    assert tasks._trim_text("alpha beta gamma", 10) == "alpha beta..."
+    assert common._trim_text("alpha beta gamma", 10) == "alpha beta..."
 
 
 # Verifies that chunking blank text returns no output chunks.
@@ -41,7 +41,7 @@ def test_chunk_text_applies_overlap() -> None:
 # Verifies that ingestion exits early when the source record has been deleted.
 def test_ingest_text_skips_when_source_deleted(monkeypatch) -> None:
     # If the source is gone, ingestion should skip without embedding or inserts.
-    monkeypatch.setattr(tasks, "_source_exists", lambda *_args, **_kwargs: False)
+    monkeypatch.setattr(tasks._storage, "_source_exists", lambda *_args, **_kwargs: False)
     monkeypatch.setattr(
         tasks,
         "_embed_chunks",
@@ -62,7 +62,7 @@ def test_ingest_text_skips_when_source_deleted(monkeypatch) -> None:
 def test_batch_splits_items() -> None:
     # Batches a list by size; expect final smaller batch.
     items = [1, 2, 3, 4, 5]
-    batches = list(tasks._batch(items, size=2))
+    batches = list(common._batch(items, size=2))
     assert batches == [[1, 2], [3, 4], [5]]
 
 
@@ -71,20 +71,20 @@ def test_batch_splits_items() -> None:
 # Verifies that file extraction dispatches to the correct parser for each supported extension.
 def test_extract_text_routes_by_extension(monkeypatch) -> None:
     # Mocks extractors; expect extension-based routing and decoded text.
-    monkeypatch.setattr(tasks._content, "_extract_pdf", lambda raw: "pdf-text")
-    monkeypatch.setattr(tasks._content, "_extract_docx", lambda raw: "docx-text")
+    monkeypatch.setattr(content, "_extract_pdf", lambda raw: "pdf-text")
+    monkeypatch.setattr(content, "_extract_docx", lambda raw: "docx-text")
 
-    assert tasks._extract_text(b"pdf-bytes", "file.pdf") == "pdf-text"
-    assert tasks._extract_text(b"docx-bytes", "file.docx") == "docx-text"
-    assert tasks._extract_text(b"plain-text", "file.txt") == "plain-text"
-    assert tasks._extract_text(b"markdown", "file.md") == "markdown"
+    assert content._extract_text(b"pdf-bytes", "file.pdf") == "pdf-text"
+    assert content._extract_text(b"docx-bytes", "file.docx") == "docx-text"
+    assert content._extract_text(b"plain-text", "file.txt") == "plain-text"
+    assert content._extract_text(b"markdown", "file.md") == "markdown"
 
 
 # Verifies that SSRF protection rejects loopback and private-network targets.
 def test_validate_public_url_rejects_private_ip() -> None:
     # Private IPs should be blocked for SSRF protection.
     try:
-        tasks._validate_public_url("http://127.0.0.1")
+        web._validate_public_url("http://127.0.0.1")
     except ValueError as exc:
         assert "private" in str(exc).lower()
     else:
@@ -94,14 +94,14 @@ def test_validate_public_url_rejects_private_ip() -> None:
 # Verifies that a public internet IP passes URL validation unchanged.
 def test_validate_public_url_accepts_public_ip() -> None:
     # Public IPs should pass URL validation.
-    assert tasks._validate_public_url("http://8.8.8.8") == "http://8.8.8.8"
+    assert web._validate_public_url("http://8.8.8.8") == "http://8.8.8.8"
 
 
 # Verifies that HTML extraction strips tags and keeps readable body text.
 def test_extract_web_text_returns_body_text() -> None:
     # HTML should be converted to readable text.
     html = b"<html><body><h1>Hello</h1><p>World</p></body></html>"
-    text, title = tasks._extract_web_text(html, "text/html; charset=utf-8")
+    text, title = web._extract_web_text(html, "text/html; charset=utf-8")
     assert "Hello" in text
     assert "World" in text
     assert "<html>" not in text
@@ -112,7 +112,7 @@ def test_extract_web_text_returns_body_text() -> None:
 # Verifies that pseudo documents include the metadata header used for web ingestion.
 def test_build_pseudo_doc_includes_metadata() -> None:
     # Pseudo doc should include header fields.
-    doc = tasks._build_pseudo_doc("Example", "https://example.com", "2026-01-01T00:00:00Z", "text/html", "Body")
+    doc = web._build_pseudo_doc("Example", "https://example.com", "2026-01-01T00:00:00Z", "text/html", "Body")
     assert "Example" in doc
     assert "https://example.com" in doc
     assert "Crawled: 2026-01-01T00:00:00Z" in doc
@@ -128,7 +128,7 @@ def test_strip_vtt_srt_removes_timestamps_and_tags() -> None:
 00:00:01.000 --> 00:00:03.000
 <c>hello</c> world
 """
-    cleaned = tasks._strip_vtt_srt(sample)
+    cleaned = youtube._strip_vtt_srt(sample)
     assert "hello world" in cleaned
     assert "WEBVTT" not in cleaned
 
@@ -137,7 +137,7 @@ def test_strip_vtt_srt_removes_timestamps_and_tags() -> None:
 def test_parse_json3_extracts_segments() -> None:
     # JSON3 captions should merge utf8 segments.
     sample = '{"events":[{"segs":[{"utf8":"Hello "},{"utf8":"world"}]}]}'
-    cleaned = tasks._parse_json3(sample)
+    cleaned = youtube._parse_json3(sample)
     assert "Hello" in cleaned
     assert "world" in cleaned
 
@@ -149,7 +149,7 @@ def test_select_caption_track_prefers_manual_then_auto() -> None:
         "subtitles": {"en": [{"ext": "vtt", "url": "http://manual.test/en.vtt"}]},
         "automatic_captions": {"en": [{"ext": "vtt", "url": "http://auto.test/en.vtt"}]},
     }
-    source, lang, url, ext = tasks._select_caption_track(info, preferred_language="en", allow_auto=True)
+    source, lang, url, ext = youtube._select_caption_track(info, preferred_language="en", allow_auto=True)
     assert source == "manual"
     assert lang == "en"
     assert url == "http://manual.test/en.vtt"
@@ -159,7 +159,7 @@ def test_select_caption_track_prefers_manual_then_auto() -> None:
         "subtitles": {},
         "automatic_captions": {"en": [{"ext": "vtt", "url": "http://auto.test/en.vtt"}]},
     }
-    source, lang, url, ext = tasks._select_caption_track(info, preferred_language="en", allow_auto=True)
+    source, lang, url, ext = youtube._select_caption_track(info, preferred_language="en", allow_auto=True)
     assert source == "auto"
     assert lang == "en"
     assert url == "http://auto.test/en.vtt"
@@ -173,8 +173,8 @@ def test_ingest_youtube_source_success(monkeypatch) -> None:
     # Ingest should upload pseudo doc and update source on success.
     updates: list[dict] = []
 
-    monkeypatch.setattr(tasks, "_get_supabase_client", lambda: object())
-    monkeypatch.setattr(tasks, "_upload_pseudo_doc", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(tasks._common, "_get_supabase_client", lambda: object())
+    monkeypatch.setattr(tasks._storage, "_upload_pseudo_doc", lambda *_args, **_kwargs: None)
 
     # Simulate the inner ingestion step completing and marking the source as done.
     def fake_ingest(_client, source_id, hub_id, text, extra_metadata=None):
@@ -189,7 +189,7 @@ def test_ingest_youtube_source_success(monkeypatch) -> None:
 
     monkeypatch.setattr(tasks, "_update_source", fake_update)
     monkeypatch.setattr(
-        tasks,
+        tasks._youtube,
         "_fetch_youtube_transcript",
         lambda *_args, **_kwargs: (
             "hello world",
@@ -298,7 +298,7 @@ def test_filter_new_source_suggestions_reserves_one_youtube_slot() -> None:
 
 # Verifies that normalization converts YouTube URLs to video suggestions and canonicalizes web URLs.
 def test_normalize_source_suggestion_candidate_coerces_youtube_and_web(monkeypatch) -> None:
-    monkeypatch.setattr(tasks, "_validate_public_url", lambda url: url)
+    monkeypatch.setattr(tasks._web, "_validate_public_url", lambda url: url)
 
     youtube = tasks._normalize_source_suggestion_candidate(
         {
@@ -366,9 +366,9 @@ def test_discover_source_suggestions_requests_youtube_when_relevant(monkeypatch)
             self.responses = FakeResponses()
 
     monkeypatch.setattr(tasks, "OpenAI", FakeOpenAI)
-    monkeypatch.setattr(tasks, "_extract_response_text", lambda _response: "[]")
+    monkeypatch.setattr(tasks._response_utils, "_extract_response_text", lambda _response: "[]")
     monkeypatch.setattr(tasks, "_parse_source_suggestion_candidates", lambda _raw: [])
-    monkeypatch.setattr(tasks, "_extract_web_search_results", lambda _response: [])
+    monkeypatch.setattr(tasks._response_utils, "_extract_web_search_results", lambda _response: [])
 
     candidates, metadata = tasks._discover_source_suggestions("Hub context")
 

@@ -1,7 +1,7 @@
 # Caddie Worker (Celery)
 
 Celery worker that handles ingestion, parsing, chunking, and embedding, and writes chunks to Supabase/pgvector. Web URLs are crawled into a pseudo-document snapshot before chunking. YouTube ingestion pulls captions with `yt-dlp` and stores a transcript snapshot.
-The worker is now split into focused modules inside `worker/`, with `worker.tasks` kept as the compatibility layer and Celery task registration entrypoint.
+The worker is now split into focused modules inside `worker/`, with `worker.tasks` kept as the Celery task registration and orchestration entrypoint.
 
 ## Run locally
 ```bash
@@ -36,4 +36,4 @@ For reminder detection, install a spaCy English model (e.g. `python -m spacy dow
 - `worker/web.py` - Public-URL validation, robots.txt checks, fetching, and HTML extraction helpers.
 - `worker/youtube.py` - YouTube caption selection, transcript parsing, and pseudo-document helpers.
 - `worker/main.py` - Minimal entrypoint that re-exports the shared Celery app.
-- `worker/tasks.py` - Celery task entrypoints plus the compatibility facade that preserves the historical `worker.tasks` helper surface for tests and startup commands.
+- `worker/tasks.py` - Celery task entrypoints plus task-local orchestration that calls the owned helper modules directly.
