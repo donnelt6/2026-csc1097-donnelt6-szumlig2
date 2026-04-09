@@ -26,6 +26,8 @@ def _normalize_embedding_value(value: Any) -> Optional[List[float]]:
 
 
 def _coerce_embedding_value(value: Any) -> Optional[List[float]]:
+    # Retrieval rows and RPC responses sometimes hand vectors back as JSON text
+    # rather than native lists, so this helper accepts both shapes.
     if value is None:
         return None
     if isinstance(value, (list, tuple)):
@@ -65,6 +67,8 @@ def _cosine_similarity(left: Optional[List[float]], right: Optional[List[float]]
 
 
 def _get_attr(obj: Any, name: str, default: Any = None) -> Any:
+    # OpenAI SDK objects vary between dict-like and attribute-based payloads
+    # across endpoints and versions, so callers stay defensive through one shim.
     if isinstance(obj, dict):
         return obj.get(name, default)
     return getattr(obj, name, default)
@@ -126,6 +130,8 @@ def _total_tokens_from_usage(usage: Optional[Dict[str, Any]]) -> int:
 
 
 def _extract_response_text(response: Any) -> str:
+    # Response payloads can expose text at the top level or nested inside
+    # message/content parts depending on the SDK surface used.
     text = _get_attr(response, "output_text")
     if isinstance(text, str) and text.strip():
         return text
@@ -160,6 +166,8 @@ def _extract_usage(response: Any) -> Optional[dict]:
 
 
 def _extract_web_results(response: Any) -> list[Any]:
+    # Web-search tool calls are attached as output items rather than a single
+    # normalized field, so gather them into one caller-friendly list here.
     output = _get_attr(response, "output", []) or []
     results: list[Any] = []
     for item in output:
@@ -184,6 +192,8 @@ def _format_web_snippet(title: str, snippet: str, url: str) -> str:
 
 
 def _build_web_citations(response: Any) -> List[Citation]:
+    # Preserve a stable synthetic id when the search result does not expose a
+    # usable URL so the citation list still has deterministic source ids.
     results = _extract_web_results(response)
     citations: List[Citation] = []
     for idx, result in enumerate(results, start=1):

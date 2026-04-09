@@ -42,6 +42,8 @@ _FOLLOW_UP_LEAD_TOKENS = {
 }
 
 
+# Keep title cleanup here so chat session naming stays consistent across
+# creation, regeneration, and fallback paths.
 def _normalize_chat_session_title(text: str) -> str:
     collapsed = " ".join((text or "").split()).strip().strip("\"'`")
     collapsed = re.sub(r"^[Tt]itle\s*:\s*", "", collapsed)
@@ -89,6 +91,8 @@ def _parse_questions_from_text(raw: str, max_count: int) -> List[str]:
             if len(candidates) >= max_count:
                 break
 
+    # LLM output sometimes wraps the array in extra prose, so callers first try
+    # the raw payload and then the widest bracketed slice that still looks JSON-like.
     def _load_json_array(value: str) -> Optional[List[str]]:
         try:
             parsed = json.loads(value)
@@ -137,6 +141,8 @@ def _parse_steps_from_text(raw: str, max_count: int) -> List[Dict[str, str]]:
         cleaned_title = _clean(title or "")
         steps.append({"title": cleaned_title if cleaned_title else "", "instruction": cleaned_instruction})
 
+    # Generation flows often return either a plain JSON array or a short preamble
+    # followed by JSON, so this mirrors the question parser's recovery strategy.
     def _load_json_array(value: str) -> Optional[List[Any]]:
         try:
             parsed = json.loads(value)
@@ -183,6 +189,8 @@ class _QuotePair:
         self.quote = quote
 
 
+# Grounded answer generation appends a trailing `QUOTES:` JSON block. This
+# helper peels that block off while still accepting the legacy quote-only shape.
 def _extract_quotes(raw_answer: str) -> tuple[str, Dict[str, List[_QuotePair]]]:
     marker = "QUOTES:"
     idx = raw_answer.rfind(marker)
@@ -218,6 +226,8 @@ def _match_quote_pairs_to_snippet(
     snippet: str,
     threshold: float = 0.45,
 ) -> list[tuple[str, str]]:
+    # Matching all quote pairs together avoids one early fuzzy match consuming
+    # the best snippet region and leaving later citations with lower-quality text.
     snippet_lower = snippet.lower()
     s_words = snippet_lower.split()
     if not s_words:
@@ -283,6 +293,8 @@ def _match_quote_pairs_to_snippet(
 
         all_candidates.append(candidates)
 
+    # Pick the strongest non-overlapping regions globally rather than greedily
+    # per quote so multi-citation answers stay aligned with distinct evidence.
     assignment: dict[int, tuple[float, int, int, str]] = {}
     claimed_ranges: list[tuple[int, int]] = []
     flat: list[tuple[float, int, tuple[float, int, int, str]]] = []
@@ -393,6 +405,8 @@ def _is_vague_follow_up(question: str) -> bool:
         return False
     if len(tokens) <= 4 and any(token in _DEICTIC_TOKENS for token in tokens):
         return True
+    # Longer follow-ups like "why there?" should still trigger rewrite when the
+    # opening token is interrogative and the rest points back to prior context.
     return tokens[0] in _FOLLOW_UP_LEAD_TOKENS and _has_context_reference(tokens)
 
 
@@ -455,6 +469,8 @@ def _build_anchored_retrieval_query(anchor_turn: str, query_suffix: str) -> str:
         return anchor
     if anchor.lower() == suffix.lower():
         return anchor
+    # Keep punctuation stable so the anchored query reads like one prompt rather
+    # than two jammed strings when it is sent back through retrieval.
     separator = "" if anchor.endswith((".", "?", "!")) else "."
     return f"{anchor}{separator} {suffix}".strip()
 

@@ -219,6 +219,8 @@ def _ingest_text_for_source(
     text: str,
     extra_metadata: Optional[dict],
 ) -> int:
+    # Re-check source existence before and after embedding so user-driven source
+    # deletion cannot leave newly generated chunks behind.
     chunks = _chunk_text(text, settings.chunk_size, settings.chunk_overlap)
     if not chunks:
         raise ValueError("No chunks produced from extracted text")
@@ -264,6 +266,8 @@ def _chunk_text(text: str, chunk_size: int, overlap: int) -> List[str]:
         chunks.append(" ".join(chunk_words))
         if end == len(words):
             break
+        # Rewind by the configured overlap so adjacent chunks keep enough shared
+        # context for retrieval without duplicating the full window each time.
         start = max(end - overlap, 0)
     return chunks
 
@@ -432,6 +436,8 @@ def _find_date_candidates(text: str, timezone_name: str) -> List[dict]:
         time_hint = _extract_time_hint(text, mention["start"], mention["end"])
         parse_text = date_text
         # Attach a nearby time to otherwise date-only mentions when one is available.
+        # Date mentions often appear beside a separate time token; combine them
+        # here so downstream parsing preserves the intended due time.
         if time_hint and not _has_time(date_text):
             parse_text = f"{date_text} {time_hint}"
         parsed = _parse_date_text(parse_text, timezone_name, now)
@@ -1104,6 +1110,8 @@ def _discover_source_suggestions(context_text: str) -> tuple[list[dict], dict]:
         raw_text = _response_utils._extract_response_text(response)
         # Parse defensively because the model can still wrap JSON in markdown or extra text.
         candidates = _parse_source_suggestion_candidates(raw_text)
+        # Keep only lightweight search metadata so suggestion rows capture
+        # enough audit context without storing the full tool payload.
         search_results = []
         for item in _response_utils._extract_web_search_results(response)[:10]:
             search_results.append(
@@ -1152,6 +1160,8 @@ def _normalize_source_suggestion_candidate(
     seed_source_ids: list[str],
     search_metadata: dict,
 ) -> Optional[dict]:
+    # Normalize discovered candidates into one stored shape so later duplicate
+    # checks only need canonical URL or canonical YouTube id comparisons.
     raw_url = str(candidate.get("url") or "").strip()
     if not raw_url:
         return None
@@ -1239,6 +1249,8 @@ def _filter_new_source_suggestions(
     existing_suggestion_targets: set[tuple[str, str]],
     limit: int,
 ) -> list[dict]:
+    # If the first pass fills every slot with web pages, pull one YouTube result
+    # forward when available so suggestion sets stay mixed and more useful.
     deduped: list[dict] = []
     seen_targets = set(existing_source_targets) | set(existing_suggestion_targets)
     for candidate in candidates:

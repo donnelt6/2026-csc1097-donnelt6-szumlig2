@@ -10,6 +10,8 @@ _FILENAME_SAFE_RE = re.compile(r"[^A-Za-z0-9._ -]")
 _YOUTUBE_ID_RE = re.compile(r"^[A-Za-z0-9_-]{11}$")
 
 
+# Centralize storage-safe filename cleanup so file, web, and YouTube source
+# creation all use the same path rules.
 def _sanitize_filename(name: str) -> str:
     base = PurePath(name).name.strip()
     base = _FILENAME_SAFE_RE.sub("_", base)
@@ -52,6 +54,8 @@ def _build_youtube_source_name(url: str, video_id: str) -> str:
 
 
 def _extract_youtube_video_id(url: str) -> Optional[str]:
+    # Accept the common watch, short, embed, and live URL shapes so callers can
+    # normalize YouTube targets before de-duplication or storage.
     parsed = urlparse(url)
     host = (parsed.netloc or "").lower()
     if host.startswith("www."):
@@ -79,6 +83,8 @@ def _normalize_youtube_id(value: str) -> Optional[str]:
 
 
 def _canonicalize_web_url(url: str) -> Optional[str]:
+    # Canonicalization intentionally removes tracking noise but keeps meaningful
+    # query params so source de-duplication does not collapse distinct pages.
     cleaned = (url or "").strip()
     if not cleaned:
         return None
