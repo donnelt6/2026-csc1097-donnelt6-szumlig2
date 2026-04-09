@@ -528,10 +528,6 @@ def _preview_text(value: Any, limit: int = 140) -> str:
     return f"{text[: max(0, limit - 1)].rstrip()}..."
 
 
-def _escape_ilike_pattern(value: str) -> str:
-    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-
-
 def _build_search_snippet(content: str, query: str, radius: int = 72) -> tuple[str, str | None]:
     collapsed = re.sub(r"\s+", " ", (content or "")).strip()
     normalized_query = re.sub(r"\s+", " ", (query or "")).strip()
@@ -577,7 +573,6 @@ __all__ = [
     "_build_search_snippet",
     "_chat_search_score",
     "_count_distinct_citation_sources",
-    "_escape_ilike_pattern",
     "_extract_quotes",
     "_fallback_chat_session_title",
     "_has_context_reference",
