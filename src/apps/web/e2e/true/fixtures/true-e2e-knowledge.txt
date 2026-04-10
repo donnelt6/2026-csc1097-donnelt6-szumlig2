@@ -1,0 +1,7 @@
+The Caddie true E2E verification document contains three grounded rollout facts.
+
+1. The release codename for this rollout is Delta Lantern.
+2. The onboarding call starts at 14:30 Dublin time on 15 April 2026.
+3. The first required deliverable is an architecture diagram before implementation begins.
+
+If a user asks for the key rollout facts, answer from this document and cite it.

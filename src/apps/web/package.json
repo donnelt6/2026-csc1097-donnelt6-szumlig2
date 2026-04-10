@@ -9,7 +9,11 @@
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "test": "vitest",
-    "test:watch": "vitest --watch"
+    "test:watch": "vitest --watch",
+    "test:e2e": "playwright test",
+    "test:e2e:true": "playwright test --config=playwright.true.config.ts",
+    "test:e2e:true:setup": "node ./e2e/true/setup.mjs",
+    "test:e2e:true:cleanup": "node ./e2e/true/cleanup.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.1.0",
@@ -26,6 +30,7 @@
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "@playwright/test": "^1.52.0",
     "@testing-library/jest-dom": "^6.6.0",
     "@testing-library/react": "^14.3.1",
     "@testing-library/user-event": "^14.5.2",

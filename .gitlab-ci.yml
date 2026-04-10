@@ -45,6 +45,76 @@ web_test:
     - npm ci
     - npm --workspace apps/web run test -- --run
 
+web_e2e:
+  image: mcr.microsoft.com/playwright:v1.52.0-jammy
+  stage: test
+  script:
+    - cd src
+    - npm ci
+    - npm --workspace apps/web run test:e2e
+
+web_e2e_true:
+  image: mcr.microsoft.com/playwright:v1.52.0-noble
+  stage: deploy
+  services:
+    - name: redis:7-alpine
+      alias: redis
+  variables:
+    REDIS_URL: redis://redis:6379/0
+    NEXT_PUBLIC_API_BASE_URL: http://127.0.0.1:8000
+    NEXT_PUBLIC_AUTH_REDIRECT_BASE_URL: http://127.0.0.1:3000
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+    - when: never
+  before_script:
+    - apt-get update
+    - apt-get install -y python3 python3-venv python3-pip
+  script:
+    - set -euo pipefail
+    - cd src
+    - mkdir -p .e2e-logs
+    - npm ci
+    - python3 -m venv .venv
+    - . .venv/bin/activate
+    - python -m pip install --upgrade pip
+    - cd apps/api
+    - python -m pip install -r requirements.txt
+    - nohup python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 > ../../.e2e-logs/api.log 2>&1 &
+    - cd ../worker
+    - python -m pip install -r requirements.txt
+    - nohup python -m celery -A worker.tasks worker --loglevel=info -P solo > ../../.e2e-logs/worker.log 2>&1 &
+    - |
+      for attempt in $(seq 1 20); do
+        if python -m celery -A worker.tasks inspect ping --timeout=5 > ../../.e2e-logs/worker-ping.log 2>&1; then
+          break
+        fi
+        if [ "$attempt" -eq 20 ]; then
+          echo "Worker failed to become healthy."
+          exit 1
+        fi
+        sleep 3
+      done
+    - cd ../../
+    - |
+      for attempt in $(seq 1 40); do
+        if python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5).read()"; then
+          break
+        fi
+        if [ "$attempt" -eq 40 ]; then
+          echo "API failed to become healthy."
+          exit 1
+        fi
+        sleep 3
+      done
+    - npm run test:web:e2e:true
+  artifacts:
+    when: always
+    expire_in: 7 days
+    paths:
+      - src/.e2e-logs/
+      - src/apps/web/playwright-report/
+      - src/apps/web/test-results/
+
 web_build:
   image: node:20
   stage: build
@@ -80,6 +150,15 @@ api_tests:
     - pip install -r requirements.txt
     - pytest -q
 
+api_integration_tests:
+  image: python:3.11
+  stage: test
+  script:
+    - cd src/apps/api
+    - python -m pip install --upgrade pip
+    - pip install -r requirements.txt
+    - pytest -q tests/integration
+
 worker_tests:
   image: python:3.11
   stage: test
@@ -98,9 +177,12 @@ promote_production:
     - web_lint
     - web_typecheck
     - web_test
+    - web_e2e
+    - web_e2e_true
     - web_build
     - api_build
     - api_tests
+    - api_integration_tests
     - worker_build
     - worker_tests
   rules:
