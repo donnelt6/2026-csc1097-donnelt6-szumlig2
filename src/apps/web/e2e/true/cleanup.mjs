@@ -3,11 +3,10 @@ import { getTrueE2EStateFile } from "./support/state.mjs";
 import fs from "node:fs";
 
 export default async function globalTeardown() {
-  // Only clean up when setup produced state for this run. This keeps teardown
-  // safe when setup fails early or Playwright aborts before initialization.
+  // Temporarily disabled so a true E2E run can be inspected afterward.
+  // Restore cleanup before relying on this test as a repeatable release gate.
   if (fs.existsSync(getTrueE2EStateFile())) {
-    await cleanupTrueE2E();
-    console.log("Cleaned true E2E hub data.");
+    console.log("True E2E cleanup is temporarily disabled. Leaving hub data in place.");
   } else {
     console.log("No true E2E state file found. Skipping cleanup.");
   }
