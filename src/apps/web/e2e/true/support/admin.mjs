@@ -287,5 +287,7 @@ export async function cleanupTrueE2E() {
   const client = createAdminClient();
   const state = readTrueE2EState();
   await cleanupHubData(client, state.hubId);
+  await runQuery(client.from("hub_members").delete().eq("hub_id", state.hubId));
+  await runQuery(client.from("hubs").delete().eq("id", state.hubId));
   clearTrueE2EState();
 }

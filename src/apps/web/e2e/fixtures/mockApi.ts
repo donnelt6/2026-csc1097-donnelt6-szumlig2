@@ -145,6 +145,15 @@ export async function installMockApi(page: Page, state: MockApiState) {
       return jsonResponse(route, state.hubs);
     }
 
+    if (method === "GET" && /^\/hubs\/[^/]+$/.test(path)) {
+      const hubId = path.split("/")[2];
+      const hub = state.hubs.find((entry) => entry.id === hubId);
+      if (!hub) {
+        return jsonResponse(route, { detail: "Hub not found" }, 404);
+      }
+      return jsonResponse(route, hub);
+    }
+
     if (method === "POST" && /^\/hubs\/[^/]+\/access$/.test(path)) {
       return emptyResponse(route);
     }
