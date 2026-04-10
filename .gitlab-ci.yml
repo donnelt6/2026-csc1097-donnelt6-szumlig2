@@ -45,6 +45,60 @@ web_test:
     - npm ci
     - npm --workspace apps/web run test -- --run
 
+web_e2e:
+  image: mcr.microsoft.com/playwright:v1.52.0-jammy
+  stage: test
+  script:
+    - cd src
+    - npm ci
+    - npm --workspace apps/web run test:e2e
+
+web_e2e_true:
+  image: mcr.microsoft.com/playwright:v1.52.0-jammy
+  stage: test
+  allow_failure: true
+  services:
+    - name: redis:7-alpine
+      alias: redis
+  variables:
+    REDIS_URL: redis://redis:6379/0
+    NEXT_PUBLIC_API_BASE_URL: http://127.0.0.1:8000
+    NEXT_PUBLIC_AUTH_REDIRECT_BASE_URL: http://127.0.0.1:3000
+  before_script:
+    - apt-get update
+    - apt-get install -y python3 python3-pip python3-venv
+  script:
+    - cd src
+    - mkdir -p .e2e-logs
+    - npm ci
+    - python3 -m pip install --upgrade pip
+    - pip3 install -r apps/api/requirements.txt
+    - pip3 install -r apps/worker/requirements.txt
+    - cd apps/api
+    - nohup python3 -m uvicorn app.main:app --host 127.0.0.1 --port 8000 > ../../.e2e-logs/api.log 2>&1 &
+    - cd ../worker
+    - nohup python3 -m celery -A worker.tasks worker --loglevel=info -P solo > ../../.e2e-logs/worker.log 2>&1 &
+    - cd ../../
+    - |
+      for attempt in $(seq 1 40); do
+        if python3 -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5).read()"; then
+          break
+        fi
+        if [ "$attempt" -eq 40 ]; then
+          echo "API failed to become healthy."
+          exit 1
+        fi
+        sleep 3
+      done
+    - npm run test:web:e2e:true
+  artifacts:
+    when: always
+    expire_in: 7 days
+    paths:
+      - src/.e2e-logs/
+      - src/apps/web/playwright-report/
+      - src/apps/web/test-results/
+
 web_build:
   image: node:20
   stage: build
@@ -80,6 +134,15 @@ api_tests:
     - pip install -r requirements.txt
     - pytest -q
 
+api_integration_tests:
+  image: python:3.11
+  stage: test
+  script:
+    - cd src/apps/api
+    - python -m pip install --upgrade pip
+    - pip install -r requirements.txt
+    - pytest -q tests/integration
+
 worker_tests:
   image: python:3.11
   stage: test
@@ -98,9 +161,11 @@ promote_production:
     - web_lint
     - web_typecheck
     - web_test
+    - web_e2e
     - web_build
     - api_build
     - api_tests
+    - api_integration_tests
     - worker_build
     - worker_tests
   rules:

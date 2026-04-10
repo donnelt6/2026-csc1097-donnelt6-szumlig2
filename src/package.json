@@ -10,7 +10,12 @@
     "dev:web": "npm --workspace apps/web run dev",
     "build:web": "npm --workspace apps/web run build",
     "lint:web": "npm --workspace apps/web run lint",
-    "typecheck:web": "npm --workspace apps/web run typecheck"
+    "typecheck:web": "npm --workspace apps/web run typecheck",
+    "test:web:e2e": "npm --workspace apps/web run test:e2e",
+    "test:web:e2e:true": "npm --workspace apps/web run test:e2e:true",
+    "test:web:e2e:true:setup": "npm --workspace apps/web run test:e2e:true:setup",
+    "test:web:e2e:true:cleanup": "npm --workspace apps/web run test:e2e:true:cleanup",
+    "test:api:integration": "cd apps/api && python -m pytest -q tests/integration"
   },
   "devDependencies": {
     "next": "^14.2.35",

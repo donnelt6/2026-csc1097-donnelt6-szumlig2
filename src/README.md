@@ -118,3 +118,17 @@ Chat read/write hardening also applies the standard read/write limiter to:
 3. Trigger the manual `promote_production` job only when the hosted environment should be brought online.
 4. Let Netlify and Railway deploy from the mirrored GitHub `main` commit.
 5. Confirm the `post_deploy_health` job passes against the production Railway API.
+
+## Higher-level tests
+- API integration tests: `cd apps/api && python -m pytest -q tests/integration`
+- Web E2E tests: `npm --workspace apps/web run test:e2e`
+- Web true E2E tests: `npm --workspace apps/web run test:e2e:true`
+- The API integration layer uses the real FastAPI app with offline doubles for auth, store, and queue collaborators.
+- The web E2E layer runs the real Next.js app in a browser with E2E-only fake auth and mocked API responses for critical journeys.
+- The true E2E layer runs the real web app, API, worker, Redis, Supabase auth/storage, and live OpenAI-backed ingestion/chat.
+
+## True E2E setup
+- Required secrets: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_STORAGE_BUCKET`, `OPENAI_API_KEY`.
+- Required test credentials: `CADDIE_TRUE_E2E_PASSWORD`. Optional: `CADDIE_TRUE_E2E_EMAIL`, `CADDIE_TRUE_E2E_RUN_ID`, `CADDIE_TRUE_E2E_QUESTION`.
+- The setup script creates or reuses one dedicated hub namespace per run id, clears prior chat/source data for that hub, then Playwright drives the real `/auth`, upload, ingestion, and chat flow.
+- Local run order: start Redis, API, worker, and web with the real env vars, then run `npm --workspace apps/web run test:e2e:true`.
