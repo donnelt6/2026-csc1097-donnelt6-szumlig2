@@ -270,6 +270,6 @@ export async function signIn(page: Page) {
   await page.getByLabel("Email").fill(TEST_EMAIL);
   await page.getByLabel("Password").fill(TEST_PASSWORD);
   await page.getByRole("button", { name: "Sign in" }).click();
-  await page.waitForURL("**/");
-  await expect(page.getByText("Recent Hubs")).toBeVisible();
+  await page.waitForURL((url) => url.pathname === "/");
+  await expect(page.getByRole("heading", { name: "Discover your knowledge archive." })).toBeVisible();
 }
