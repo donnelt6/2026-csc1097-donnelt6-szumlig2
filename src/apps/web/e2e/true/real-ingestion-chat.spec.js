@@ -70,7 +70,9 @@ async function ensureSourceSelected(page) {
   const label = (await toggle.textContent()) || "";
   if (/Sources \(0\/\d+\)/.test(label)) {
     await toggle.click();
-    await page.getByRole("button", { name: "Select all" }).click();
+    const sourceButton = page.getByRole("button", { name: readState().fixtureFileName });
+    await expect(sourceButton).toBeVisible();
+    await sourceButton.click();
     await expect(toggle).not.toHaveText(/Sources \(0\/\d+\)/);
   }
 }
@@ -89,7 +91,7 @@ test("real sign-in, upload, and grounded chat path works end to end", async ({ p
   await page.getByRole("button", { name: "Sign in" }).click();
 
   await page.waitForURL("**/");
-  await expect(page.getByText("Recent Hubs")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Discover your knowledge archive." })).toBeVisible();
 
   await page.goto(`/hubs/${state.hubId}?tab=sources`);
   await expect(page.getByText("Hub Sources")).toBeVisible();
@@ -103,7 +105,7 @@ test("real sign-in, upload, and grounded chat path works end to end", async ({ p
   const source = await waitForSourceCompletion(adminClient, state.hubId, state.fixtureFileName);
 
   await page.reload();
-  const sourceRow = page.locator(".sources__row", { hasText: state.fixtureFileName });
+  const sourceRow = page.locator(".sources__row", { hasText: state.fixtureFileName }).first();
   await expect(sourceRow).toBeVisible();
   await expect(sourceRow).toContainText("Complete");
 
