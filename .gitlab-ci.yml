@@ -54,7 +54,7 @@ web_e2e:
     - npm --workspace apps/web run test:e2e
 
 web_e2e_true:
-  image: mcr.microsoft.com/playwright:v1.52.0-jammy
+  image: mcr.microsoft.com/playwright:v1.52.0-noble
   stage: test
   allow_failure: true
   services:
@@ -66,22 +66,22 @@ web_e2e_true:
     NEXT_PUBLIC_AUTH_REDIRECT_BASE_URL: http://127.0.0.1:3000
   before_script:
     - apt-get update
-    - apt-get install -y python3 python3-pip python3-venv
+    - apt-get install -y python3.11 python3.11-venv python3-pip
   script:
     - cd src
     - mkdir -p .e2e-logs
     - npm ci
-    - python3 -m pip install --upgrade pip
+    - python3.11 -m pip install --upgrade pip
     - cd apps/api
-    - pip3 install -r requirements.txt
-    - nohup python3 -m uvicorn app.main:app --host 127.0.0.1 --port 8000 > ../../.e2e-logs/api.log 2>&1 &
+    - python3.11 -m pip install -r requirements.txt
+    - nohup python3.11 -m uvicorn app.main:app --host 127.0.0.1 --port 8000 > ../../.e2e-logs/api.log 2>&1 &
     - cd ../worker
-    - pip3 install -r requirements.txt
-    - nohup python3 -m celery -A worker.tasks worker --loglevel=info -P solo > ../../.e2e-logs/worker.log 2>&1 &
+    - python3.11 -m pip install -r requirements.txt
+    - nohup python3.11 -m celery -A worker.tasks worker --loglevel=info -P solo > ../../.e2e-logs/worker.log 2>&1 &
     - cd ../../
     - |
       for attempt in $(seq 1 40); do
-        if python3 -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5).read()"; then
+        if python3.11 -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5).read()"; then
           break
         fi
         if [ "$attempt" -eq 40 ]; then
