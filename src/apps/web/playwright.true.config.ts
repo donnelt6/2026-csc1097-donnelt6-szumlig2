@@ -2,7 +2,9 @@ import { defineConfig } from "@playwright/test";
 
 export default defineConfig({
   testDir: "./e2e/true",
-  timeout: 240_000,
+  // This suite can legitimately spend several minutes on ingestion plus one
+  // real grounded answer, so the test budget must exceed both waits combined.
+  timeout: 450_000,
   expect: {
     timeout: 15_000,
   },

@@ -121,11 +121,12 @@ function buildE2EUser(email: string, overrides?: Partial<User> | null): User {
 
 function buildE2ESession(email: string, overrides?: Partial<User> | null): Session {
   const user = buildE2EUser(email, overrides);
+  const expiresAt = Math.floor(Date.now() / 1000) + 3600;
   return {
     access_token: "e2e-access-token",
     token_type: "bearer",
     expires_in: 3600,
-    expires_at: 1_800_000_000,
+    expires_at: expiresAt,
     refresh_token: "e2e-refresh-token",
     user,
   } as Session;

@@ -263,6 +263,8 @@ export async function installMockApi(page: Page, state: MockApiState) {
       });
     }
 
+    // Keep the mocked suite strict by default so new API dependencies fail
+    // loudly instead of silently bypassing coverage.
     return jsonResponse(route, { detail: `Unhandled mock API route: ${method} ${path}` }, 404);
   });
 
@@ -280,5 +282,5 @@ export async function signIn(page: Page) {
   await page.getByLabel("Password").fill(TEST_PASSWORD);
   await page.getByRole("button", { name: "Sign in" }).click();
   await page.waitForURL((url) => url.pathname === "/");
-  await expect(page.getByRole("heading", { name: "Discover your knowledge archive." })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Caddie" })).toBeVisible();
 }

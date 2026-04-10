@@ -209,7 +209,11 @@ def integration_services(monkeypatch: pytest.MonkeyPatch) -> FakeApiServices:
     monkeypatch.setattr(store_module, "chat", services.chat)
     monkeypatch.setattr(store_module, "log_activity", services.log_activity)
     monkeypatch.setattr(chat_router, "require_hub_member", services.require_member)
-    monkeypatch.setattr(sources_router.celery_app, "send_task", lambda task_name, args: services.queue_task(task_name, args))
+    monkeypatch.setattr(
+        sources_router.celery_app,
+        "send_task",
+        lambda task_name, args=None, **kwargs: services.queue_task(task_name, args or []),
+    )
     return services
 
 
@@ -226,4 +230,5 @@ def integration_client(integration_services: FakeApiServices) -> TestClient:
     app.dependency_overrides[get_supabase_user_client] = lambda: DummyClient()
     with TestClient(app) as test_client:
         yield test_client
-    app.dependency_overrides = {}
+    for dependency in (get_current_user, get_rate_limiter, get_supabase_user_client):
+        app.dependency_overrides.pop(dependency, None)

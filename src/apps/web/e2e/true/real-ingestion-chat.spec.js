@@ -1,20 +1,20 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const { test, expect } = require("@playwright/test");
-const { createClient } = require("@supabase/supabase-js");
 
 function readState() {
   const statePath = path.resolve(__dirname, ".runtime", "true-e2e-state.json");
   return JSON.parse(fs.readFileSync(statePath, "utf8"));
 }
 
-function createAdminClient() {
-  return createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-  });
+async function createAdminClient() {
+  const { createAdminClient: buildAdminClient } = await import("./support/admin.mjs");
+  return buildAdminClient();
+}
+
+async function assertSignedIn(page) {
+  await page.waitForURL("**/");
+  await expect(page.getByRole("link", { name: "Caddie" })).toBeVisible();
 }
 
 async function findLatestSource(client, hubId, originalName) {
@@ -86,7 +86,7 @@ test.describe.configure({ mode: "serial" });
 
 test("real sign-in, upload, and grounded chat path works end to end", async ({ page }) => {
   const state = readState();
-  const adminClient = createAdminClient();
+  const adminClient = await createAdminClient();
   const fixturePath = path.resolve(__dirname, "fixtures", "true-e2e-knowledge.txt");
   const fixtureBuffer = fs.readFileSync(fixturePath);
 
@@ -95,8 +95,7 @@ test("real sign-in, upload, and grounded chat path works end to end", async ({ p
   await page.getByLabel("Password").fill(state.password);
   await page.getByRole("button", { name: "Sign in" }).click();
 
-  await page.waitForURL("**/");
-  await expect(page.getByRole("heading", { name: "Discover your knowledge archive." })).toBeVisible();
+  await assertSignedIn(page);
 
   await page.goto(`/hubs/${state.hubId}?tab=sources`);
   await expect(page.getByText("Hub Sources")).toBeVisible();

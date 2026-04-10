@@ -143,6 +143,19 @@ async function ensureHub(client, ownerId, hubName) {
   return row;
 }
 
+async function listStaleTrueE2EHubs(client, ownerId, activeHubName, staleBeforeIso) {
+  const { data, error } = await client
+    .from("hubs")
+    .select("id,name")
+    .eq("owner_id", ownerId)
+    .like("name", "Caddie True E2E %")
+    .lt("created_at", staleBeforeIso);
+  if (error) {
+    throw error;
+  }
+  return (data || []).filter((hub) => hub.name !== activeHubName);
+}
+
 async function listStoragePaths(client, bucket, prefix) {
   const pending = [prefix];
   const paths = [];
@@ -267,10 +280,23 @@ export async function cleanupHubData(client, hubId) {
   }
 }
 
+async function cleanupStaleTrueE2EHubs(client, ownerId, activeHubName) {
+  // Sweep hubs left behind by interrupted CI runs so the shared test project
+  // does not accumulate one orphaned namespace per pipeline forever.
+  const staleBeforeIso = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  const staleHubs = await listStaleTrueE2EHubs(client, ownerId, activeHubName, staleBeforeIso);
+  for (const hub of staleHubs) {
+    await cleanupHubData(client, hub.id);
+    await runQuery(client.from("hub_members").delete().eq("hub_id", hub.id));
+    await runQuery(client.from("hubs").delete().eq("id", hub.id));
+  }
+}
+
 export async function setupTrueE2E() {
   const client = createAdminClient();
   const config = getTrueE2EConfig();
   const user = await ensureUser(client, config);
+  await cleanupStaleTrueE2EHubs(client, user.id, config.hubName);
   const hub = await ensureHub(client, user.id, config.hubName);
   await cleanupHubData(client, hub.id);
 
