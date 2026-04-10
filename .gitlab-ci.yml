@@ -55,8 +55,7 @@ web_e2e:
 
 web_e2e_true:
   image: mcr.microsoft.com/playwright:v1.52.0-noble
-  stage: test
-  allow_failure: true
+  stage: deploy
   services:
     - name: redis:7-alpine
       alias: redis
@@ -64,6 +63,9 @@ web_e2e_true:
     REDIS_URL: redis://redis:6379/0
     NEXT_PUBLIC_API_BASE_URL: http://127.0.0.1:8000
     NEXT_PUBLIC_AUTH_REDIRECT_BASE_URL: http://127.0.0.1:3000
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+    - when: never
   before_script:
     - apt-get update
     - apt-get install -y python3 python3-venv python3-pip
@@ -164,6 +166,7 @@ promote_production:
     - web_typecheck
     - web_test
     - web_e2e
+    - web_e2e_true
     - web_build
     - api_build
     - api_tests
