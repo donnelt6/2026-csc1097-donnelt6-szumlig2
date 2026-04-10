@@ -72,11 +72,11 @@ web_e2e_true:
     - mkdir -p .e2e-logs
     - npm ci
     - python3 -m pip install --upgrade pip
-    - pip3 install -r apps/api/requirements.txt
-    - pip3 install -r apps/worker/requirements.txt
     - cd apps/api
+    - pip3 install -r requirements.txt
     - nohup python3 -m uvicorn app.main:app --host 127.0.0.1 --port 8000 > ../../.e2e-logs/api.log 2>&1 &
     - cd ../worker
+    - pip3 install -r requirements.txt
     - nohup python3 -m celery -A worker.tasks worker --loglevel=info -P solo > ../../.e2e-logs/worker.log 2>&1 &
     - cd ../../
     - |
