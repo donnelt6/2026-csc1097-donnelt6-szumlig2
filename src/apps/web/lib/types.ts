@@ -195,6 +195,11 @@ export interface AnalyticsTopSource {
   citation_flags: number;
 }
 
+export interface NeverCitedSource {
+  source_id: string;
+  source_name?: string | null;
+}
+
 export interface ChatAnalyticsSummary {
   window_days: number;
   total_questions: number;
@@ -212,6 +217,9 @@ export interface ChatAnalyticsSummary {
   rewrite_usage_rate: number;
   zero_hit_rate: number;
   top_sources: AnalyticsTopSource[];
+  never_cited_sources?: NeverCitedSource[];
+  never_cited_count?: number;
+  total_complete_sources?: number;
 }
 
 export interface ChatAnalyticsTrendPoint {
@@ -219,6 +227,7 @@ export interface ChatAnalyticsTrendPoint {
   questions: number;
   answers: number;
   helpful: number;
+  not_helpful?: number;
   citation_opens: number;
   citation_flags: number;
 }

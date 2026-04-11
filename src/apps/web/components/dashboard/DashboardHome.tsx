@@ -9,7 +9,6 @@ import {
   MagnifyingGlassIcon,
   RectangleStackIcon,
   SparklesIcon,
-  BellIcon,
   ChatBubbleLeftIcon,
   ArrowPathIcon,
 } from '@heroicons/react/24/outline';
@@ -19,10 +18,10 @@ import { resolveHubAppearance } from '../../lib/hubAppearance';
 import type { ChatSessionSummary } from '../../lib/types';
 import { useAuth } from '../auth/AuthProvider';
 import { describeEventParts, formatRelativeTime, getEventTone } from '../../lib/utils';
-import { MiniCalendar } from './MiniCalendar';
 import { getEventIcon, buildHubNameMap } from './dashboardUtils';
 import { selectDashboardPrompts } from './dashboardPromptRules';
 import { ProfileAvatar } from '../profile/ProfileAvatar';
+import { RemindersPanel } from './RemindersPanel';
 
 function DashboardHomeHubSkeleton({ index }: { index: number }) {
   return (
@@ -77,25 +76,11 @@ function DashboardHomePromptSkeleton({ index }: { index: number }) {
   );
 }
 
-function DashboardHomeReminderEmptySkeleton() {
-  return (
-    <div className="dash-empty-state dash-empty-state--compact dash-empty-state--skeleton" aria-hidden="true" data-testid="dashboard-reminder-empty-skeleton">
-      <span className="dash-skeleton dash-skeleton--reminder-empty-icon" />
-      <span className="dash-skeleton dash-skeleton--reminder-empty-line" />
-      <span className="dash-skeleton dash-skeleton--reminder-empty-line dash-skeleton--reminder-empty-line-short" />
-    </div>
-  );
-}
-
 export function DashboardHome() {
   const { user } = useAuth();
   const router = useRouter();
   const [heroSearch, setHeroSearch] = useState('');
   const [promptRefreshIndex, setPromptRefreshIndex] = useState(0);
-
-  const now = new Date();
-  const [calMonth, setCalMonth] = useState(now.getMonth());
-  const [calYear, setCalYear] = useState(now.getFullYear());
 
   const { data: hubs, isLoading: hubsLoading } = useQuery({
     queryKey: ['hubs'],
@@ -103,7 +88,7 @@ export function DashboardHome() {
     staleTime: 0,
   });
 
-  // Fetch ALL reminders (no status filter) so calendar shows everything
+  // Fetch ALL reminders (no status filter) so suggested prompts can use them
   const { data: reminders, isLoading: remindersLoading } = useQuery({
     queryKey: ['dashboard-reminders'],
     queryFn: () => listReminders({}),
@@ -113,22 +98,6 @@ export function DashboardHome() {
   const recentHubs = hubs?.slice(0, 2) ?? [];
 
   const hubNameMap = buildHubNameMap(hubs);
-
-  // Reminders for the selected calendar month
-  const monthReminders = reminders?.filter((r) => {
-    const d = new Date(r.due_at);
-    return d.getMonth() === calMonth && d.getFullYear() === calYear;
-  }) ?? [];
-
-  const reminderDays = new Set(monthReminders.map((r) => new Date(r.due_at).getDate()));
-
-  // Show closest reminders (upcoming first, then recent past)
-  const sortedReminders = [...(reminders ?? [])].sort((a, b) => {
-    const aTime = Math.abs(new Date(a.due_at).getTime() - Date.now());
-    const bTime = Math.abs(new Date(b.due_at).getTime() - Date.now());
-    return aTime - bTime;
-  });
-  const closestReminders = sortedReminders.slice(0, 4);
 
   const searchRef = useRef<HTMLDivElement>(null);
   const [searchFocused, setSearchFocused] = useState(false);
@@ -419,47 +388,7 @@ export function DashboardHome() {
 
         <div className="dash-col-side">
           {/* Reminders */}
-          <div className="dash-reminders-card">
-            <h2 className="dash-reminders-title">Reminders</h2>
-            <MiniCalendar
-                month={calMonth}
-                year={calYear}
-                onMonthChange={(m, y) => { setCalMonth(m); setCalYear(y); }}
-                reminderDays={reminderDays}
-              />
-              {closestReminders.length > 0 && (
-                <>
-                  <hr className="dash-reminders-divider" />
-                  <div className="dash-reminder-list">
-                    {closestReminders.map((r) => {
-                      const dueDate = new Date(r.due_at);
-                      return (
-                        <Link key={r.id} href={`/hubs/${r.hub_id}?tab=dashboard&dashTab=reminders`} className="dash-reminder-item">
-                          <div className={`dash-reminder-dot-wrap dash-reminder-dot-wrap--${r.status}`}>
-                            <span className="dash-reminder-dot-inner" />
-                          </div>
-                          <div className="dash-reminder-info">
-                            <p className="dash-reminder-title">{r.message || 'Reminder'}</p>
-                            <p className="dash-reminder-meta">
-                              {hubNameMap.get(r.hub_id) ?? 'Hub'} &middot; {dueDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} &middot; {dueDate.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
-                            </p>
-                          </div>
-                        </Link>
-                      );
-                    })}
-                  </div>
-                </>
-              )}
-              {closestReminders.length === 0 && remindersLoading && (
-                <DashboardHomeReminderEmptySkeleton />
-              )}
-              {closestReminders.length === 0 && !remindersLoading && (
-                <div className="dash-empty-state dash-empty-state--compact">
-                  <BellIcon className="dash-empty-state-icon" />
-                  <p className="dash-empty-state-text">Set up reminders in any hub to see them here</p>
-                </div>
-              )}
-          </div>
+          <RemindersPanel variant="sidebar" />
 
           {/* Suggested Prompts */}
           {(promptsLoading || suggestedPrompts.length > 0) && (

@@ -16,6 +16,7 @@ import {
   decideSourceSuggestion,
   dismissContentFlag,
   dismissFlaggedChat,
+  getFlaggedChat,
   listFlaggedChats,
   listFlaggedContent,
   listSourceSuggestions,
@@ -160,10 +161,15 @@ export function AdminDashboard({ hubId, hubRole, onSwitchTab }: AdminDashboardPr
 
   const resolvedCount = resolvedFlags.length + dismissedFlags.length + resolvedContentFlags.length + dismissedContentFlags.length;
   const allResolved = useMemo(
-    () => [...resolvedFlags, ...dismissedFlags].sort(
+    () => [
+      ...resolvedFlags,
+      ...dismissedFlags,
+      ...resolvedContentFlags.map((f) => ({ ...f, session_title: f.title, question_preview: f.preview })),
+      ...dismissedContentFlags.map((f) => ({ ...f, session_title: f.title, question_preview: f.preview })),
+    ].sort(
       (a, b) => new Date(b.flagged_at).getTime() - new Date(a.flagged_at).getTime(),
     ),
-    [resolvedFlags, dismissedFlags],
+    [resolvedFlags, dismissedFlags, resolvedContentFlags, dismissedContentFlags],
   );
 
   const decideSuggestionMutation = useMutation({
@@ -248,11 +254,17 @@ export function AdminDashboard({ hubId, hubRole, onSwitchTab }: AdminDashboardPr
     ]);
   };
 
-  const openEditModal = (flagId: string, item: FlaggedChatQueueItem) => {
+  const openEditModal = async (flagId: string) => {
     setEditFlagId(flagId);
-    setDraftContent(item.answer_preview);
-    setDraftCitations('[]');
     setEditModalOpen(true);
+    try {
+      const detail = await getFlaggedChat(hubId, flagId);
+      setDraftContent(detail.flagged_message.content);
+      setDraftCitations(JSON.stringify(detail.flagged_message.citations));
+    } catch {
+      setDraftContent('');
+      setDraftCitations('[]');
+    }
   };
 
   if (!canModerate) {
@@ -278,7 +290,10 @@ export function AdminDashboard({ hubId, hubRole, onSwitchTab }: AdminDashboardPr
   return (
     <div className="admin">
       {activeAdminTab === 'analytics' ? (
-        <HubAnalyticsPanel hubId={hubId} hubRole={hubRole} />
+        <>
+          <h2 className="admin__title">AI Analytics</h2>
+          <HubAnalyticsPanel hubId={hubId} hubRole={hubRole} />
+        </>
       ) : (
       <>
       <h2 className="admin__title">Admin Console</h2>
@@ -434,7 +449,7 @@ export function AdminDashboard({ hubId, hubRole, onSwitchTab }: AdminDashboardPr
                     key={item.id}
                     item={item}
                     onRegenerate={() => regenerateMutation.mutate(item.id)}
-                    onEdit={() => openEditModal(item.id, item)}
+                    onEdit={() => openEditModal(item.id)}
                     onDismiss={() => dismissMutation.mutate(item.id)}
                     regenerating={regenerateMutation.isPending}
                     dismissing={dismissMutation.isPending}

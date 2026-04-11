@@ -12,6 +12,7 @@ from ...schemas import (
     ChatEventType,
     ChatFeedbackRating,
     CitationFeedbackEventType,
+    NeverCitedSource,
 )
 from .common_helpers import _clamp_window_days, _iso_day, _safe_float, _safe_int
 
@@ -68,7 +69,19 @@ class AnalyticsStoreMixin:
             elif row.get("event_type") == CitationFeedbackEventType.flagged_incorrect.value:
                 source_counts[source_id]["flags"] += 1
         ranked_sources = sorted(source_counts.items(), key=lambda item: (max(item[1]["returns"], item[1]["opens"]), item[1]["opens"], item[1]["flags"], item[0]), reverse=True)[:10]
-        source_name_map = self._source_name_map([source_id for source_id, _counts in ranked_sources])
+
+        # Fetch every complete source in the hub once so we can (a) name the ranked list and
+        # (b) surface "never cited" sources for coverage gaps.
+        hub_source_rows = self.service_client.table("sources").select("id,original_name").eq("hub_id", str(hub_id)).eq("status", "complete").execute().data or []
+        hub_source_name_map = {str(row["id"]): str(row.get("original_name") or "") for row in hub_source_rows if row.get("id")}
+        cited_source_ids = {source_id for source_id, counts in source_counts.items() if counts["returns"] > 0}
+        never_cited_ids = [sid for sid in hub_source_name_map.keys() if sid not in cited_source_ids]
+        never_cited_ids.sort(key=lambda sid: hub_source_name_map.get(sid, ""))
+        never_cited_sources = [
+            NeverCitedSource(source_id=sid, source_name=hub_source_name_map.get(sid) or None)
+            for sid in never_cited_ids[:10]
+        ]
+        source_name_map = hub_source_name_map
         return ChatAnalyticsSummary(
             window_days=window_days,
             total_questions=total_questions,
@@ -95,6 +108,9 @@ class AnalyticsStoreMixin:
                 )
                 for source_id, counts in ranked_sources
             ],
+            never_cited_sources=never_cited_sources,
+            never_cited_count=len(never_cited_ids),
+            total_complete_sources=len(hub_source_name_map),
         )
 
     # Build day-by-day analytics points for charts and trend views.
@@ -126,8 +142,13 @@ class AnalyticsStoreMixin:
                 points[day].answers += 1
         for row in feedback_rows:
             day = _iso_day(row.get("updated_at"))
-            if day in points and row.get("rating") == ChatFeedbackRating.helpful.value:
+            if day not in points:
+                continue
+            rating = row.get("rating")
+            if rating == ChatFeedbackRating.helpful.value:
                 points[day].helpful += 1
+            elif rating == ChatFeedbackRating.not_helpful.value:
+                points[day].not_helpful += 1
         for row in citation_rows:
             day = _iso_day(row.get("created_at"))
             if day not in points:

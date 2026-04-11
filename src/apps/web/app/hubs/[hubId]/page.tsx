@@ -22,7 +22,7 @@ import { useSearch } from "../../../lib/SearchContext";
 import type { HubTab } from "../../../lib/HubTabContext";
 import type { Hub } from "../../../lib/types";
 
-const VALID_TABS: HubTab[] = ['chat', 'sources', 'dashboard', 'members', 'settings', 'admin'];
+const VALID_TABS: HubTab[] = ['chat', 'sources', 'dashboard', 'members', 'admin'];
 
 export default function HubDetail({ params }: { params: { hubId: string } }) {
   const queryClient = useQueryClient();
@@ -210,6 +210,12 @@ export default function HubDetail({ params }: { params: { hubId: string } }) {
                 p.delete('addSource');
                 router.replace(`/hubs/${params.hubId}?${p.toString()}`, { scroll: false });
               }}
+              focusSourceId={searchParams.get('focusSource') ?? undefined}
+              onFocusHandled={() => {
+                const p = new URLSearchParams(searchParams.toString());
+                p.delete('focusSource');
+                router.replace(`/hubs/${params.hubId}?${p.toString()}`, { scroll: false });
+              }}
             />
           )}
           {activeTab === 'members' && (
@@ -241,11 +247,6 @@ export default function HubDetail({ params }: { params: { hubId: string } }) {
                   canEdit={canUpload}
                 />
               )}
-            </div>
-          )}
-          {activeTab === 'settings' && (
-            <div className="hub-settings">
-              <p className="muted">Hub settings coming soon.</p>
             </div>
           )}
           {activeTab === 'admin' && (

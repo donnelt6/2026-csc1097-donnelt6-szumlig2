@@ -1,11 +1,14 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronDownIcon } from "@heroicons/react/24/outline";
 
 import { getHubAnalyticsSummary, getHubAnalyticsTrends } from "../lib/api";
 import type { AnalyticsTopSource, ChatAnalyticsTrendPoint, MembershipRole } from "../lib/types";
+
+type TopSourcesMode = "opens" | "returns" | "flags";
 
 function MetricCard({
   label,
@@ -48,10 +51,15 @@ export function HubAnalyticsPanel({
   hubId: string;
   hubRole?: MembershipRole | null;
 }) {
+  const router = useRouter();
   const canViewAnalytics = hubRole === "owner" || hubRole === "admin";
-  const [topSourcesMode, setTopSourcesMode] = useState<"opens" | "returns">("opens");
+  const [topSourcesMode, setTopSourcesMode] = useState<TopSourcesMode>("opens");
   const [topSourcesMenuOpen, setTopSourcesMenuOpen] = useState(false);
   const topSourcesMenuRef = useRef<HTMLDivElement>(null);
+
+  const handleSourceClick = (sourceId: string) => {
+    router.push(`/hubs/${hubId}?tab=sources&focusSource=${sourceId}`);
+  };
 
   useEffect(() => {
     if (!topSourcesMenuOpen) {
@@ -120,9 +128,16 @@ export function HubAnalyticsPanel({
 
   const latencyStatus = getLatencyStatus(summary.average_latency_ms);
   const sortedTopSources = [...summary.top_sources]
+    .filter((source) => topSourcesMode !== "flags" || source.citation_flags > 0)
     .sort((left, right) => compareTopSources(left, right, topSourcesMode))
     .slice(0, 5);
-  const topSourcesModeLabel = topSourcesMode === "opens" ? "By citation opens" : "By citations returned";
+  const topSourcesModeLabel =
+    topSourcesMode === "opens" ? "By citation opens"
+    : topSourcesMode === "returns" ? "By citations returned"
+    : "By flags";
+  const neverCitedSources = summary.never_cited_sources ?? [];
+  const neverCitedCount = summary.never_cited_count ?? neverCitedSources.length;
+  const totalCompleteSources = summary.total_complete_sources ?? 0;
 
   return (
     <div className="hub-analytics">
@@ -149,7 +164,7 @@ export function HubAnalyticsPanel({
       </div>
 
       <div className="hub-analytics__grid">
-        <section className="card hub-analytics__panel">
+        <section className="card hub-analytics__panel hub-analytics__panel--wide">
           <div className="hub-analytics__panel-header">
             <h4>Recent trend</h4>
             <span className="muted">{trends.window_days} days</span>
@@ -158,6 +173,14 @@ export function HubAnalyticsPanel({
             {trends.points.map((point) => (
               <TrendBar key={point.date} point={point} maxQuestions={maxQuestions} />
             ))}
+          </div>
+          <div className="hub-analytics__trend-legend">
+            <span className="hub-analytics__trend-legend-item">
+              <span className="hub-analytics__trend-legend-dot" /> Questions
+            </span>
+            <span className="hub-analytics__trend-legend-item">
+              <span className="hub-analytics__trend-legend-dot hub-analytics__trend-legend-dot--unhelpful" /> Unhelpful
+            </span>
           </div>
         </section>
 
@@ -199,26 +222,77 @@ export function HubAnalyticsPanel({
                   >
                     By citations returned
                   </button>
+                  <button
+                    type="button"
+                    className="hub-analytics__source-filter-option"
+                    onClick={() => {
+                      setTopSourcesMode("flags");
+                      setTopSourcesMenuOpen(false);
+                    }}
+                    role="menuitem"
+                  >
+                    By flags
+                  </button>
                 </div>
               )}
             </div>
           </div>
           {sortedTopSources.length === 0 ? (
-            <p className="muted">No citation interactions recorded yet.</p>
+            <p className="muted">
+              {topSourcesMode === "flags"
+                ? "No sources have been flagged in this window."
+                : "No citation interactions recorded yet."}
+            </p>
           ) : (
             <div className="hub-analytics__source-list">
               {sortedTopSources.map((source) => (
-                <div key={source.source_id} className="hub-analytics__source-row">
-                  <div>
-                    <strong>{source.source_name ?? source.source_id}</strong>
-                    <div className="muted hub-analytics__source-id">{source.source_id}</div>
-                  </div>
+                <button
+                  key={source.source_id}
+                  type="button"
+                  className="hub-analytics__source-row hub-analytics__source-row--clickable"
+                  onClick={() => handleSourceClick(source.source_id)}
+                  title={source.source_name ?? source.source_id}
+                >
+                  <strong className="hub-analytics__source-name">{source.source_name ?? source.source_id}</strong>
                   <div className="hub-analytics__source-stats">
                     <span>{source.citation_returns} returned</span>
                     <span>{source.citation_opens} opens</span>
                     <span>{source.citation_flags} flags</span>
                   </div>
-                </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </section>
+
+        <section className="card hub-analytics__panel">
+          <div className="hub-analytics__panel-header">
+            <h4>Coverage gaps</h4>
+            <span className="muted">
+              {totalCompleteSources > 0
+                ? `${neverCitedCount} of ${totalCompleteSources} never cited`
+                : "No sources"}
+            </span>
+          </div>
+          {neverCitedSources.length === 0 ? (
+            <p className="muted">
+              {neverCitedCount === 0 && totalCompleteSources > 0
+                ? "Every source has been cited at least once. Nice."
+                : "No sources to show."}
+            </p>
+          ) : (
+            <div className="hub-analytics__source-list">
+              {neverCitedSources.map((source) => (
+                <button
+                  key={source.source_id}
+                  type="button"
+                  className="hub-analytics__source-row hub-analytics__source-row--clickable"
+                  onClick={() => handleSourceClick(source.source_id)}
+                  title={source.source_name ?? source.source_id}
+                >
+                  <strong className="hub-analytics__source-name">{source.source_name ?? source.source_id}</strong>
+                  <span className="hub-analytics__coverage-tag">Never cited</span>
+                </button>
               ))}
             </div>
           )}
@@ -228,28 +302,32 @@ export function HubAnalyticsPanel({
   );
 }
 
-function compareTopSources(left: AnalyticsTopSource, right: AnalyticsTopSource, mode: "opens" | "returns"): number {
-  const primary = mode === "opens" ? right.citation_opens - left.citation_opens : right.citation_returns - left.citation_returns;
+function compareTopSources(left: AnalyticsTopSource, right: AnalyticsTopSource, mode: TopSourcesMode): number {
+  const primaryBy = mode === "opens" ? "citation_opens" : mode === "returns" ? "citation_returns" : "citation_flags";
+  const primary = right[primaryBy] - left[primaryBy];
   if (primary !== 0) {
     return primary;
   }
-  const secondary = mode === "opens" ? right.citation_returns - left.citation_returns : right.citation_opens - left.citation_opens;
+  // Secondary ordering: whichever other metric is most signal-rich
+  const secondary = (right.citation_opens + right.citation_returns) - (left.citation_opens + left.citation_returns);
   if (secondary !== 0) {
     return secondary;
-  }
-  const tertiary = right.citation_flags - left.citation_flags;
-  if (tertiary !== 0) {
-    return tertiary;
   }
   return left.source_id.localeCompare(right.source_id);
 }
 
 function TrendBar({ point, maxQuestions }: { point: ChatAnalyticsTrendPoint; maxQuestions: number }) {
   const height = point.questions > 0 ? Math.max(6, Math.round((point.questions / maxQuestions) * 72)) : 0;
+  const notHelpful = point.not_helpful ?? 0;
+  const unhelpfulHeight = notHelpful > 0 ? Math.max(4, Math.round((notHelpful / maxQuestions) * 72)) : 0;
+  const title = `${point.date}: ${point.questions} questions, ${point.helpful} helpful, ${notHelpful} unhelpful`;
   return (
-    <div className="hub-analytics__trend-day" title={`${point.date}: ${point.questions} questions, ${point.helpful} helpful`}>
+    <div className="hub-analytics__trend-day" title={title}>
       <div className="hub-analytics__trend-bars">
         {height > 0 ? <span className="hub-analytics__trend-bar" style={{ height }} /> : null}
+        {unhelpfulHeight > 0 ? (
+          <span className="hub-analytics__trend-bar hub-analytics__trend-bar--unhelpful" style={{ height: unhelpfulHeight }} />
+        ) : null}
       </div>
       <span className="hub-analytics__trend-label">{point.date.slice(5)}</span>
     </div>
