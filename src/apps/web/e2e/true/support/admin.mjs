@@ -287,7 +287,6 @@ async function cleanupStaleTrueE2EHubs(client, ownerId, activeHubName) {
   const staleHubs = await listStaleTrueE2EHubs(client, ownerId, activeHubName, staleBeforeIso);
   for (const hub of staleHubs) {
     await cleanupHubData(client, hub.id);
-    await runQuery(client.from("hub_members").delete().eq("hub_id", hub.id));
     await runQuery(client.from("hubs").delete().eq("id", hub.id));
   }
 }
@@ -313,7 +312,6 @@ export async function cleanupTrueE2E() {
   const client = createAdminClient();
   const state = readTrueE2EState();
   await cleanupHubData(client, state.hubId);
-  await runQuery(client.from("hub_members").delete().eq("hub_id", state.hubId));
   await runQuery(client.from("hubs").delete().eq("id", state.hubId));
   clearTrueE2EState();
 }
