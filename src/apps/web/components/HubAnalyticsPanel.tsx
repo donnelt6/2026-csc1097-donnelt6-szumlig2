@@ -176,7 +176,7 @@ export function HubAnalyticsPanel({
           </div>
           <div className="hub-analytics__trend-legend">
             <span className="hub-analytics__trend-legend-item">
-              <span className="hub-analytics__trend-legend-dot" /> Questions
+              <span className="hub-analytics__trend-legend-dot" /> Asked
             </span>
             <span className="hub-analytics__trend-legend-item">
               <span className="hub-analytics__trend-legend-dot hub-analytics__trend-legend-dot--unhelpful" /> Unhelpful

@@ -323,6 +323,17 @@ export function RemindersPanel({ variant }: RemindersPanelProps) {
               </div>
             </>
           )}
+          {closestReminders.length === 0 && remindersLoading && (
+            <div
+              className="dash-empty-state dash-empty-state--compact dash-empty-state--skeleton"
+              aria-hidden="true"
+              data-testid="dashboard-reminder-empty-skeleton"
+            >
+              <span className="dash-skeleton dash-skeleton--reminder-empty-icon" />
+              <span className="dash-skeleton dash-skeleton--reminder-empty-line" />
+              <span className="dash-skeleton dash-skeleton--reminder-empty-line dash-skeleton--reminder-empty-line-short" />
+            </div>
+          )}
           {closestReminders.length === 0 && !remindersLoading && (
             <div className="dash-empty-state dash-empty-state--compact">
               <BellIcon className="dash-empty-state-icon" />
