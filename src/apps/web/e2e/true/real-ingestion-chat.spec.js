@@ -66,6 +66,28 @@ function pageWait(durationMs) {
   return new Promise((resolve) => setTimeout(resolve, durationMs));
 }
 
+async function waitForSourceReadyInUi(page, fileName) {
+  // The backend source row can become complete before the sources tab redraws
+  // its latest status, so keep reloading until the visible row catches up.
+  await expect
+    .poll(
+      async () => {
+        await page.reload();
+        const sourceRow = page.locator(".sources__row", { hasText: fileName }).first();
+        if (!(await sourceRow.isVisible().catch(() => false))) {
+          return "";
+        }
+        return (await sourceRow.textContent()) || "";
+      },
+      {
+        timeout: 60_000,
+        intervals: [1_000, 2_000, 5_000],
+        message: `Timed out waiting for ${fileName} to show a complete state in the sources UI.`,
+      }
+    )
+    .toContain("Complete");
+}
+
 async function ensureSourceSelected(page) {
   const toggle = page.getByRole("button", { name: /Sources \(\d+\/\d+\)/ });
   await expect(toggle).toBeVisible();
@@ -78,7 +100,12 @@ async function ensureSourceSelected(page) {
     const sourceButton = page.getByRole("button", { name: readState().fixtureFileName });
     await expect(sourceButton).toBeVisible();
     await sourceButton.click();
-    await expect(toggle).not.toHaveText(/Sources \(0\/\d+\)/);
+    await expect
+      .poll(async () => (await toggle.textContent()) || "", {
+        timeout: 15_000,
+        intervals: [500, 1_000, 2_000],
+      })
+      .not.toMatch(/Sources \(0\/\d+\)/);
   }
 }
 
@@ -108,12 +135,7 @@ test("real sign-in, upload, and grounded chat path works end to end", async ({ p
 
   const source = await waitForSourceCompletion(adminClient, state.hubId, state.fixtureFileName);
 
-  await page.reload();
-  // The sources view can briefly contain both a static text row and the
-  // interactive selectable row for the same source after reload.
-  const sourceRow = page.locator(".sources__row", { hasText: state.fixtureFileName }).first();
-  await expect(sourceRow).toBeVisible();
-  await expect(sourceRow).toContainText("Complete");
+  await waitForSourceReadyInUi(page, state.fixtureFileName);
 
   await page.goto(`/hubs/${state.hubId}?tab=chat`);
   await expect(page.getByLabel("Ask a question")).toBeVisible();
