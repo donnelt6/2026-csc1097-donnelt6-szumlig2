@@ -67,12 +67,13 @@ function pageWait(durationMs) {
 }
 
 async function waitForSourceReadyInUi(page, fileName) {
-  // The backend source row can become complete before the sources tab redraws
-  // its latest status, so keep reloading until the visible row catches up.
+  // The sources tab auto-refetches every 4 seconds, so poll the existing DOM
+  // rather than reloading. Reloading resets the React tab state to 'chat'
+  // (the HubTabContext default), causing a race where the sources tab has not
+  // re-rendered before the check runs, making the row permanently invisible.
   await expect
     .poll(
       async () => {
-        await page.reload();
         const sourceRow = page.locator(".sources__row", { hasText: fileName }).first();
         if (!(await sourceRow.isVisible().catch(() => false))) {
           return "";
@@ -81,7 +82,7 @@ async function waitForSourceReadyInUi(page, fileName) {
       },
       {
         timeout: 60_000,
-        intervals: [1_000, 2_000, 5_000],
+        intervals: [2_000, 4_000, 5_000],
         message: `Timed out waiting for ${fileName} to show a complete state in the sources UI.`,
       }
     )
