@@ -14,6 +14,7 @@ import {
 } from '@heroicons/react/24/outline';
 import { createReminder, listHubs, listReminders } from '../../lib/api';
 import { MiniCalendar } from './MiniCalendar';
+import { FullCalendar } from '../hub-dashboard/FullCalendar';
 import { buildHubNameMap } from './dashboardUtils';
 import { formatLocal } from '../../lib/dateUtils';
 import type { Reminder } from '../../lib/types';
@@ -94,6 +95,38 @@ export function RemindersPanel({ variant }: RemindersPanelProps) {
     return aTime - bTime;
   });
   const closestReminders = sortedReminders.slice(0, 4);
+
+  // Page variant: upcoming reminders grouped by day (today onwards, chronological)
+  const upcomingByDay = (() => {
+    if (!reminders?.length) return [];
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const future = reminders
+      .filter((r) => new Date(r.due_at).getTime() >= todayStart.getTime())
+      .sort((a, b) => new Date(a.due_at).getTime() - new Date(b.due_at).getTime());
+
+    const groups: { label: string; dateKey: string; items: Reminder[] }[] = [];
+    for (const r of future) {
+      const d = new Date(r.due_at);
+      const dateKey = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+      const last = groups[groups.length - 1];
+      if (last && last.dateKey === dateKey) {
+        last.items.push(r);
+      } else {
+        const isToday = d.getDate() === now.getDate() && d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        const isTomorrow = d.getDate() === tomorrow.getDate() && d.getMonth() === tomorrow.getMonth() && d.getFullYear() === tomorrow.getFullYear();
+        const label = isToday
+          ? 'Today'
+          : isTomorrow
+            ? 'Tomorrow'
+            : d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+        groups.push({ label, dateKey, items: [r] });
+      }
+    }
+    return groups;
+  })();
 
   const handleDayClick = (day: number) => {
     setSelectedDay(selectedDay === day ? null : day);
@@ -280,30 +313,96 @@ export function RemindersPanel({ variant }: RemindersPanelProps) {
     </>
   );
 
+  const selectedDate = selectedDay !== null ? new Date(calYear, calMonth, selectedDay) : null;
+
+  const handleFullCalDateClick = (date: Date) => {
+    const clickedDay = date.getDate();
+    const clickedMonth = date.getMonth();
+    const clickedYear = date.getFullYear();
+    if (clickedMonth !== calMonth || clickedYear !== calYear) {
+      handleMonthChange(clickedMonth, clickedYear);
+    }
+    handleDayClick(clickedDay);
+  };
+
+  const renderUpcomingByDay = () => {
+    if (remindersLoading) {
+      return (
+        <div className="dash-empty-state dash-empty-state--compact dash-empty-state--skeleton" aria-hidden="true">
+          <span className="dash-skeleton dash-skeleton--reminder-empty-icon" />
+          <span className="dash-skeleton dash-skeleton--reminder-empty-line" />
+        </div>
+      );
+    }
+    if (upcomingByDay.length === 0) {
+      return (
+        <div className="dash-calendar-empty">
+          <BellIcon className="dash-empty-state-icon" />
+          <p className="muted">No upcoming reminders</p>
+        </div>
+      );
+    }
+    return (
+      <div className="dash-upcoming-groups">
+        {upcomingByDay.map((group) => (
+          <div key={group.dateKey} className="dash-upcoming-group">
+            <h4 className="dash-upcoming-group-label">{group.label}</h4>
+            {group.items.map((r) => {
+              const dueDate = new Date(r.due_at);
+              return (
+                <button
+                  key={r.id}
+                  type="button"
+                  className="dash-upcoming-row"
+                  onClick={() => {
+                    setCalMonth(dueDate.getMonth());
+                    setCalYear(dueDate.getFullYear());
+                    setSelectedDay(dueDate.getDate());
+                  }}
+                >
+                  <div className={`dash-reminder-dot-wrap dash-reminder-dot-wrap--${r.status}`}>
+                    <span className="dash-reminder-dot-inner" />
+                  </div>
+                  <div className="dash-upcoming-row-info">
+                    <span className="dash-upcoming-row-msg">{r.message || 'Reminder'}</span>
+                    <span className="dash-upcoming-row-meta">
+                      {hubNameMap.get(r.hub_id) ?? 'Hub'} &middot; {dueDate.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+                    </span>
+                  </div>
+                  <span className={`dash-reminder-status dash-reminder-status--${r.status}`}>{r.status}</span>
+                </button>
+              );
+            })}
+          </div>
+        ))}
+      </div>
+    );
+  };
+
   if (variant === 'page') {
     return (
       <div className="dash-calendar-layout">
-        <div className="hdash__aside-card dash-calendar-main dash-reminders-card">
-          <div className="hdash__aside-header">
-            <h3 className="hdash__aside-title">Reminders &amp; Milestones</h3>
-          </div>
-          <div className="hdash__aside-cal-wrap">
-            <MiniCalendar
-              month={calMonth}
-              year={calYear}
-              onMonthChange={handleMonthChange}
-              reminderDays={reminderDays}
-              onDayClick={handleDayClick}
-              selectedDay={selectedDay}
-            />
-          </div>
+        <div className="dash-calendar-main">
+          <FullCalendar
+            month={calMonth}
+            year={calYear}
+            onMonthChange={handleMonthChange}
+            reminders={reminders ?? []}
+            candidates={[]}
+            selectedDate={selectedDate}
+            onDateClick={handleFullCalDateClick}
+          />
         </div>
-        <div className="hdash__aside-card dash-calendar-detail">
-          {selectedDay !== null ? renderDayDetail() : (
-            <div className="dash-calendar-empty">
-              <p className="muted">Select a day to view reminders.</p>
+        <div className="dash-calendar-sidebar">
+          {selectedDay !== null && (
+            <div className="hdash__aside-card dash-calendar-detail">
+              {renderDayDetail()}
             </div>
           )}
+          <div className="hdash__aside-card dash-calendar-upcoming">
+            <h3 className="dash-calendar-detail-title">Upcoming</h3>
+            {renderUpcomingByDay()}
+          </div>
         </div>
       </div>
     );

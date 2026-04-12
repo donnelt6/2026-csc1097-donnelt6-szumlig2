@@ -8297,18 +8297,16 @@ textarea {
   align-items: start;
 }
 
-.dash-calendar-main .mini-cal {
-  padding: 24px;
+.dash-calendar-main {
+  min-width: 0;
 }
 
-.dash-calendar-main .mini-cal-day {
-  width: 40px;
-  height: 40px;
-  font-size: 0.85rem;
+.dash-calendar-main .hdash__cal-cell {
+  min-height: 90px;
 }
 
-.dash-calendar-main .mini-cal-month {
-  font-size: 1rem;
+.dash-calendar-main .hdash__cal-title {
+  font-size: 1.15rem;
 }
 
 .dash-calendar-detail {
@@ -8327,11 +8325,80 @@ textarea {
   margin: 0 0 16px;
 }
 
+.dash-calendar-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
 .dash-calendar-empty {
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 8px;
   min-height: 120px;
+}
+
+.dash-calendar-empty .dash-empty-state-icon {
+  width: 28px;
+  height: 28px;
+  color: var(--muted);
+}
+
+.dash-upcoming-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.dash-upcoming-group-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  margin: 0 0 6px;
+}
+
+.dash-upcoming-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  background: none;
+  border-radius: 8px;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s;
+}
+
+.dash-upcoming-row:hover {
+  background: var(--hover);
+}
+
+.dash-upcoming-row-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.dash-upcoming-row-msg {
+  display: block;
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dash-upcoming-row-meta {
+  display: block;
+  font-size: 0.72rem;
+  color: var(--muted);
+  margin-top: 1px;
 }
 .dash-cal-add-btn {
   display: inline-flex;
