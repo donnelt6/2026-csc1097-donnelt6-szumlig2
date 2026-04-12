@@ -99,10 +99,9 @@ export function RemindersPanel({ variant }: RemindersPanelProps) {
   // Page variant: upcoming reminders grouped by day (today onwards, chronological)
   const upcomingByDay = (() => {
     if (!reminders?.length) return [];
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
+    const nowMs = Date.now();
     const future = reminders
-      .filter((r) => new Date(r.due_at).getTime() >= todayStart.getTime())
+      .filter((r) => r.status === 'scheduled' && new Date(r.due_at).getTime() >= nowMs)
       .sort((a, b) => new Date(a.due_at).getTime() - new Date(b.due_at).getTime());
 
     const groups: { label: string; dateKey: string; items: Reminder[] }[] = [];
@@ -355,9 +354,12 @@ export function RemindersPanel({ variant }: RemindersPanelProps) {
                   type="button"
                   className="dash-upcoming-row"
                   onClick={() => {
-                    setCalMonth(dueDate.getMonth());
-                    setCalYear(dueDate.getFullYear());
-                    setSelectedDay(dueDate.getDate());
+                    const m = dueDate.getMonth();
+                    const y = dueDate.getFullYear();
+                    if (m !== calMonth || y !== calYear) {
+                      handleMonthChange(m, y);
+                    }
+                    handleDayClick(dueDate.getDate());
                   }}
                 >
                   <div className={`dash-reminder-dot-wrap dash-reminder-dot-wrap--${r.status}`}>
@@ -443,9 +445,12 @@ export function RemindersPanel({ variant }: RemindersPanelProps) {
                   key={r.id}
                   className="hdash__upcoming-item"
                   onClick={() => {
-                    setCalMonth(dueDate.getMonth());
-                    setCalYear(dueDate.getFullYear());
-                    setSelectedDay(dueDate.getDate());
+                    const m = dueDate.getMonth();
+                    const y = dueDate.getFullYear();
+                    if (m !== calMonth || y !== calYear) {
+                      handleMonthChange(m, y);
+                    }
+                    handleDayClick(dueDate.getDate());
                   }}
                 >
                   <div className={`hdash__manual-dot hdash__manual-dot--${r.status}`} />
