@@ -61,7 +61,8 @@ export default function HubDetail({ params }: { params: { hubId: string } }) {
   }, [activeTab, setSearchQuery]);
 
   const hubResolved = !!hub;
-  const canUpload = hub?.role === 'owner' || hub?.role === 'admin' || hub?.role === 'editor';
+  const roleKnown = hubResolved;
+  const canUpload = !roleKnown || hub?.role === 'owner' || hub?.role === 'admin' || hub?.role === 'editor';
   const canModerate = hub?.role === 'owner' || hub?.role === 'admin';
 
   const { data: invites = [] } = useQuery({
@@ -85,7 +86,7 @@ export default function HubDetail({ params }: { params: { hubId: string } }) {
   const { data: sources, refetch: refetchSources, isLoading: sourcesLoading } = useQuery({
     queryKey: ['sources', params.hubId],
     queryFn: () => listSources(params.hubId),
-    enabled: hubResolved,
+    enabled: !!params.hubId,
     refetchInterval: activeTab === 'sources' ? 4000 : false,
   });
 
@@ -196,7 +197,7 @@ export default function HubDetail({ params }: { params: { hubId: string } }) {
             <UploadPanel
               hubId={params.hubId}
               sources={sources ?? []}
-              sourcesLoading={currentHubLoading || !hubResolved || sourcesLoading}
+              sourcesLoading={sourcesLoading}
               onRefresh={() => refetchSources()}
               canUpload={canUpload}
               canReviewSuggestions={canUpload}

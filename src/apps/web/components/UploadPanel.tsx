@@ -343,7 +343,7 @@ export function UploadPanel({
         </div>
       </div>
 
-      {!canUpload && (
+      {!sourcesLoading && !canUpload && (
         <p className="sources__permission-notice">You only have view access. Ask the hub owner to grant admin or editor permissions.</p>
       )}
 
