@@ -294,6 +294,8 @@ export const ChatPanel = forwardRef<ChatPanelHandle, Props>(function ChatPanel({
     () => completeSources.map((source) => source.id),
     [completeSources]
   );
+  const completeSourceIdsRef = useRef<string[]>([]);
+  completeSourceIdsRef.current = completeSourceIds;
 
   const hasSelectableSources = completeSourceIds.length > 0;
   const normalizedSelectedSourceIds = useMemo(
@@ -433,7 +435,7 @@ export const ChatPanel = forwardRef<ChatPanelHandle, Props>(function ChatPanel({
 
         if (initialSessionParam === "new") {
           sessionSourceCacheRef.current.delete(null);
-          activateDraft({ messages: [], scope: "hub", selectedSourceIds: [...completeSourceIds] }, false);
+          activateDraft({ messages: [], scope: "hub", selectedSourceIds: [...completeSourceIdsRef.current] }, false);
           return;
         }
 
@@ -460,11 +462,11 @@ export const ChatPanel = forwardRef<ChatPanelHandle, Props>(function ChatPanel({
           return;
         }
 
-        activateDraft(buildDraftState(draftState, completeSourceIds), false);
+        activateDraft(buildDraftState(draftState, completeSourceIdsRef.current), false);
       } catch (error) {
         if (!cancelled) {
           setPanelError(error instanceof Error ? error.message : String(error));
-          activateDraft(buildDraftState(draftState, completeSourceIds), false);
+          activateDraft(buildDraftState(draftState, completeSourceIdsRef.current), false);
         }
       } finally {
         if (!cancelled) {
@@ -589,13 +591,14 @@ export const ChatPanel = forwardRef<ChatPanelHandle, Props>(function ChatPanel({
 
   function activateDraft(nextDraft: DraftState, clearQuery: boolean) {
     const cached = sessionSourceCacheRef.current.get(null);
+    const currentCompleteIds = completeSourceIdsRef.current;
     setDraftState(nextDraft);
     setActiveSessionId(null);
     setMessages(nextDraft.messages);
     setScope(nextDraft.scope);
     setSelectedSourceIds(
-      cached
-        ? cached.filter((id) => completeSourceIds.includes(id))
+      cached && cached.length > 0
+        ? cached.filter((id) => currentCompleteIds.includes(id))
         : nextDraft.selectedSourceIds
     );
     setPanelError(null);
