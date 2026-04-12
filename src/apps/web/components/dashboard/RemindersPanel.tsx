@@ -1,16 +1,21 @@
 'use client';
 
+/** RemindersPanel.tsx: Dashboard reminders sidebar showing upcoming and past-due reminders. */
+
 import { useState, useRef, useEffect } from 'react';
+import Link from 'next/link';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   PlusIcon,
   ChevronDownIcon,
   ClockIcon,
   BellIcon,
+  ArrowRightIcon,
 } from '@heroicons/react/24/outline';
 import { createReminder, listHubs, listReminders } from '../../lib/api';
 import { MiniCalendar } from './MiniCalendar';
 import { buildHubNameMap } from './dashboardUtils';
+import { formatLocal } from '../../lib/dateUtils';
 import type { Reminder } from '../../lib/types';
 
 const HOURS = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0'));
@@ -278,17 +283,22 @@ export function RemindersPanel({ variant }: RemindersPanelProps) {
   if (variant === 'page') {
     return (
       <div className="dash-calendar-layout">
-        <div className="dash-calendar-main dash-reminders-card">
-          <MiniCalendar
-            month={calMonth}
-            year={calYear}
-            onMonthChange={handleMonthChange}
-            reminderDays={reminderDays}
-            onDayClick={handleDayClick}
-            selectedDay={selectedDay}
-          />
+        <div className="hdash__aside-card dash-calendar-main dash-reminders-card">
+          <div className="hdash__aside-header">
+            <h3 className="hdash__aside-title">Reminders &amp; Milestones</h3>
+          </div>
+          <div className="hdash__aside-cal-wrap">
+            <MiniCalendar
+              month={calMonth}
+              year={calYear}
+              onMonthChange={handleMonthChange}
+              reminderDays={reminderDays}
+              onDayClick={handleDayClick}
+              selectedDay={selectedDay}
+            />
+          </div>
         </div>
-        <div className="dash-calendar-detail">
+        <div className="hdash__aside-card dash-calendar-detail">
           {selectedDay !== null ? renderDayDetail() : (
             <div className="dash-calendar-empty">
               <p className="muted">Select a day to view reminders.</p>
@@ -301,29 +311,53 @@ export function RemindersPanel({ variant }: RemindersPanelProps) {
 
   // sidebar variant
   return (
-    <div className="dash-reminders-card">
-      <h2 className="dash-reminders-title">Reminders</h2>
-      <MiniCalendar
-        month={calMonth}
-        year={calYear}
-        onMonthChange={handleMonthChange}
-        reminderDays={reminderDays}
-        onDayClick={handleDayClick}
-        selectedDay={selectedDay}
-      />
+    <div className="hdash__aside-card dash-reminders-card">
+      <div className="hdash__aside-header">
+        <h3 className="hdash__aside-title">Reminders &amp; Milestones</h3>
+        <Link href="/?tab=calendar" className="hdash__overview-link">
+          View all <ArrowRightIcon className="hdash__overview-link-icon" />
+        </Link>
+      </div>
+
+      <div className="hdash__aside-cal-wrap">
+        <MiniCalendar
+          month={calMonth}
+          year={calYear}
+          onMonthChange={handleMonthChange}
+          reminderDays={reminderDays}
+          onDayClick={handleDayClick}
+          selectedDay={selectedDay}
+        />
+      </div>
+
       {selectedDay !== null ? (
         renderDayDetail()
       ) : (
-        <>
-          {closestReminders.length > 0 && (
-            <>
-              <hr className="dash-reminders-divider" />
-              <div className="dash-reminder-list">
-                {closestReminders.map(renderReminderItem)}
-              </div>
-            </>
-          )}
-          {closestReminders.length === 0 && remindersLoading && (
+        <div className="hdash__upcoming">
+          <h4 className="hdash__upcoming-title">Upcoming</h4>
+          {closestReminders.length > 0 ? (
+            closestReminders.map((r) => {
+              const dueDate = new Date(r.due_at);
+              const hubName = hubNameMap.get(r.hub_id) ?? 'Hub';
+              return (
+                <div
+                  key={r.id}
+                  className="hdash__upcoming-item"
+                  onClick={() => {
+                    setCalMonth(dueDate.getMonth());
+                    setCalYear(dueDate.getFullYear());
+                    setSelectedDay(dueDate.getDate());
+                  }}
+                >
+                  <div className={`hdash__manual-dot hdash__manual-dot--${r.status}`} />
+                  <div className="hdash__upcoming-info">
+                    <span className="hdash__upcoming-msg">{r.message || 'Reminder'}</span>
+                    <span className="hdash__upcoming-due">{hubName} · {formatLocal(r.due_at)}</span>
+                  </div>
+                </div>
+              );
+            })
+          ) : remindersLoading ? (
             <div
               className="dash-empty-state dash-empty-state--compact dash-empty-state--skeleton"
               aria-hidden="true"
@@ -333,14 +367,13 @@ export function RemindersPanel({ variant }: RemindersPanelProps) {
               <span className="dash-skeleton dash-skeleton--reminder-empty-line" />
               <span className="dash-skeleton dash-skeleton--reminder-empty-line dash-skeleton--reminder-empty-line-short" />
             </div>
-          )}
-          {closestReminders.length === 0 && !remindersLoading && (
+          ) : (
             <div className="dash-empty-state dash-empty-state--compact">
               <BellIcon className="dash-empty-state-icon" />
               <p className="dash-empty-state-text">Set up reminders in any hub to see them here</p>
             </div>
           )}
-        </>
+        </div>
       )}
     </div>
   );

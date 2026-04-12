@@ -449,18 +449,10 @@ class ModerationStoreMixin:
         hub_id = str(row.data[0]["hub_id"])
         self._require_hub_access(user_id, hub_id)
 
-        existing = (
-            self.service_client.table("content_flags")
-            .select("*")
-            .eq("content_type", content_type.value)
-            .eq("content_id", str(content_id))
-            .eq("status", ContentFlagStatus.open.value)
-            .limit(1)
-            .execute()
-        )
-        if existing.data:
+        existing_flag = self._get_open_content_flag(content_type, content_id)
+        if existing_flag is not None:
             return ContentFlagResponse(
-                flag=self._serialize_content_flag(existing.data[0]),
+                flag=self._serialize_content_flag(existing_flag),
                 created=False,
             )
 
@@ -473,17 +465,48 @@ class ModerationStoreMixin:
             "notes": payload.notes,
             "status": ContentFlagStatus.open.value,
         }
-        result = (
-            self.service_client.table("content_flags")
-            .insert(insert_row)
-            .execute()
-        )
+        try:
+            result = (
+                self.service_client.table("content_flags")
+                .insert(insert_row)
+                .execute()
+            )
+        except Exception as exc:
+            message = (getattr(exc, "message", "") or str(exc)).lower()
+            code = str(getattr(exc, "code", "") or "")
+            if code == "23505" or "duplicate key" in message or "unique" in message:
+                concurrent = self._get_open_content_flag(content_type, content_id)
+                if concurrent is not None:
+                    return ContentFlagResponse(
+                        flag=self._serialize_content_flag(concurrent),
+                        created=False,
+                    )
+            raise
         if not result.data:
             raise RuntimeError("Failed to create content flag.")
         return ContentFlagResponse(
             flag=self._serialize_content_flag(result.data[0]),
             created=True,
         )
+
+    def _get_open_content_flag(
+        self,
+        content_type: ContentFlagType,
+        content_id: str,
+    ) -> Optional[Dict[str, Any]]:
+        response = (
+            self.service_client.table("content_flags")
+            .select("*")
+            .eq("content_type", content_type.value)
+            .eq("content_id", str(content_id))
+            .eq("status", ContentFlagStatus.open.value)
+            .order("created_at", desc=True)
+            .limit(1)
+            .execute()
+        )
+        if not response.data:
+            return None
+        return response.data[0]
 
     def list_flagged_content(
         self,

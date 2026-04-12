@@ -6526,7 +6526,11 @@ textarea {
 }
 
 .hub-analytics__metric-label,
-.hub-analytics__metric-hint,
+.hub-analytics__metric-hint {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
 .hub-analytics__metric-hint--fast {
   color: var(--status-complete);
 }
