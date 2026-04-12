@@ -55,7 +55,7 @@ web_e2e:
 
 web_e2e_true:
   image: mcr.microsoft.com/playwright:v1.52.0-noble
-  stage: deploy
+  stage: build
   services:
     - name: redis:7-alpine
       alias: redis
