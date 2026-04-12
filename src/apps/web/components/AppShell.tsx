@@ -199,7 +199,7 @@ export function AppShell({ children }: AppShellProps) {
               >
                 <Bars3Icon />
               </button>
-              <a className="brand" href="/">
+              <a className="brand" href="/" data-testid="brand-link">
                 Caddie
               </a>
             </div>

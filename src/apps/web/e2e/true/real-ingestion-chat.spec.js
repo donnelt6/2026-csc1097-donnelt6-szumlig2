@@ -14,7 +14,7 @@ async function createAdminClient() {
 
 async function assertSignedIn(page) {
   await page.waitForURL("**/");
-  await expect(page.getByRole("link", { name: "Caddie" })).toBeVisible();
+  await expect(page.getByTestId("brand-link")).toBeVisible();
 }
 
 async function findLatestSource(client, hubId, originalName) {

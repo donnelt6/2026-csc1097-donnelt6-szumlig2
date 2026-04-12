@@ -282,5 +282,5 @@ export async function signIn(page: Page) {
   await page.getByLabel("Password").fill(TEST_PASSWORD);
   await page.getByRole("button", { name: "Sign in" }).click();
   await page.waitForURL((url) => url.pathname === "/");
-  await expect(page.getByRole("link", { name: "Caddie" })).toBeVisible();
+  await expect(page.getByTestId("brand-link")).toBeVisible();
 }
