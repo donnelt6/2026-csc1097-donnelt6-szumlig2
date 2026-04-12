@@ -15,12 +15,17 @@ import type {
   ChatFeedbackRating,
   CitationFeedbackEventType,
   CitationFeedbackResponse,
+  ContentFlag,
+  ContentFlagResponse,
+  ContentFlagStatus,
+  ContentFlagType,
   FlagCase,
   FlagCaseStatus,
   FlagMessageResponse,
   FlagReason,
   FlaggedChatDetail,
   FlaggedChatQueueItem,
+  FlaggedContentQueueItem,
   HistoryMessage,
   Hub,
   HubMember,
@@ -450,6 +455,59 @@ export async function dismissFlaggedChat(hubId: string, flagId: string): Promise
     method: "POST",
   });
   return handle<FlagCase>(res);
+}
+
+export async function flagFaq(
+  faqId: string,
+  data: { reason: FlagReason; notes?: string },
+): Promise<ContentFlagResponse> {
+  const res = await authedFetch(`${API_BASE}/faqs/${faqId}/flag`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  return handle<ContentFlagResponse>(res);
+}
+
+export async function flagGuide(
+  guideId: string,
+  data: { reason: FlagReason; notes?: string },
+): Promise<ContentFlagResponse> {
+  const res = await authedFetch(`${API_BASE}/guides/${guideId}/flag`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  return handle<ContentFlagResponse>(res);
+}
+
+export async function listFlaggedContent(
+  hubId: string,
+  params?: { status?: ContentFlagStatus; content_type?: ContentFlagType },
+): Promise<FlaggedContentQueueItem[]> {
+  const search = new URLSearchParams();
+  if (params?.status) search.set("status", params.status);
+  if (params?.content_type) search.set("content_type", params.content_type);
+  const qs = search.toString();
+  const res = await authedFetch(
+    `${API_BASE}/hubs/${hubId}/flagged-content${qs ? `?${qs}` : ""}`,
+    { cache: "no-store" },
+  );
+  return handle<FlaggedContentQueueItem[]>(res);
+}
+
+export async function resolveContentFlag(hubId: string, flagId: string): Promise<ContentFlag> {
+  const res = await authedFetch(`${API_BASE}/hubs/${hubId}/flagged-content/${flagId}/resolve`, {
+    method: "POST",
+  });
+  return handle<ContentFlag>(res);
+}
+
+export async function dismissContentFlag(hubId: string, flagId: string): Promise<ContentFlag> {
+  const res = await authedFetch(`${API_BASE}/hubs/${hubId}/flagged-content/${flagId}/dismiss`, {
+    method: "POST",
+  });
+  return handle<ContentFlag>(res);
 }
 
 export async function listFaqs(hubId: string): Promise<FaqEntry[]> {

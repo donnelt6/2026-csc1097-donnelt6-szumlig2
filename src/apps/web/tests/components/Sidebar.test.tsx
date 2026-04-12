@@ -8,7 +8,7 @@ import { renderWithQueryClient } from "../test-utils";
 const replaceMock = vi.fn();
 const setActiveTabMock = vi.fn();
 let currentSearchParams = "session=session-1&prompt=hello";
-let activeTab: "chat" | "sources" | "dashboard" | "members" | "settings" | "admin" = "chat";
+let activeTab: "chat" | "sources" | "dashboard" | "members" | "admin" = "chat";
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: replaceMock, push: vi.fn() }),

@@ -9,7 +9,6 @@ import {
   ChatBubbleLeftRightIcon,
   DocumentTextIcon,
   UsersIcon,
-  Cog6ToothIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
   XMarkIcon,
@@ -87,7 +86,7 @@ export function Sidebar({ state, onStateChange, mobileOpen, onMobileClose, onCre
     }
   }, [editingSessionId]);
 
-  function navigateToTab(tab: 'chat' | 'sources' | 'dashboard' | 'members' | 'settings' | 'admin') {
+  function navigateToTab(tab: 'chat' | 'sources' | 'dashboard' | 'members' | 'admin') {
     const p = new URLSearchParams(searchParams.toString());
     p.set('tab', tab);
     setSessionActionError(null);
@@ -248,7 +247,6 @@ export function Sidebar({ state, onStateChange, mobileOpen, onMobileClose, onCre
             { key: 'sources' as const, label: 'Sources', Icon: DocumentTextIcon },
             { key: 'dashboard' as const, label: 'Dashboard', Icon: Squares2X2Icon },
             { key: 'members' as const, label: 'Members', Icon: UsersIcon },
-            { key: 'settings' as const, label: 'Settings', Icon: Cog6ToothIcon },
             ...(canModerate ? [{ key: 'admin' as const, label: 'Admin', Icon: ShieldCheckIcon }] : []),
           ].map(({ key, label, Icon }) => (
             <li key={key}>

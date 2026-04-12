@@ -41,6 +41,8 @@ interface Props {
   onClearSourceSelection?: (scope?: string[]) => void;
   autoOpenModal?: boolean;
   onModalOpened?: () => void;
+  focusSourceId?: string;
+  onFocusHandled?: () => void;
 }
 
 export function UploadPanel({
@@ -56,6 +58,8 @@ export function UploadPanel({
   onClearSourceSelection = () => undefined,
   autoOpenModal = false,
   onModalOpened,
+  focusSourceId,
+  onFocusHandled,
 }: Props) {
   const queryClient = useQueryClient();
   const { searchQuery } = useSearch();
@@ -74,6 +78,9 @@ export function UploadPanel({
   const [errorPopoverId, setErrorPopoverId] = useState<string | null>(null);
   const [errorPopoverFlip, setErrorPopoverFlip] = useState(false);
   const errorPopoverRef = useRef<HTMLDivElement>(null);
+  const [highlightedSourceId, setHighlightedSourceId] = useState<string | null>(null);
+  const sourceRowRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+  const focusHandledFor = useRef<string | null>(null);
 
   // Close error popover on click outside
   useEffect(() => {
@@ -212,6 +219,36 @@ export function UploadPanel({
     () => [...sources].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()),
     [sources]
   );
+
+  // Focus and highlight a source when navigated from analytics
+  useEffect(() => {
+    if (!focusSourceId || focusHandledFor.current === focusSourceId) return;
+    if (sourcesLoading || sortedSources.length === 0) return;
+    const idx = sortedSources.findIndex((s) => s.id === focusSourceId);
+    focusHandledFor.current = focusSourceId;
+    if (idx === -1) {
+      onFocusHandled?.();
+      return;
+    }
+    // Reset filters that could hide the row
+    setTypeFilter("all");
+    setStatusFilter("all");
+    setPage(Math.floor(idx / pageSize));
+    setHighlightedSourceId(focusSourceId);
+    // Scroll on next paint, once the row has rendered on the correct page
+    const raf = requestAnimationFrame(() => {
+      const el = sourceRowRefs.current.get(focusSourceId);
+      el?.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+    const timeout = window.setTimeout(() => setHighlightedSourceId(null), 2400);
+    onFocusHandled?.();
+    return () => {
+      cancelAnimationFrame(raf);
+      window.clearTimeout(timeout);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusSourceId, sourcesLoading, sortedSources.length, pageSize]);
+
   const filteredSources = useMemo(() => {
     let result = sortedSources;
     if (typeFilter !== "all") {
@@ -398,10 +435,15 @@ export function UploadPanel({
           const isRemoteSource = source.type === "web" || source.type === "youtube";
           const isDeleting = deletingSourceIds.has(source.id);
           const isRefreshingThis = refreshingSourceIds.has(source.id);
+          const isHighlighted = highlightedSourceId === source.id;
           return (
             <div
               key={source.id}
-              className={`sources__row${isSelectable ? " sources__row--selectable" : ""}${isSelected ? " sources__row--selected" : ""}`}
+              ref={(el) => {
+                if (el) sourceRowRefs.current.set(source.id, el);
+                else sourceRowRefs.current.delete(source.id);
+              }}
+              className={`sources__row${isSelectable ? " sources__row--selectable" : ""}${isSelected ? " sources__row--selected" : ""}${isHighlighted ? " sources__row--highlighted" : ""}`}
               role={isSelectable ? "button" : undefined}
               tabIndex={isSelectable ? 0 : undefined}
               aria-label={isSelectable ? `${isSelected ? "Deselect" : "Select"} row ${source.original_name}` : undefined}

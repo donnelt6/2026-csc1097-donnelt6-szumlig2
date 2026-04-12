@@ -5,6 +5,10 @@ import { HubAnalyticsPanel } from "../../components/HubAnalyticsPanel";
 import { getHubAnalyticsSummary, getHubAnalyticsTrends } from "../../lib/api";
 import { renderWithQueryClient } from "../test-utils";
 
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
+}));
+
 vi.mock("../../lib/api", () => ({
   getHubAnalyticsSummary: vi.fn(),
   getHubAnalyticsTrends: vi.fn(),

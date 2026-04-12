@@ -13,11 +13,13 @@ import {
   StarIcon as StarOutline,
   SparklesIcon,
   ChatBubbleLeftIcon,
+  FlagIcon,
 } from "@heroicons/react/24/outline";
 import { StarIcon as StarSolid } from "@heroicons/react/24/solid";
-import { archiveFaq, askQuestion, createFaq, generateFaqs, listFaqs, updateFaq } from "../../lib/api";
+import { archiveFaq, askQuestion, createFaq, flagFaq, generateFaqs, listFaqs, updateFaq } from "../../lib/api";
 import { useSearch } from "../../lib/SearchContext";
-import type { Citation, FaqEntry, Source } from "../../lib/types";
+import { FlagModal } from "./FlagModal";
+import type { Citation, FaqEntry, FlagReason, Source } from "../../lib/types";
 
 
 interface Props {
@@ -59,6 +61,7 @@ export function FaqsPage({ hubId, sources, canEdit }: Props) {
   const [drafts, setDrafts] = useState<Record<string, DraftValues>>({});
   const [activeCitation, setActiveCitation] = useState<Citation | null>(null);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [flagTargetId, setFlagTargetId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!openMenuId) return;
@@ -207,6 +210,16 @@ export function FaqsPage({ hubId, sources, canEdit }: Props) {
     });
     setEditingId(null);
   };
+
+  const flagMutation = useMutation({
+    mutationFn: ({ faqId, reason, notes }: { faqId: string; reason: FlagReason; notes?: string }) =>
+      flagFaq(faqId, { reason, notes }),
+    onSuccess: () => {
+      setFlagTargetId(null);
+      setStatusMessage("FAQ flagged for review.");
+    },
+    onError: (err) => setStatusMessage((err as Error).message),
+  });
 
   const favouriteMutation = useMutation({
     mutationFn: ({ faqId, is_pinned }: { faqId: string; is_pinned: boolean }) =>
@@ -394,6 +407,17 @@ export function FaqsPage({ hubId, sources, canEdit }: Props) {
                         >
                           Archive
                           <TrashIcon className="hub-card-menu__item-icon" />
+                        </button>
+                        <button
+                          className="hub-card-menu__item hub-card-menu__item--danger"
+                          type="button"
+                          onClick={() => {
+                            setFlagTargetId(faq.id);
+                            setOpenMenuId(null);
+                          }}
+                        >
+                          Flag
+                          <FlagIcon className="hub-card-menu__item-icon" />
                         </button>
                       </div>
                     )}
@@ -694,6 +718,14 @@ export function FaqsPage({ hubId, sources, canEdit }: Props) {
                       </button>
                     </>
                   )}
+                  <button
+                    className="gmodal__icon-btn"
+                    type="button"
+                    title="Flag"
+                    onClick={() => setFlagTargetId(faq.id)}
+                  >
+                    <FlagIcon />
+                  </button>
                   <button className="gmodal__icon-btn" type="button" title="Close" onClick={() => setSelectedFaq(null)}>
                     <XMarkIcon />
                   </button>
@@ -786,6 +818,15 @@ export function FaqsPage({ hubId, sources, canEdit }: Props) {
             <p className="gmodal__citation-text">{activeCitation.snippet}</p>
           </div>
         </div>
+      )}
+
+      {flagTargetId && (
+        <FlagModal
+          label="FAQ"
+          submitting={flagMutation.isPending}
+          onClose={() => setFlagTargetId(null)}
+          onSubmit={(reason, notes) => flagMutation.mutate({ faqId: flagTargetId, reason, notes })}
+        />
       )}
     </div>
   );

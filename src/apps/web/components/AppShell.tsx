@@ -38,6 +38,13 @@ export function AppShell({ children }: AppShellProps) {
   const { activeTab } = useHubTab();
   const { activeDashTab, setActiveDashTab } = useHubDashboardTab();
 
+  const { activeAdminTab, setActiveAdminTab } = useHubDashboardTab();
+
+  const adminSubTabs: { key: typeof activeAdminTab; label: string }[] = [
+    { key: 'overview', label: 'Overview' },
+    { key: 'analytics', label: 'Analytics' },
+  ];
+
   const hubDashboardTabs: { key: HubDashboardTab; label: string }[] = [
     { key: 'overview', label: 'Dashboard' },
     { key: 'guides', label: 'Guides' },
@@ -227,7 +234,21 @@ export function AppShell({ children }: AppShellProps) {
                     <span className="nav-current-hub-name">{currentHub.name}</span>
                   </div>
                 )}
-                {activeTab === 'dashboard' ? (
+                {activeTab === 'admin' ? (
+                  <div className="dash-nav-row">
+                    <div className="dash-nav-tabs">
+                      {adminSubTabs.map((tab) => (
+                        <button
+                          key={tab.key}
+                          className={`dash-nav-tab ${activeAdminTab === tab.key ? 'dash-nav-tab--active' : ''}`}
+                          onClick={() => setActiveAdminTab(tab.key)}
+                        >
+                          {tab.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : activeTab === 'dashboard' ? (
                   <div className="dash-nav-row">
                     <div className="dash-nav-tabs">
                       {hubDashboardTabs.map((tab) => (

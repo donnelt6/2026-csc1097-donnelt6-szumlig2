@@ -503,6 +503,11 @@ class AnalyticsTopSource(BaseModel):
     citation_flags: int = 0
 
 
+class NeverCitedSource(BaseModel):
+    source_id: str
+    source_name: Optional[str] = None
+
+
 class ChatAnalyticsSummary(BaseModel):
     window_days: int
     total_questions: int = 0
@@ -520,6 +525,9 @@ class ChatAnalyticsSummary(BaseModel):
     rewrite_usage_rate: float = 0.0
     zero_hit_rate: float = 0.0
     top_sources: List[AnalyticsTopSource] = Field(default_factory=list)
+    never_cited_sources: List[NeverCitedSource] = Field(default_factory=list)
+    never_cited_count: int = 0
+    total_complete_sources: int = 0
 
 
 class ChatAnalyticsTrendPoint(BaseModel):
@@ -527,6 +535,7 @@ class ChatAnalyticsTrendPoint(BaseModel):
     questions: int = 0
     answers: int = 0
     helpful: int = 0
+    not_helpful: int = 0
     citation_opens: int = 0
     citation_flags: int = 0
 
@@ -871,6 +880,55 @@ class NotificationEvent(BaseModel):
     sent_at: Optional[datetime] = None
     dismissed_at: Optional[datetime] = None
     reminder: ReminderSummary
+
+
+class ContentFlagType(str, Enum):
+    faq = "faq"
+    guide = "guide"
+
+
+class ContentFlagStatus(str, Enum):
+    open = "open"
+    resolved = "resolved"
+    dismissed = "dismissed"
+
+
+class ContentFlagRequest(StrictModel):
+    reason: FlagReason
+    notes: Optional[str] = Field(default=None, max_length=1000)
+
+
+class ContentFlag(BaseModel):
+    id: str
+    hub_id: str
+    content_type: ContentFlagType
+    content_id: str
+    created_by: str
+    reason: FlagReason
+    notes: Optional[str] = None
+    status: ContentFlagStatus
+    reviewed_by: Optional[str] = None
+    reviewed_at: Optional[datetime] = None
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class ContentFlagResponse(BaseModel):
+    flag: ContentFlag
+    created: bool
+
+
+class FlaggedContentQueueItem(BaseModel):
+    id: str
+    hub_id: str
+    content_type: ContentFlagType
+    content_id: str
+    title: str
+    preview: str
+    reason: FlagReason
+    status: ContentFlagStatus
+    flagged_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    reviewed_at: Optional[datetime] = None
 
 
 class ActivityEvent(BaseModel):

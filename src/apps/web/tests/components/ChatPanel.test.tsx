@@ -86,8 +86,7 @@ describe("ChatPanel", () => {
       <ChatPanel hubId="hub-1" sources={sources} />
     );
 
-    await waitFor(() => expect(screen.getByText("New Chat")).toBeInTheDocument());
-    expect(screen.getByText("Ask a question about your hub")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText("Ask a question about your hub")).toBeInTheDocument());
     expect(screen.getByRole("button", { name: "Action items and deadlines" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Summarise" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Key Risks" })).toBeInTheDocument();

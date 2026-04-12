@@ -5,8 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ChatPanel } from "../../../components/ChatPanel";
 import type { ChatPanelHandle } from "../../../components/ChatPanel";
-import { HubAnalyticsPanel } from "../../../components/HubAnalyticsPanel";
-import { HubModerationPanel } from "../../../components/HubModerationPanel";
+import { AdminDashboard } from "../../../components/AdminDashboard";
 import { UploadPanel } from "../../../components/UploadPanel";
 import { MembersPanel } from "../../../components/MembersPanel";
 import { DashboardOverview } from "../../../components/hub-dashboard/DashboardOverview";
@@ -23,7 +22,7 @@ import { useSearch } from "../../../lib/SearchContext";
 import type { HubTab } from "../../../lib/HubTabContext";
 import type { Hub } from "../../../lib/types";
 
-const VALID_TABS: HubTab[] = ['chat', 'sources', 'dashboard', 'members', 'settings', 'admin'];
+const VALID_TABS: HubTab[] = ['chat', 'sources', 'dashboard', 'members', 'admin'];
 
 export default function HubDetail({ params }: { params: { hubId: string } }) {
   const queryClient = useQueryClient();
@@ -211,6 +210,12 @@ export default function HubDetail({ params }: { params: { hubId: string } }) {
                 p.delete('addSource');
                 router.replace(`/hubs/${params.hubId}?${p.toString()}`, { scroll: false });
               }}
+              focusSourceId={searchParams.get('focusSource') ?? undefined}
+              onFocusHandled={() => {
+                const p = new URLSearchParams(searchParams.toString());
+                p.delete('focusSource');
+                router.replace(`/hubs/${params.hubId}?${p.toString()}`, { scroll: false });
+              }}
             />
           )}
           {activeTab === 'members' && (
@@ -244,25 +249,12 @@ export default function HubDetail({ params }: { params: { hubId: string } }) {
               )}
             </div>
           )}
-          {activeTab === 'settings' && (
-            <div className="hub-settings">
-              <p className="muted">Hub settings coming soon.</p>
-            </div>
-          )}
           {activeTab === 'admin' && (
-            <div className="hub-dashboard">
-              <section className="hub-dashboard__section">
-                <h3 className="hub-dashboard__section-title">Moderation</h3>
-                <HubModerationPanel
-                  hubId={params.hubId}
-                  hubRole={hub?.role ?? undefined}
-                />
-              </section>
-              <section className="hub-dashboard__section">
-                <h3 className="hub-dashboard__section-title">AI Analytics</h3>
-                <HubAnalyticsPanel hubId={params.hubId} hubRole={hub?.role ?? undefined} />
-              </section>
-            </div>
+            <AdminDashboard
+              hubId={params.hubId}
+              hubRole={hub?.role ?? undefined}
+              onSwitchTab={setActiveTab}
+            />
           )}
         </div>
       </div>
