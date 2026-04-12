@@ -1,3 +1,5 @@
+// dashboardUtils.ts: Icon mappings and helper functions for dashboard components.
+
 import {
   RectangleStackIcon,
   DocumentIcon,

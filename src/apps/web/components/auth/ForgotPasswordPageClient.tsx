@@ -1,5 +1,7 @@
 'use client';
 
+// ForgotPasswordPageClient.tsx: Password reset request form that sends a recovery email.
+
 import Link from "next/link";
 import { useState } from "react";
 import { buildRecoveryRedirectUrl, getAuthRedirectConfigError, mapAuthErrorMessage } from "../../lib/authRecovery";

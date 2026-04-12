@@ -1,3 +1,5 @@
+// api.ts: Typed fetch helpers and error handling for all backend API calls.
+
 import { getAccessToken } from "./supabaseClient";
 import type {
   ActivityEvent,

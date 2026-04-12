@@ -1,5 +1,7 @@
 'use client';
 
+// page.tsx: Hubs list page with create-hub modal, filtering, and toolbar.
+
 import { Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { DashboardHome } from '../components/dashboard/DashboardHome';

@@ -1,5 +1,7 @@
 'use client';
 
+// ProfileMenu.tsx: Profile dropdown menu in the navbar with account links.
+
 import Link from "next/link";
 import { useMemo, useState, useRef, useEffect } from "react";
 import { useAuth } from "../auth/AuthProvider";

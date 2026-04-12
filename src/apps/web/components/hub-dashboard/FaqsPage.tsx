@@ -1,5 +1,7 @@
 'use client';
 
+// FaqsPage.tsx: Hub dashboard FAQs page with search, filtering, and flag actions.
+
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {

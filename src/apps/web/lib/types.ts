@@ -1,3 +1,5 @@
+// types.ts: Shared TypeScript interfaces and type aliases for the web app.
+
 export type HubScope = "hub" | "global";
 export type MembershipRole = "owner" | "admin" | "editor" | "viewer";
 export type AssignableMembershipRole = "admin" | "editor" | "viewer";

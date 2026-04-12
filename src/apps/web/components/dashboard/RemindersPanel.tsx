@@ -1,6 +1,6 @@
 'use client';
 
-/** RemindersPanel.tsx: Dashboard reminders sidebar showing upcoming and past-due reminders. */
+// RemindersPanel.tsx: Dashboard reminders sidebar showing upcoming and past-due reminders.
 
 import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';

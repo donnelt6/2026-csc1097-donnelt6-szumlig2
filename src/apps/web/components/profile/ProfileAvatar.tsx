@@ -1,5 +1,7 @@
 'use client';
 
+// ProfileAvatar.tsx: Renders a user avatar from preset icons with a colour background.
+
 import { getPresetAvatar, resolveProfile, type ProfileSummary } from "../../lib/profile";
 
 interface Props {

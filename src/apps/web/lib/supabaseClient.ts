@@ -1,3 +1,5 @@
+// supabaseClient.ts: Initialises the Supabase client and token accessor for API auth.
+
 import { createClient } from "@supabase/supabase-js";
 import { createE2ESupabaseClient } from "./e2eAuth";
 

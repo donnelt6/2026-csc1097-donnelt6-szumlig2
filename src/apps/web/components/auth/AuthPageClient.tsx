@@ -1,5 +1,7 @@
 'use client';
 
+// AuthPageClient.tsx: Login and sign-up form with email and password authentication.
+
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";

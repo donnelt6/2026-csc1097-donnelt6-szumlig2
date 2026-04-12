@@ -1,5 +1,7 @@
 'use client';
 
+// HubAnalyticsPanel.tsx: Hub usage analytics with charts and engagement metrics.
+
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";

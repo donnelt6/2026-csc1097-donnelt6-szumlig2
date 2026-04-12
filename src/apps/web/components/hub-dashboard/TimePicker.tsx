@@ -1,5 +1,7 @@
 'use client';
 
+// TimePicker.tsx: Time picker component with hour and minute selection.
+
 import { useEffect, useRef, useState } from 'react';
 import { ClockIcon } from '@heroicons/react/24/outline';
 import { pad2 } from '../../lib/dateUtils';

@@ -1,3 +1,5 @@
+// useSourceSelection.ts: Exclusion-based source selection hook with localStorage persistence.
+
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Source } from "./types";
 

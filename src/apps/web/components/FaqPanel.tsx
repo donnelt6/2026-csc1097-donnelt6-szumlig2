@@ -1,5 +1,7 @@
 'use client';
 
+// FaqPanel.tsx: FAQ management panel for viewing and managing hub FAQs.
+
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { archiveFaq, generateFaqs, listFaqs, updateFaq } from "../lib/api";

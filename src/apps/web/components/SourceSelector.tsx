@@ -1,5 +1,7 @@
 'use client';
 
+// SourceSelector.tsx: Dropdown for selecting which sources to include in chat context.
+
 import { useState, useRef, useEffect } from 'react';
 import { ChevronDownIcon } from '@heroicons/react/24/outline';
 import type { Source } from '../lib/types';

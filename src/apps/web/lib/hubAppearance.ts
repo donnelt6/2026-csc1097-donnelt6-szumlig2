@@ -1,3 +1,5 @@
+// hubAppearance.ts: Hub icon and colour palettes used by the appearance picker.
+
 import type { ComponentType, SVGProps } from "react";
 import {
   AcademicCapIcon,

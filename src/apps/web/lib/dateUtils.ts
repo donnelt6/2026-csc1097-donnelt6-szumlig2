@@ -1,3 +1,5 @@
+// dateUtils.ts: Date and time formatting utilities shared across components.
+
 export function pad2(value: number) {
   return value.toString().padStart(2, "0");
 }

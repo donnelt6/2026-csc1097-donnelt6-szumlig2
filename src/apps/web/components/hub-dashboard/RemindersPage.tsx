@@ -1,5 +1,7 @@
 'use client';
 
+// RemindersPage.tsx: Hub dashboard reminders page with calendar and list views.
+
 import { useMemo, useState } from 'react';
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { listReminders, listReminderCandidates } from '../../lib/api';

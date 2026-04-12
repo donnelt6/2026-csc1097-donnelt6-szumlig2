@@ -1,5 +1,7 @@
 'use client';
 
+// HubDashboardTabContext.tsx: Tab state context for the per-hub dashboard page.
+
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { useHubTab } from './HubTabContext';
 

@@ -1,5 +1,7 @@
 'use client';
 
+// AdminDashboard.tsx: Admin-only overview dashboard with platform-wide statistics.
+
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {

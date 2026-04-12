@@ -1,5 +1,7 @@
 'use client';
 
+// HubTabContext.tsx: Tab state context for the hub detail page.
+
 import { createContext, useCallback, useContext, useState } from 'react';
 
 export type HubTab = 'chat' | 'sources' | 'dashboard' | 'members' | 'admin';

@@ -1,5 +1,7 @@
 "use client";
 
+// CurrentHubContext.tsx: React context providing the currently active hub to child components.
+
 import { createContext, useContext } from "react";
 import type { Hub } from "./types";
 

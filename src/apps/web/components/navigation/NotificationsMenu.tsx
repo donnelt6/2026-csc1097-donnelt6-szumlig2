@@ -1,5 +1,7 @@
 'use client';
 
+// NotificationsMenu.tsx: Notification bell dropdown showing recent alerts and updates.
+
 import { useEffect, useMemo, useRef } from "react";
 import { BellIcon } from "@heroicons/react/24/solid";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";

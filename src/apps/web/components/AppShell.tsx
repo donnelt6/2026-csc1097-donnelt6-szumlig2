@@ -1,5 +1,7 @@
 'use client';
 
+// AppShell.tsx: Top-level layout shell providing sidebar, navbar, and content area.
+
 import { useState, useCallback, useLayoutEffect, useMemo, useEffect, useRef } from 'react';
 import { useParams, usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';

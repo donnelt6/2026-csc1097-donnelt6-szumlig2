@@ -1,5 +1,7 @@
 'use client';
 
+// ReminderModal.tsx: Modal for creating and editing reminders with date and time pickers.
+
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { XMarkIcon, TrashIcon, CheckCircleIcon, ArrowPathIcon, ChevronDownIcon } from '@heroicons/react/24/outline';
@@ -190,8 +192,6 @@ function NotifyPicker({ value, onChange, onValidChange, deadlineDate, deadlineHo
   );
 }
 
-/* ---- Helpers ---- */
-
 function buildIso(dateStr: string, hour: number, minute: number): string {
   const [y, m, d] = dateStr.split('-').map(Number);
   const date = new Date(y, m - 1, d, hour, minute, 0, 0);
@@ -217,8 +217,6 @@ function defaultTime(d: Date): { hour: number; minute: number } {
   if (m >= 60) { m = 0; h = (h + 1) % 24; }
   return { hour: h, minute: m };
 }
-
-/* ---- Types ---- */
 
 interface DayModalProps {
   mode: 'day';
@@ -252,8 +250,6 @@ export function ReminderModal(props: ReminderModalProps) {
   if (props.mode === 'create') return <CreateModal {...props} />;
   return <EditModal {...props} />;
 }
-
-/* Day Modal (clicked a calendar day) */
 
 function DayModal({ hubId, date, reminders, onClose, onSaved, onEditReminder }: DayModalProps) {
   const [tab, setTab] = useState<'view' | 'create'>(reminders.length > 0 ? 'view' : 'create');
@@ -308,8 +304,6 @@ function DayModal({ hubId, date, reminders, onClose, onSaved, onEditReminder }: 
   );
 }
 
-/* ---- Day reminders list ---- */
-
 function DayRemindersList({ reminders, onEdit }: { reminders: Reminder[]; onEdit: (r: Reminder) => void }) {
   const sorted = useMemo(
     () => [...reminders].sort((a, b) => new Date(a.due_at).getTime() - new Date(b.due_at).getTime()),
@@ -343,8 +337,6 @@ function DayRemindersList({ reminders, onEdit }: { reminders: Reminder[]; onEdit
     </div>
   );
 }
-
-/* ---- Day create form (time + message only, date from context) ---- */
 
 function DayCreateForm({ hubId, date, onSaved }: { hubId: string; date: Date; onSaved: () => void }) {
   const queryClient = useQueryClient();
@@ -429,8 +421,6 @@ function DayCreateForm({ hubId, date, onSaved }: { hubId: string; date: Date; on
     </form>
   );
 }
-
-/* Create Modal (sidebar button) */
 
 function CreateModal({ hubId, onClose, onSaved }: CreateModalProps) {
   const queryClient = useQueryClient();
@@ -531,8 +521,6 @@ function CreateModal({ hubId, onClose, onSaved }: CreateModalProps) {
     </div>
   );
 }
-
-/* Edit Modal */
 
 function EditModal({ hubId, reminder, onClose, onSaved }: EditModalProps) {
   const queryClient = useQueryClient();

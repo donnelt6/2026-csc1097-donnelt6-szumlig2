@@ -1,5 +1,7 @@
 'use client';
 
+// UploadPanel.tsx: Source upload and management panel with status tracking.
+
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {

@@ -1,5 +1,7 @@
 'use client';
 
+// FullCalendar.tsx: Full-size calendar view for browsing reminders by month.
+
 import { useMemo } from 'react';
 import { ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/24/outline';
 import type { Reminder, ReminderCandidate } from '../../lib/types';

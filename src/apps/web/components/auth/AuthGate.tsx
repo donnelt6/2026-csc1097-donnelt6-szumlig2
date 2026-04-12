@@ -1,5 +1,7 @@
 'use client';
 
+// AuthGate.tsx: Authentication guard that redirects unauthenticated users to the login page.
+
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { useAuth } from "./AuthProvider";

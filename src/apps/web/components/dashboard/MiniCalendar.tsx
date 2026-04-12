@@ -1,5 +1,7 @@
 'use client';
 
+// MiniCalendar.tsx: Compact calendar widget with day selection and reminder dot indicators.
+
 import { ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/24/outline';
 
 const WEEKDAYS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];

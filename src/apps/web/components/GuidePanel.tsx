@@ -1,5 +1,7 @@
 'use client';
 
+// GuidePanel.tsx: Study guide management panel for generating and viewing guides.
+
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
