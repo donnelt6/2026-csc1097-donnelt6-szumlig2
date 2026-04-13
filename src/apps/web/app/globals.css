@@ -6525,10 +6525,42 @@ textarea {
   padding: 16px;
 }
 
+.hub-analytics__metric--skeleton {
+  align-content: start;
+}
+
 .hub-analytics__metric-label,
 .hub-analytics__metric-hint {
   color: var(--muted);
   font-size: 0.85rem;
+}
+
+.hub-analytics__metric-label-skeleton,
+.hub-analytics__metric-hint-skeleton,
+.hub-analytics__panel-title-skeleton,
+.hub-analytics__panel-meta-skeleton,
+.hub-analytics__trend-label-skeleton,
+.hub-analytics__legend-skeleton,
+.hub-analytics__source-name-skeleton,
+.hub-analytics__source-stat-skeleton {
+  display: inline-block;
+  border-radius: 999px;
+}
+
+.hub-analytics__metric-label-skeleton {
+  width: 68px;
+  height: 12px;
+}
+
+.hub-analytics__metric-value-skeleton {
+  width: 76px;
+  height: 26px;
+  border-radius: 10px;
+}
+
+.hub-analytics__metric-hint-skeleton {
+  width: 96px;
+  height: 12px;
 }
 
 .hub-analytics__metric-hint--fast {
@@ -6583,10 +6615,24 @@ textarea {
   margin: 0;
 }
 
+.hub-analytics__panel-title-skeleton {
+  width: 104px;
+  height: 16px;
+}
+
+.hub-analytics__panel-meta-skeleton {
+  width: 52px;
+  height: 12px;
+}
+
 .hub-analytics__trend {
   display: flex;
   align-items: end;
   gap: 6px;
+}
+
+.hub-analytics__trend--skeleton {
+  min-height: 102px;
 }
 
 .hub-analytics__trend-day {
@@ -6605,11 +6651,20 @@ textarea {
   gap: 3px;
 }
 
+.hub-analytics__trend-bars--skeleton {
+  width: 100%;
+  justify-content: center;
+}
+
 .hub-analytics__trend-bar {
   display: block;
   width: 14px;
   border-radius: 999px;
   background: linear-gradient(180deg, var(--accent), color-mix(in srgb, var(--accent) 60%, var(--card) 40%));
+}
+
+.hub-analytics__trend-bar--skeleton {
+  background: transparent;
 }
 
 .hub-analytics__trend-bar--unhelpful {
@@ -6645,6 +6700,11 @@ textarea {
 .hub-analytics__trend-label {
   color: var(--muted);
   font-size: 0.75rem;
+}
+
+.hub-analytics__trend-label-skeleton {
+  width: 22px;
+  height: 10px;
 }
 
 .hub-analytics__source-list {
@@ -6723,6 +6783,11 @@ textarea {
   white-space: nowrap;
 }
 
+.hub-analytics__source-name-skeleton {
+  width: min(170px, 100%);
+  height: 14px;
+}
+
 .hub-analytics__source-row:last-child {
   padding-bottom: 0;
   border-bottom: 0;
@@ -6769,6 +6834,21 @@ textarea {
   text-align: right;
   color: var(--muted);
   font-size: 0.85rem;
+}
+
+.hub-analytics__source-stat-skeleton {
+  width: 74px;
+  height: 12px;
+  justify-self: end;
+}
+
+.hub-analytics__source-stat-skeleton--short {
+  width: 58px;
+}
+
+.hub-analytics__legend-skeleton {
+  width: 88px;
+  height: 12px;
 }
 
 .hub-analytics__coverage-tag {

@@ -34,6 +34,12 @@
   transition: border-color var(--transition-fast, 0.15s ease);
 }
 
+.admin__stat-card--skeleton,
+.admin__sug-row--skeleton,
+.admin__flag-card--skeleton {
+  pointer-events: none;
+}
+
 .admin__stat-card--clickable {
   cursor: pointer;
 }
@@ -61,6 +67,10 @@
 .admin__stat-icon svg {
   width: 18px;
   height: 18px;
+}
+
+.admin__stat-icon--skeleton {
+  border-radius: 10px;
 }
 
 .admin__stat-icon--sources {
@@ -97,6 +107,24 @@
 .admin__stat-sub {
   font-size: 0.75rem;
   color: var(--muted);
+}
+
+.admin__stat-label-skeleton {
+  width: 108px;
+  height: 12px;
+  border-radius: 999px;
+}
+
+.admin__stat-value-skeleton {
+  width: 64px;
+  height: 30px;
+  border-radius: 10px;
+}
+
+.admin__stat-sub-skeleton {
+  width: 154px;
+  height: 12px;
+  border-radius: 999px;
 }
 
 .admin__main {
@@ -238,10 +266,20 @@
   gap: 4px;
 }
 
+.admin__sug-row-icon--skeleton {
+  color: transparent;
+}
+
 .admin__sug-row-header {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.admin__sug-row-title-skeleton {
+  width: min(220px, 100%);
+  height: 16px;
+  border-radius: 999px;
 }
 
 .admin__sug-row-title {
@@ -266,6 +304,12 @@
   color: var(--accent);
 }
 
+.admin__sug-row-badge-skeleton {
+  width: 58px;
+  height: 18px;
+  border-radius: 999px;
+}
+
 .admin__sug-row-badge--youtube {
   background: color-mix(in srgb, #ef4444 12%, transparent);
   color: #ef4444;
@@ -285,6 +329,12 @@
   text-decoration: underline;
 }
 
+.admin__sug-row-url-skeleton {
+  width: min(280px, 100%);
+  height: 12px;
+  border-radius: 999px;
+}
+
 .admin__sug-row-reason {
   font-size: 0.8125rem;
   color: var(--text-secondary);
@@ -294,6 +344,12 @@
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+.admin__sug-row-reason-skeleton {
+  width: min(100%, 320px);
+  height: 12px;
+  border-radius: 999px;
 }
 
 .admin__sug-row-actions {
@@ -320,6 +376,10 @@
 .admin__sug-row-btn svg {
   width: 15px;
   height: 15px;
+}
+
+.admin__sug-row-btn--skeleton {
+  border: 0;
 }
 
 .admin__sug-row-btn--accept {
@@ -462,6 +522,12 @@
   justify-content: space-between;
 }
 
+.admin__flag-badge-skeleton {
+  width: 118px;
+  height: 22px;
+  border-radius: 999px;
+}
+
 .admin__flag-badge {
   display: inline-flex;
   align-items: center;
@@ -489,10 +555,22 @@
   color: var(--muted);
 }
 
+.admin__flag-time-skeleton {
+  width: 72px;
+  height: 12px;
+  border-radius: 999px;
+}
+
 .admin__flag-section {
   display: flex;
   flex-direction: column;
   gap: 4px;
+}
+
+.admin__flag-label-skeleton {
+  width: 88px;
+  height: 11px;
+  border-radius: 999px;
 }
 
 .admin__flag-label {
@@ -513,6 +591,16 @@
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+.admin__flag-text-skeleton {
+  width: 100%;
+  height: 13px;
+  border-radius: 999px;
+}
+
+.admin__flag-text-skeleton--short {
+  width: 72%;
 }
 
 .admin__flag-reason-text {
@@ -548,6 +636,11 @@
 .admin__flag-btn svg {
   width: 14px;
   height: 14px;
+}
+
+.admin__flag-btn--skeleton {
+  color: transparent;
+  border: 0;
 }
 
 .admin__flag-btn:hover {

@@ -47,6 +47,64 @@ interface AdminDashboardProps {
   onSwitchTab?: (tab: HubTab) => void;
 }
 
+function AdminStatCardSkeleton({ index }: { index: number }) {
+  return (
+    <div className="admin__stat-card admin__stat-card--skeleton" aria-hidden="true" data-testid={`admin-stat-skeleton-${index}`}>
+      <div className="admin__stat-header">
+        <span className="admin__stat-icon admin__stat-icon--skeleton dash-skeleton" />
+        <span className="admin__stat-label-skeleton dash-skeleton" />
+      </div>
+      <span className="admin__stat-value-skeleton dash-skeleton" />
+      <span className="admin__stat-sub-skeleton dash-skeleton" />
+    </div>
+  );
+}
+
+function AdminSuggestionRowSkeleton({ index }: { index: number }) {
+  return (
+    <div className="admin__sug-row admin__sug-row--skeleton" aria-hidden="true" data-testid={`admin-suggestion-skeleton-${index}`}>
+      <span className="admin__sug-row-icon admin__sug-row-icon--skeleton dash-skeleton" />
+      <div className="admin__sug-row-content">
+        <div className="admin__sug-row-header">
+          <span className="admin__sug-row-title-skeleton dash-skeleton" />
+          <span className="admin__sug-row-badge-skeleton dash-skeleton" />
+        </div>
+        <span className="admin__sug-row-url-skeleton dash-skeleton" />
+        <span className="admin__sug-row-reason-skeleton dash-skeleton" />
+      </div>
+      <div className="admin__sug-row-actions" aria-hidden="true">
+        <span className="admin__sug-row-btn admin__sug-row-btn--skeleton dash-skeleton" />
+        <span className="admin__sug-row-btn admin__sug-row-btn--skeleton dash-skeleton" />
+      </div>
+    </div>
+  );
+}
+
+function AdminModerationRowSkeleton({ index }: { index: number }) {
+  return (
+    <div className="admin__flag-card admin__flag-card--skeleton" aria-hidden="true" data-testid={`admin-moderation-skeleton-${index}`}>
+      <div className="admin__flag-card-top">
+        <span className="admin__flag-badge-skeleton dash-skeleton" />
+        <span className="admin__flag-time-skeleton dash-skeleton" />
+      </div>
+      <div className="admin__flag-section">
+        <span className="admin__flag-label-skeleton dash-skeleton" />
+        <span className="admin__flag-text-skeleton dash-skeleton" />
+        <span className="admin__flag-text-skeleton admin__flag-text-skeleton--short dash-skeleton" />
+      </div>
+      <div className="admin__flag-section">
+        <span className="admin__flag-label-skeleton dash-skeleton" />
+        <span className="admin__flag-text-skeleton dash-skeleton" />
+      </div>
+      <div className="admin__flag-actions" aria-hidden="true">
+        <span className="admin__flag-btn admin__flag-btn--skeleton dash-skeleton" />
+        <span className="admin__flag-btn admin__flag-btn--skeleton dash-skeleton" />
+        <span className="admin__flag-btn admin__flag-btn--skeleton dash-skeleton" />
+      </div>
+    </div>
+  );
+}
+
 export function AdminDashboard({ hubId, hubRole, onSwitchTab }: AdminDashboardProps) {
   const queryClient = useQueryClient();
   const { activeAdminTab } = useHubDashboardTab();
@@ -61,14 +119,14 @@ export function AdminDashboard({ hubId, hubRole, onSwitchTab }: AdminDashboardPr
   const [draftCitations, setDraftCitations] = useState('[]');
   const [busySugIds, setBusySugIds] = useState<Map<string, 'accepted' | 'declined'>>(new Map());
 
-  const { data: sources = [] } = useQuery({
+  const { data: sources = [], isLoading: sourcesLoading } = useQuery({
     queryKey: ['sources', hubId],
     queryFn: () => listSources(hubId),
     enabled: canModerate,
     staleTime: 0,
   });
 
-  const { data: suggestions = [] } = useQuery({
+  const { data: suggestions = [], isLoading: suggestionsLoading } = useQuery({
     queryKey: ['source-suggestions', hubId],
     queryFn: () => listSourceSuggestions({ hubId, status: 'pending' }),
     enabled: canModerate,
@@ -76,14 +134,14 @@ export function AdminDashboard({ hubId, hubRole, onSwitchTab }: AdminDashboardPr
     refetchInterval: 10000,
   });
 
-  const { data: acceptedSuggestions = [] } = useQuery({
+  const { data: acceptedSuggestions = [], isLoading: acceptedSuggestionsLoading } = useQuery({
     queryKey: ['source-suggestions', hubId, 'accepted'],
     queryFn: () => listSourceSuggestions({ hubId, status: 'accepted' }),
     enabled: canModerate && sugTab === 'reviewed',
     staleTime: 0,
   });
 
-  const { data: declinedSuggestions = [] } = useQuery({
+  const { data: declinedSuggestions = [], isLoading: declinedSuggestionsLoading } = useQuery({
     queryKey: ['source-suggestions', hubId, 'declined'],
     queryFn: () => listSourceSuggestions({ hubId, status: 'declined' }),
     enabled: canModerate && sugTab === 'reviewed',
@@ -97,49 +155,49 @@ export function AdminDashboard({ hubId, hubRole, onSwitchTab }: AdminDashboardPr
     [acceptedSuggestions, declinedSuggestions],
   );
 
-  const { data: openFlags = [] } = useQuery({
+  const { data: openFlags = [], isLoading: openFlagsLoading } = useQuery({
     queryKey: ['flagged-chats', hubId, 'open'],
     queryFn: () => listFlaggedChats(hubId, { status: 'open' }),
     enabled: canModerate,
     refetchInterval: 5000,
   });
 
-  const { data: inReviewFlags = [] } = useQuery({
+  const { data: inReviewFlags = [], isLoading: inReviewFlagsLoading } = useQuery({
     queryKey: ['flagged-chats', hubId, 'in_review'],
     queryFn: () => listFlaggedChats(hubId, { status: 'in_review' }),
     enabled: canModerate,
     refetchInterval: 5000,
   });
 
-  const { data: resolvedFlags = [] } = useQuery({
+  const { data: resolvedFlags = [], isLoading: resolvedFlagsLoading } = useQuery({
     queryKey: ['flagged-chats', hubId, 'resolved'],
     queryFn: () => listFlaggedChats(hubId, { status: 'resolved' }),
     enabled: canModerate,
     staleTime: 0,
   });
 
-  const { data: dismissedFlags = [] } = useQuery({
+  const { data: dismissedFlags = [], isLoading: dismissedFlagsLoading } = useQuery({
     queryKey: ['flagged-chats', hubId, 'dismissed'],
     queryFn: () => listFlaggedChats(hubId, { status: 'dismissed' }),
     enabled: canModerate,
     staleTime: 0,
   });
 
-  const { data: openContentFlags = [] } = useQuery({
+  const { data: openContentFlags = [], isLoading: openContentFlagsLoading } = useQuery({
     queryKey: ['flagged-content', hubId, 'open'],
     queryFn: () => listFlaggedContent(hubId, { status: 'open' }),
     enabled: canModerate,
     refetchInterval: 10000,
   });
 
-  const { data: resolvedContentFlags = [] } = useQuery({
+  const { data: resolvedContentFlags = [], isLoading: resolvedContentFlagsLoading } = useQuery({
     queryKey: ['flagged-content', hubId, 'resolved'],
     queryFn: () => listFlaggedContent(hubId, { status: 'resolved' }),
     enabled: canModerate,
     staleTime: 0,
   });
 
-  const { data: dismissedContentFlags = [] } = useQuery({
+  const { data: dismissedContentFlags = [], isLoading: dismissedContentFlagsLoading } = useQuery({
     queryKey: ['flagged-content', hubId, 'dismissed'],
     queryFn: () => listFlaggedContent(hubId, { status: 'dismissed' }),
     enabled: canModerate,
@@ -288,12 +346,26 @@ export function AdminDashboard({ hubId, hubRole, onSwitchTab }: AdminDashboardPr
     { key: 'faqs', label: 'FAQs', count: pendingFaqs.length },
     { key: 'guides', label: 'Guides', count: pendingGuides.length },
   ];
+  const statsLoading = sourcesLoading
+    || openFlagsLoading
+    || inReviewFlagsLoading
+    || openContentFlagsLoading
+    || resolvedFlagsLoading
+    || dismissedFlagsLoading
+    || resolvedContentFlagsLoading
+    || dismissedContentFlagsLoading;
+  const suggestionsPanelLoading = sugTab === 'pending'
+    ? suggestionsLoading
+    : acceptedSuggestionsLoading || declinedSuggestionsLoading;
+  const moderationPanelLoading = modTab === 'chats'
+    ? openFlagsLoading || inReviewFlagsLoading
+    : openContentFlagsLoading;
 
   return (
     <div className="admin">
       {activeAdminTab === 'analytics' ? (
         <>
-          <h2 className="admin__title">AI Analytics</h2>
+          <h2 className="admin__title">Analytics</h2>
           <HubAnalyticsPanel hubId={hubId} hubRole={hubRole} />
         </>
       ) : (
@@ -301,6 +373,10 @@ export function AdminDashboard({ hubId, hubRole, onSwitchTab }: AdminDashboardPr
       <h2 className="admin__title">Admin Console</h2>
 
       <div className="admin__stats">
+        {statsLoading ? (
+          Array.from({ length: 3 }, (_, index) => <AdminStatCardSkeleton key={index} index={index} />)
+        ) : (
+          <>
         <div
           className="admin__stat-card admin__stat-card--clickable"
           onClick={() => onSwitchTab?.('sources')}
@@ -351,6 +427,8 @@ export function AdminDashboard({ hubId, hubRole, onSwitchTab }: AdminDashboardPr
           <span className="admin__stat-value">{resolvedCount}</span>
           <span className="admin__stat-sub">View all past reviews</span>
         </div>
+          </>
+        )}
       </div>
 
       <div className="admin__main">
@@ -379,7 +457,9 @@ export function AdminDashboard({ hubId, hubRole, onSwitchTab }: AdminDashboardPr
           </div>
           <div className="admin__panel-body">
             {sugTab === 'pending' && (
-              suggestions.length === 0 ? (
+              suggestionsPanelLoading ? (
+                Array.from({ length: 3 }, (_, index) => <AdminSuggestionRowSkeleton key={index} index={index} />)
+              ) : suggestions.length === 0 ? (
                 <div className="admin__section-empty">
                   <LightBulbIcon className="admin__empty-icon" />
                   <p className="admin__empty-title">No pending suggestions</p>
@@ -399,7 +479,9 @@ export function AdminDashboard({ hubId, hubRole, onSwitchTab }: AdminDashboardPr
               )
             )}
             {sugTab === 'reviewed' && (
-              reviewedSuggestions.length === 0 ? (
+              suggestionsPanelLoading ? (
+                Array.from({ length: 3 }, (_, index) => <AdminSuggestionRowSkeleton key={index} index={index} />)
+              ) : reviewedSuggestions.length === 0 ? (
                 <div className="admin__section-empty">
                   <CheckIcon className="admin__empty-icon" />
                   <p className="admin__empty-title">No reviewed suggestions yet</p>
@@ -443,7 +525,9 @@ export function AdminDashboard({ hubId, hubRole, onSwitchTab }: AdminDashboardPr
 
           <div className="admin__mod-list">
             {modTab === 'chats' && (
-              pendingChats.length === 0 ? (
+              moderationPanelLoading ? (
+                Array.from({ length: 3 }, (_, index) => <AdminModerationRowSkeleton key={index} index={index} />)
+              ) : pendingChats.length === 0 ? (
                 <p className="admin__section-empty">No flagged chats to review.</p>
               ) : (
                 pendingChats.map((item) => (
@@ -461,7 +545,9 @@ export function AdminDashboard({ hubId, hubRole, onSwitchTab }: AdminDashboardPr
             )}
 
             {modTab === 'faqs' && (
-              pendingFaqs.length === 0 ? (
+              moderationPanelLoading ? (
+                Array.from({ length: 3 }, (_, index) => <AdminModerationRowSkeleton key={index} index={index} />)
+              ) : pendingFaqs.length === 0 ? (
                 <p className="admin__section-empty">No flagged FAQs to review.</p>
               ) : (
                 pendingFaqs.map((item) => (
@@ -477,7 +563,9 @@ export function AdminDashboard({ hubId, hubRole, onSwitchTab }: AdminDashboardPr
             )}
 
             {modTab === 'guides' && (
-              pendingGuides.length === 0 ? (
+              moderationPanelLoading ? (
+                Array.from({ length: 3 }, (_, index) => <AdminModerationRowSkeleton key={index} index={index} />)
+              ) : pendingGuides.length === 0 ? (
                 <p className="admin__section-empty">No flagged guides to review.</p>
               ) : (
                 pendingGuides.map((item) => (
