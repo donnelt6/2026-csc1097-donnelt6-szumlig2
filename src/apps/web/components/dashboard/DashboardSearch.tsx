@@ -1,5 +1,7 @@
 'use client';
 
+// DashboardSearch.tsx: Dashboard search tab for finding hubs, sources, and content.
+
 import { useState, useMemo } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';

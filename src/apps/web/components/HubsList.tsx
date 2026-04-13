@@ -1,5 +1,7 @@
 'use client';
 
+// HubsList.tsx: Hub card grid with search filtering, sorting, and pagination.
+
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";

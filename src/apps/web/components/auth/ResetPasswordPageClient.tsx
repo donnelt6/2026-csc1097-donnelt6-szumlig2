@@ -1,5 +1,7 @@
 'use client';
 
+// ResetPasswordPageClient.tsx: Password reset form for setting a new password via recovery link.
+
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";

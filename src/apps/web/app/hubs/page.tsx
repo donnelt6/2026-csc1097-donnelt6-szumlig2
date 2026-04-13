@@ -1,5 +1,7 @@
 'use client';
 
+// page.tsx: Hubs list page with create-hub modal and hub management toolbar.
+
 import Link from "next/link";
 import { useState, useRef, useEffect } from "react";
 import { useSearchParams, useRouter } from "next/navigation";

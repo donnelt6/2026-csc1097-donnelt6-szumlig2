@@ -1,5 +1,7 @@
 'use client';
 
+// HubAppearanceModal.tsx: Modal for choosing a hub icon and colour.
+
 import { useEffect, useRef } from "react";
 import { XMarkIcon } from "@heroicons/react/24/outline";
 import {

@@ -1,5 +1,7 @@
 'use client';
 
+// RemindersSidebar.tsx: Sidebar panel listing reminders for the selected calendar date.
+
 import { useMemo, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { PlusIcon } from '@heroicons/react/24/outline';
@@ -33,8 +35,6 @@ export function RemindersSidebar({
     </div>
   );
 }
-
-/* ---------- AI Insights Section ---------- */
 
 function InsightsSection({ hubId, candidates }: { hubId: string; candidates: ReminderCandidate[] }) {
   const queryClient = useQueryClient();
@@ -129,8 +129,6 @@ function InsightsSection({ hubId, candidates }: { hubId: string; candidates: Rem
     </div>
   );
 }
-
-/* ---------- Manual Reminders Section ---------- */
 
 function ManualSection({
   reminders,

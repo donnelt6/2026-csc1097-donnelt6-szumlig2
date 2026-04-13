@@ -1,5 +1,7 @@
 'use client';
 
+// AuthProvider.tsx: Session context provider that tracks Supabase auth state changes.
+
 import type { Session, User } from "@supabase/supabase-js";
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { supabase } from "../../lib/supabaseClient";

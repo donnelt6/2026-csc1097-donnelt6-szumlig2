@@ -19,6 +19,19 @@ describe("HubAnalyticsPanel", () => {
     vi.clearAllMocks();
   });
 
+  it("renders analytics skeletons while data is loading", () => {
+    const pending = new Promise<never>(() => {});
+    vi.mocked(getHubAnalyticsSummary).mockReturnValue(pending);
+    vi.mocked(getHubAnalyticsTrends).mockReturnValue(pending);
+
+    renderWithQueryClient(<HubAnalyticsPanel hubId="hub-1" hubRole="owner" />);
+
+    expect(screen.getByTestId("hub-analytics-loading-skeleton")).toBeInTheDocument();
+    expect(screen.getByTestId("hub-analytics-metric-skeleton-0")).toBeInTheDocument();
+    expect(screen.getByTestId("hub-analytics-trend-skeleton")).toBeInTheDocument();
+    expect(screen.getByTestId("hub-analytics-sources-skeleton")).toBeInTheDocument();
+  });
+
   it("renders analytics metrics and top sources for owners", async () => {
     vi.mocked(getHubAnalyticsSummary).mockResolvedValue({
       window_days: 30,

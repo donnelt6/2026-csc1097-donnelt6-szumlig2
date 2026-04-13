@@ -1,5 +1,7 @@
 'use client';
 
+// HubAnalyticsPanel.tsx: Hub usage analytics with charts and engagement metrics.
+
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
@@ -9,6 +11,84 @@ import { getHubAnalyticsSummary, getHubAnalyticsTrends } from "../lib/api";
 import type { AnalyticsTopSource, ChatAnalyticsTrendPoint, MembershipRole } from "../lib/types";
 
 type TopSourcesMode = "opens" | "returns" | "flags";
+
+function HubAnalyticsMetricSkeleton({ index }: { index: number }) {
+  return (
+    <div className="hub-analytics__metric card hub-analytics__metric--skeleton" aria-hidden="true" data-testid={`hub-analytics-metric-skeleton-${index}`}>
+      <span className="hub-analytics__metric-label-skeleton dash-skeleton" />
+      <span className="hub-analytics__metric-value-skeleton dash-skeleton" />
+      <span className="hub-analytics__metric-hint-skeleton dash-skeleton" />
+    </div>
+  );
+}
+
+function HubAnalyticsTrendSkeleton() {
+  return (
+    <section className="card hub-analytics__panel hub-analytics__panel--wide" aria-hidden="true" data-testid="hub-analytics-trend-skeleton">
+      <div className="hub-analytics__panel-header">
+        <span className="hub-analytics__panel-title-skeleton dash-skeleton" />
+        <span className="hub-analytics__panel-meta-skeleton dash-skeleton" />
+      </div>
+      <div className="hub-analytics__trend hub-analytics__trend--skeleton">
+        {Array.from({ length: 10 }, (_, index) => (
+          <div key={index} className="hub-analytics__trend-day">
+            <div className="hub-analytics__trend-bars hub-analytics__trend-bars--skeleton">
+              <span
+                className="hub-analytics__trend-bar hub-analytics__trend-bar--skeleton dash-skeleton"
+                style={{ height: `${28 + (index % 5) * 8}px` }}
+              />
+              <span
+                className="hub-analytics__trend-bar hub-analytics__trend-bar--unhelpful hub-analytics__trend-bar--skeleton dash-skeleton"
+                style={{ height: `${12 + (index % 3) * 6}px` }}
+              />
+            </div>
+            <span className="hub-analytics__trend-label-skeleton dash-skeleton" />
+          </div>
+        ))}
+      </div>
+      <div className="hub-analytics__trend-legend">
+        <span className="hub-analytics__legend-skeleton dash-skeleton" />
+        <span className="hub-analytics__legend-skeleton dash-skeleton" />
+      </div>
+    </section>
+  );
+}
+
+function HubAnalyticsSourcesSkeleton() {
+  return (
+    <section className="card hub-analytics__panel" aria-hidden="true" data-testid="hub-analytics-sources-skeleton">
+      <div className="hub-analytics__panel-header">
+        <span className="hub-analytics__panel-title-skeleton dash-skeleton" />
+        <span className="hub-analytics__panel-meta-skeleton dash-skeleton" />
+      </div>
+      <div className="hub-analytics__source-list">
+        {Array.from({ length: 5 }, (_, index) => (
+          <div key={index} className="hub-analytics__source-row">
+            <span className="hub-analytics__source-name-skeleton dash-skeleton" />
+            <div className="hub-analytics__source-stats">
+              <span className="hub-analytics__source-stat-skeleton dash-skeleton" />
+              <span className="hub-analytics__source-stat-skeleton hub-analytics__source-stat-skeleton--short dash-skeleton" />
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function HubAnalyticsLoadingSkeleton() {
+  return (
+    <div className="hub-analytics" data-testid="hub-analytics-loading-skeleton">
+      <div className="hub-analytics__metrics">
+        {Array.from({ length: 6 }, (_, index) => <HubAnalyticsMetricSkeleton key={index} index={index} />)}
+      </div>
+      <div className="hub-analytics__grid">
+        <HubAnalyticsTrendSkeleton />
+        <HubAnalyticsSourcesSkeleton />
+      </div>
+    </div>
+  );
+}
 
 function MetricCard({
   label,
@@ -98,7 +178,7 @@ export function HubAnalyticsPanel({
   }
 
   if (summaryQuery.isLoading || trendsQuery.isLoading) {
-    return <p className="muted">Loading AI analytics...</p>;
+    return <HubAnalyticsLoadingSkeleton />;
   }
 
   if (summaryQuery.error) {

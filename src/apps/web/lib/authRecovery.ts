@@ -1,3 +1,5 @@
+// authRecovery.ts: Parses auth link parameters and determines recovery or confirmation intent.
+
 export type AuthLinkIntent = "recovery" | "confirmation" | "unknown";
 
 export interface AuthLinkState {

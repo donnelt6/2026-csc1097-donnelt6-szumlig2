@@ -1,5 +1,7 @@
 'use client';
 
+// ProfilePicker.tsx: Avatar and colour selection picker for profile customisation.
+
 import { ProfileAvatar } from "./ProfileAvatar";
 import {
   PROFILE_PRESET_AVATARS,

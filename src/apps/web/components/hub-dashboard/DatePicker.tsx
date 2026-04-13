@@ -1,5 +1,7 @@
 'use client';
 
+// DatePicker.tsx: Date picker component with calendar popover for selecting dates.
+
 import { useEffect, useRef, useState } from 'react';
 import { ChevronLeftIcon, ChevronRightIcon, CalendarIcon } from '@heroicons/react/24/outline';
 import { pad2 } from '../../lib/dateUtils';

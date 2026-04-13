@@ -1,3 +1,5 @@
+// e2eAuth.ts: In-browser Supabase auth shim for E2E tests without a live project.
+
 import type { Session, User } from "@supabase/supabase-js";
 
 const E2E_AUTH_STORAGE_KEY = "caddie:e2e-auth-session";

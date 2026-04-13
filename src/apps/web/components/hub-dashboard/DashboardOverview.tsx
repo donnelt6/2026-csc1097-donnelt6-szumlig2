@@ -1,5 +1,7 @@
 'use client';
 
+// DashboardOverview.tsx: Per-hub dashboard overview with source stats and recent activity.
+
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {

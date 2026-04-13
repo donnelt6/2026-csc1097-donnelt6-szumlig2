@@ -1,5 +1,7 @@
 'use client';
 
+// AddSourceModal.tsx: Modal dialog for adding new URL or file sources to a hub.
+
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   XMarkIcon,

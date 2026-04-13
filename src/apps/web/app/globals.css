@@ -6525,10 +6525,42 @@ textarea {
   padding: 16px;
 }
 
+.hub-analytics__metric--skeleton {
+  align-content: start;
+}
+
 .hub-analytics__metric-label,
 .hub-analytics__metric-hint {
   color: var(--muted);
   font-size: 0.85rem;
+}
+
+.hub-analytics__metric-label-skeleton,
+.hub-analytics__metric-hint-skeleton,
+.hub-analytics__panel-title-skeleton,
+.hub-analytics__panel-meta-skeleton,
+.hub-analytics__trend-label-skeleton,
+.hub-analytics__legend-skeleton,
+.hub-analytics__source-name-skeleton,
+.hub-analytics__source-stat-skeleton {
+  display: inline-block;
+  border-radius: 999px;
+}
+
+.hub-analytics__metric-label-skeleton {
+  width: 68px;
+  height: 12px;
+}
+
+.hub-analytics__metric-value-skeleton {
+  width: 76px;
+  height: 26px;
+  border-radius: 10px;
+}
+
+.hub-analytics__metric-hint-skeleton {
+  width: 96px;
+  height: 12px;
 }
 
 .hub-analytics__metric-hint--fast {
@@ -6583,10 +6615,24 @@ textarea {
   margin: 0;
 }
 
+.hub-analytics__panel-title-skeleton {
+  width: 104px;
+  height: 16px;
+}
+
+.hub-analytics__panel-meta-skeleton {
+  width: 52px;
+  height: 12px;
+}
+
 .hub-analytics__trend {
   display: flex;
-  align-items: end;
+  align-items: flex-end;
   gap: 6px;
+}
+
+.hub-analytics__trend--skeleton {
+  min-height: 102px;
 }
 
 .hub-analytics__trend-day {
@@ -6601,8 +6647,13 @@ textarea {
 .hub-analytics__trend-bars {
   height: 72px;
   display: flex;
-  align-items: end;
+  align-items: flex-end;
   gap: 3px;
+}
+
+.hub-analytics__trend-bars--skeleton {
+  width: 100%;
+  justify-content: center;
 }
 
 .hub-analytics__trend-bar {
@@ -6610,6 +6661,10 @@ textarea {
   width: 14px;
   border-radius: 999px;
   background: linear-gradient(180deg, var(--accent), color-mix(in srgb, var(--accent) 60%, var(--card) 40%));
+}
+
+.hub-analytics__trend-bar--skeleton {
+  background: transparent;
 }
 
 .hub-analytics__trend-bar--unhelpful {
@@ -6645,6 +6700,11 @@ textarea {
 .hub-analytics__trend-label {
   color: var(--muted);
   font-size: 0.75rem;
+}
+
+.hub-analytics__trend-label-skeleton {
+  width: 22px;
+  height: 10px;
 }
 
 .hub-analytics__source-list {
@@ -6723,6 +6783,11 @@ textarea {
   white-space: nowrap;
 }
 
+.hub-analytics__source-name-skeleton {
+  width: min(170px, 100%);
+  height: 14px;
+}
+
 .hub-analytics__source-row:last-child {
   padding-bottom: 0;
   border-bottom: 0;
@@ -6769,6 +6834,21 @@ textarea {
   text-align: right;
   color: var(--muted);
   font-size: 0.85rem;
+}
+
+.hub-analytics__source-stat-skeleton {
+  width: 74px;
+  height: 12px;
+  justify-self: end;
+}
+
+.hub-analytics__source-stat-skeleton--short {
+  width: 58px;
+}
+
+.hub-analytics__legend-skeleton {
+  width: 88px;
+  height: 12px;
 }
 
 .hub-analytics__coverage-tag {
@@ -8297,18 +8377,16 @@ textarea {
   align-items: start;
 }
 
-.dash-calendar-main .mini-cal {
-  padding: 24px;
+.dash-calendar-main {
+  min-width: 0;
 }
 
-.dash-calendar-main .mini-cal-day {
-  width: 40px;
-  height: 40px;
-  font-size: 0.85rem;
+.dash-calendar-main .hdash__cal-cell {
+  min-height: 90px;
 }
 
-.dash-calendar-main .mini-cal-month {
-  font-size: 1rem;
+.dash-calendar-main .hdash__cal-title {
+  font-size: 1.15rem;
 }
 
 .dash-calendar-detail {
@@ -8327,11 +8405,80 @@ textarea {
   margin: 0 0 16px;
 }
 
+.dash-calendar-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
 .dash-calendar-empty {
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 8px;
   min-height: 120px;
+}
+
+.dash-calendar-empty .dash-empty-state-icon {
+  width: 28px;
+  height: 28px;
+  color: var(--muted);
+}
+
+.dash-upcoming-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.dash-upcoming-group-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  margin: 0 0 6px;
+}
+
+.dash-upcoming-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  background: none;
+  border-radius: 8px;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s;
+}
+
+.dash-upcoming-row:hover {
+  background: var(--hover);
+}
+
+.dash-upcoming-row-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.dash-upcoming-row-msg {
+  display: block;
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dash-upcoming-row-meta {
+  display: block;
+  font-size: 0.72rem;
+  color: var(--muted);
+  margin-top: 1px;
 }
 .dash-cal-add-btn {
   display: inline-flex;

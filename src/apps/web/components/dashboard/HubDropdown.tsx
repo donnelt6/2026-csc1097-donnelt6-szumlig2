@@ -1,5 +1,7 @@
 'use client';
 
+// HubDropdown.tsx: Hub filter dropdown for scoping dashboard data to a specific hub.
+
 import { useState, useRef, useEffect } from 'react';
 import { ChevronDownIcon } from '@heroicons/react/24/outline';
 import type { Hub } from '../../lib/types';

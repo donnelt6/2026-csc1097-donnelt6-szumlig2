@@ -1,5 +1,7 @@
 'use client';
 
+// Sidebar.tsx: Collapsible sidebar navigation with page links and hub creation.
+
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useParams, usePathname, useRouter, useSearchParams } from 'next/navigation';

@@ -1,5 +1,7 @@
 'use client';
 
+// AuthCallbackPageClient.tsx: Handles OAuth and magic-link callback redirects after authentication.
+
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";

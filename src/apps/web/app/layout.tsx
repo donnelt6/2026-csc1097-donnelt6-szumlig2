@@ -1,3 +1,5 @@
+// layout.tsx: Root Next.js layout with font loading, metadata, and provider wrappers.
+
 import type { Metadata } from "next";
 import "./globals.css";
 import "./members.css";

@@ -1,5 +1,7 @@
 'use client';
 
+// SuggestedSourcesPanel.tsx: AI-suggested sources panel for discovering related content.
+
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import {

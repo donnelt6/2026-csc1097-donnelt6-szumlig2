@@ -1,5 +1,7 @@
 'use client';
 
+// DashboardHome.tsx: Dashboard home tab with recent hubs, reminders, activity, and prompts.
+
 import { useState, useMemo, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';

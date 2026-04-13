@@ -1,5 +1,7 @@
 'use client';
 
+// page.tsx: Vault page for browsing and searching archived hub content.
+
 import { ArchiveBoxIcon, MagnifyingGlassIcon } from '@heroicons/react/24/outline';
 
 export default function VaultPage() {

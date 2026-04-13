@@ -1,5 +1,7 @@
 'use client';
 
+// error.tsx: Global error boundary page shown on unrecoverable route errors.
+
 import Link from "next/link";
 
 export default function GlobalError({

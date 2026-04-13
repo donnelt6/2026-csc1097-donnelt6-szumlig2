@@ -1,5 +1,7 @@
 'use client';
 
+// HubModerationPanel.tsx: Content moderation panel for reviewing flagged items.
+
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {

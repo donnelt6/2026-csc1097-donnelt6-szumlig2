@@ -1,5 +1,7 @@
 'use client';
 
+// page.tsx: Hub detail page with tab switcher for sources, chat, guides, and more.
+
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";

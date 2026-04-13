@@ -1,5 +1,7 @@
 'use client';
 
+// UserMenu.tsx: User avatar dropdown menu with profile and sign-out options.
+
 import { useState } from "react";
 import { supabase } from "../../lib/supabaseClient";
 import { useAuth } from "./AuthProvider";

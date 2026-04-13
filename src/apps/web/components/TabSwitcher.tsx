@@ -1,5 +1,7 @@
 'use client';
 
+// TabSwitcher.tsx: Reusable horizontal tab bar component with active state styling.
+
 interface Tab {
   key: string;
   label: string;

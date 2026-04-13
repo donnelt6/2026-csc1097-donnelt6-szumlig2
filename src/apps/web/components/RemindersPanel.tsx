@@ -1,5 +1,7 @@
 'use client';
 
+// RemindersPanel.tsx: Reminder list and management panel within a hub.
+
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createReminder, deleteReminder, listReminders, updateReminder } from "../lib/api";

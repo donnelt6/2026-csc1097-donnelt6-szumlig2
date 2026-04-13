@@ -1,5 +1,7 @@
 'use client';
 
+// SearchContext.tsx: Global search state context consumed by the navbar search bar.
+
 import { createContext, useContext, useState, type ReactNode } from 'react';
 
 interface SearchContextValue {

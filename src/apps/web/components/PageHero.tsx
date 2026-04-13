@@ -1,5 +1,7 @@
 'use client';
 
+// PageHero.tsx: Reusable hero banner with title, description, and search.
+
 import { MagnifyingGlassIcon } from '@heroicons/react/24/outline';
 
 interface PageHeroProps {

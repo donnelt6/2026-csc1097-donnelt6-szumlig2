@@ -1,5 +1,7 @@
 'use client';
 
+// Providers.tsx: React Query and auth provider wrapper for the component tree.
+
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useState } from "react";
 import { AuthProvider } from "./auth/AuthProvider";

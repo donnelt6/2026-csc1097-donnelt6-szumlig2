@@ -1,5 +1,7 @@
 'use client';
 
+// HubsToolbar.tsx: Toolbar with type and status tab groups plus filter controls.
+
 import { useRef, useEffect } from 'react';
 import { FunnelIcon, ClockIcon, UserGroupIcon, DocumentIcon, ArrowDownIcon, ArrowUpIcon } from '@heroicons/react/24/outline';
 

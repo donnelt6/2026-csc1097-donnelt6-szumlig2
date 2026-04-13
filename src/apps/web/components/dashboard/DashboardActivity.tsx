@@ -1,5 +1,7 @@
 'use client';
 
+// DashboardActivity.tsx: Global activity feed tab showing recent events across all hubs.
+
 import { useState } from 'react';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';

@@ -1,3 +1,5 @@
+// profile.tsx: Profile types, preset avatars, and display-name resolution helpers.
+
 export type AvatarMode = "preset";
 
 export interface ProfileMetadata {

@@ -1,5 +1,7 @@
 'use client';
 
+// DashboardCalendar.tsx: Calendar tab combining the mini calendar with a reminders sidebar.
+
 import { RemindersPanel } from './RemindersPanel';
 
 export function DashboardCalendar() {

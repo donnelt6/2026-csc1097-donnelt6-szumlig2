@@ -1,5 +1,7 @@
 'use client';
 
+// ChatPanel.tsx: Chat interface with message history, streaming responses, and feedback.
+
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";

@@ -1,5 +1,7 @@
 'use client';
 
+// ShellErrorBoundary.tsx: Error boundary fallback UI for unrecoverable app errors.
+
 import Link from "next/link";
 import React from "react";
 

@@ -1,5 +1,7 @@
 'use client';
 
+// ReminderCandidatesPanel.tsx: AI-suggested reminder candidates for review and approval.
+
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { decideReminderCandidate, listReminderCandidates } from "../lib/api";
