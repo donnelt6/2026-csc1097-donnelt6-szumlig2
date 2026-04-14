@@ -78,10 +78,10 @@ describe("HubAnalyticsPanel", () => {
 
     expect(await screen.findByText("Questions")).toBeInTheDocument();
     expect(screen.getByText("12")).toBeInTheDocument();
-    expect(screen.getByText("Welcome Pack.pdf")).toBeInTheDocument();
-    expect(screen.getByText("2 returned")).toBeInTheDocument();
-    expect(screen.getByText("6 opens")).toBeInTheDocument();
-    expect(screen.getByText("8% of total citations returned")).toBeInTheDocument();
+    expect(screen.getByText("Overview.pdf")).toBeInTheDocument();
+    expect(screen.getByRole("listitem", { name: /Overview\.pdf: 7 uses/i })).toBeInTheDocument();
+    expect(screen.getByText(/Citations \(uses\)/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Across 12 answers/)[0]).toBeInTheDocument();
     expect(screen.getByText("Fast")).toBeInTheDocument();
   });
 
@@ -159,11 +159,11 @@ describe("HubAnalyticsPanel", () => {
 
     renderWithQueryClient(<HubAnalyticsPanel hubId="hub-1" hubRole="owner" />);
 
-    await screen.findByText("Welcome Pack.pdf");
-    fireEvent.click(screen.getByRole("button", { name: /By citation opens/i }));
-    fireEvent.click(screen.getByRole("menuitem", { name: /By citations returned/i }));
+    await screen.findByText("Overview.pdf");
+    fireEvent.click(screen.getByRole("button", { name: /By times used/i }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /By source opens/i }));
 
     const sourceNames = screen.getAllByText(/\.pdf$/i).map((node) => node.textContent);
-    expect(sourceNames[0]).toBe("Overview.pdf");
+    expect(sourceNames[0]).toBe("Welcome Pack.pdf");
   });
 });

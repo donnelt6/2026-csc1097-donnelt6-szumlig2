@@ -332,6 +332,7 @@ export function GuidesPage({ hubId, sources, canEdit }: Props) {
     onSuccess: () => {
       setFlagTargetId(null);
       setStatusMessage("Guide flagged for review.");
+      queryClient.invalidateQueries({ queryKey: ["flagged-content", hubId] });
     },
     onError: (err) => setStatusMessage((err as Error).message),
   });

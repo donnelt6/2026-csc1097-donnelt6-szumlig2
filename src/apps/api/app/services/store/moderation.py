@@ -436,7 +436,7 @@ class ModerationStoreMixin:
         content_id: str,
         payload: ContentFlagRequest,
     ) -> ContentFlagResponse:
-        table = "faqs" if content_type == ContentFlagType.faq else "guides"
+        table = "faqs" if content_type == ContentFlagType.faq else "guide_entries"
         row = (
             self.service_client.table(table)
             .select("id, hub_id")
@@ -535,7 +535,7 @@ class ModerationStoreMixin:
         faq_map: Dict[str, Dict[str, Any]] = {}
         if faq_ids:
             faq_rows = (
-                self.service_client.table("faqs")
+                self.service_client.table("faq_entries")
                 .select("id, question, answer")
                 .in_("id", faq_ids)
                 .execute()
@@ -545,7 +545,7 @@ class ModerationStoreMixin:
         guide_map: Dict[str, Dict[str, Any]] = {}
         if guide_ids:
             guide_rows = (
-                self.service_client.table("guides")
+                self.service_client.table("guide_entries")
                 .select("id, title, topic")
                 .in_("id", guide_ids)
                 .execute()
