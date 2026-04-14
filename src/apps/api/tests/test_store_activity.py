@@ -74,6 +74,30 @@ class FakeClient:
         raise AssertionError(f"Unexpected table {name}")
 
 
+class FakeInsertQuery:
+    # Captures inserted activity rows for log_activity tests.
+    def __init__(self, sink: list[dict]) -> None:
+        self.sink = sink
+
+    def insert(self, row: dict):
+        self.sink.append(row)
+        return self
+
+    def execute(self):
+        return FakeResponse(self.sink)
+
+
+class FakeInsertClient:
+    # Returns an insert-capable activity table stub for log_activity tests.
+    def __init__(self) -> None:
+        self.inserted_rows: list[dict] = []
+
+    def table(self, name: str):
+        if name == "activity_events":
+            return FakeInsertQuery(self.inserted_rows)
+        raise AssertionError(f"Unexpected table {name}")
+
+
 # Admin client stub used by the surrounding tests.
 class FakeAdmin:
     # Initializes the test helper state used by this class.
@@ -161,3 +185,52 @@ def test_list_activity_marks_current_user_as_you(monkeypatch) -> None:
 
     assert events[0].metadata["actor_label"] == "You"
     assert fake_admin.calls == []
+
+
+def test_list_activity_filters_source_filter_changed_chat_events(monkeypatch) -> None:
+    rows = [
+        {
+            "id": "event-noise",
+            "hub_id": "hub-1",
+            "user_id": "user-1",
+            "action": "source_filter_changed",
+            "resource_type": "chat_event",
+            "metadata": {},
+            "created_at": "2026-01-01T00:01:00Z",
+        },
+        {
+            "id": "event-keep",
+            "hub_id": "hub-1",
+            "user_id": "user-1",
+            "action": "created",
+            "resource_type": "hub",
+            "metadata": {"name": "Launch Hub"},
+            "created_at": "2026-01-01T00:00:00Z",
+        },
+    ]
+    fake_admin = FakeAdmin(pages=[[]])
+    monkeypatch.setattr(
+        store_module.store,
+        "service_client",
+        SimpleNamespace(auth=SimpleNamespace(admin=fake_admin)),
+    )
+
+    events = store_module.store.list_activity(FakeClient(rows), "user-1", hub_ids=["hub-1"], limit=10)
+
+    assert [event.id for event in events] == ["event-keep"]
+
+
+def test_log_activity_skips_source_filter_changed_chat_events() -> None:
+    client = FakeInsertClient()
+
+    store_module.store.log_activity(
+        client,
+        "hub-1",
+        "user-1",
+        "source_filter_changed",
+        "chat_event",
+        "session-1",
+        {"selected_source_ids": ["source-1"]},
+    )
+
+    assert client.inserted_rows == []

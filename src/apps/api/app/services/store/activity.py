@@ -20,6 +20,8 @@ class ActivityStoreMixin:
         resource_id: Optional[str] = None,
         metadata: Optional[dict] = None,
     ) -> None:
+        if resource_type == "chat_event" and action == "source_filter_changed":
+            return
         # Build the insert payload incrementally so optional fields are only stored when present.
         row: Dict[str, Any] = {
             "hub_id": hub_id,
@@ -53,7 +55,14 @@ class ActivityStoreMixin:
                 return []
             query = query.in_("hub_id", hub_ids)
         response = query.order("created_at", desc=True).limit(limit).execute()
-        rows = [dict(row) for row in (response.data or [])]
+        rows = [
+            dict(row)
+            for row in (response.data or [])
+            if not (
+                str(row.get("resource_type") or "") == "chat_event"
+                and str(row.get("action") or "") == "source_filter_changed"
+            )
+        ]
 
         # Resolve user labels in one batch so the activity feed can show "You" or a friendly actor name.
         actor_ids = {
