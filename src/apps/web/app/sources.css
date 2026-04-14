@@ -1813,7 +1813,7 @@
 
 .hub-analytics__trend {
   display: flex;
-  align-items: end;
+  align-items: flex-end;
   gap: 6px;
 }
 
@@ -1829,7 +1829,7 @@
 .hub-analytics__trend-bars {
   height: 72px;
   display: flex;
-  align-items: end;
+  align-items: flex-end;
   gap: 3px;
 }
 
