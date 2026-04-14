@@ -1688,6 +1688,37 @@ a {
   cursor: wait;
 }
 
+[data-theme="dark"] .menu-card {
+  background:
+    linear-gradient(180deg, rgba(223, 227, 234, 0.96) 0%, rgba(206, 212, 220, 0.94) 100%),
+    #d7dce3;
+  border-color: rgba(15, 23, 42, 0.14);
+  box-shadow: 0 22px 44px rgba(0, 0, 0, 0.34);
+}
+
+[data-theme="dark"] .menu-user {
+  background: linear-gradient(180deg, rgba(206, 212, 220, 0.92), rgba(197, 203, 212, 0.96));
+}
+
+[data-theme="dark"] .menu-label,
+[data-theme="dark"] .menu-email,
+[data-theme="dark"] .menu-user .muted,
+[data-theme="dark"] .menu-item {
+  color: #0f172a;
+}
+
+[data-theme="dark"] .menu-user .muted {
+  opacity: 0.8;
+}
+
+[data-theme="dark"] .menu-divider {
+  background: rgba(15, 23, 42, 0.12);
+}
+
+[data-theme="dark"] .menu-item:hover {
+  background: rgba(15, 23, 42, 0.08);
+}
+
 
 
 /* Content Area */

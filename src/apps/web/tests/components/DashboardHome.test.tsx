@@ -294,4 +294,61 @@ describe("DashboardHome", () => {
 
     expect(screen.getAllByText("CSC1097 Revision").length).toBeGreaterThan(0);
   });
+
+  it("shows only future scheduled reminders in the home upcoming list", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-04-14T12:00:00Z"));
+
+    vi.mocked(listHubs).mockResolvedValue([
+      {
+        id: "hub-1",
+        owner_id: "user-1",
+        name: "Admin Hub",
+        description: "Operations",
+        created_at: "2026-04-01T00:00:00Z",
+      },
+    ]);
+    vi.mocked(listReminders).mockResolvedValue([
+      {
+        id: "rem-past",
+        user_id: "user-1",
+        hub_id: "hub-1",
+        due_at: "2026-03-31T11:46:00Z",
+        timezone: "Europe/Dublin",
+        message: "popup",
+        status: "scheduled",
+        created_at: "2026-03-01T00:00:00Z",
+      },
+      {
+        id: "rem-complete",
+        user_id: "user-1",
+        hub_id: "hub-1",
+        due_at: "2026-03-31T11:42:00Z",
+        timezone: "Europe/Dublin",
+        message: "complete",
+        status: "completed",
+        created_at: "2026-03-01T00:00:00Z",
+      },
+      {
+        id: "rem-future",
+        user_id: "user-1",
+        hub_id: "hub-1",
+        due_at: "2026-04-15T09:30:00Z",
+        timezone: "Europe/Dublin",
+        message: "Submit report",
+        status: "scheduled",
+        created_at: "2026-04-10T00:00:00Z",
+      },
+    ]);
+    vi.mocked(listActivity).mockResolvedValue([]);
+    vi.mocked(listChatSessions).mockResolvedValue([]);
+
+    renderWithQueryClient(<DashboardHome />);
+
+    expect(await screen.findByText("Submit report")).toBeInTheDocument();
+    expect(screen.queryByText("popup")).not.toBeInTheDocument();
+    expect(screen.queryByText("complete")).not.toBeInTheDocument();
+
+    vi.useRealTimers();
+  });
 });
