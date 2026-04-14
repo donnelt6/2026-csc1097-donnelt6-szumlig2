@@ -296,9 +296,6 @@ describe("DashboardHome", () => {
   });
 
   it("shows only future scheduled reminders in the home upcoming list", async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-04-14T12:00:00Z"));
-
     vi.mocked(listHubs).mockResolvedValue([
       {
         id: "hub-1",
@@ -313,7 +310,7 @@ describe("DashboardHome", () => {
         id: "rem-past",
         user_id: "user-1",
         hub_id: "hub-1",
-        due_at: "2026-03-31T11:46:00Z",
+        due_at: "2000-03-31T11:46:00Z",
         timezone: "Europe/Dublin",
         message: "popup",
         status: "scheduled",
@@ -323,7 +320,7 @@ describe("DashboardHome", () => {
         id: "rem-complete",
         user_id: "user-1",
         hub_id: "hub-1",
-        due_at: "2026-03-31T11:42:00Z",
+        due_at: "2099-03-31T11:42:00Z",
         timezone: "Europe/Dublin",
         message: "complete",
         status: "completed",
@@ -333,7 +330,7 @@ describe("DashboardHome", () => {
         id: "rem-future",
         user_id: "user-1",
         hub_id: "hub-1",
-        due_at: "2026-04-15T09:30:00Z",
+        due_at: "2099-04-15T09:30:00Z",
         timezone: "Europe/Dublin",
         message: "Submit report",
         status: "scheduled",
@@ -348,7 +345,5 @@ describe("DashboardHome", () => {
     expect(await screen.findByText("Submit report")).toBeInTheDocument();
     expect(screen.queryByText("popup")).not.toBeInTheDocument();
     expect(screen.queryByText("complete")).not.toBeInTheDocument();
-
-    vi.useRealTimers();
   });
 });
