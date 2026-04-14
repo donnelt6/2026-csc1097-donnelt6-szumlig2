@@ -879,19 +879,14 @@ function ContentEditModal({
       const updates: { question?: string; answer?: string } = {};
       if (faqDraft.question.trim() !== faq.question) updates.question = faqDraft.question.trim();
       if (faqDraft.answer.trim() !== faq.answer) updates.answer = faqDraft.answer.trim();
-      console.log('[moderation] saveFaq', { faqId: faq.id, updates, alsoResolve });
       if (Object.keys(updates).length > 0) {
-        const result = await updateFaq(faq.id, updates);
-        console.log('[moderation] updateFaq result', result);
-      } else {
-        console.log('[moderation] saveFaq: no changes detected');
+        await updateFaq(faq.id, updates);
       }
       if (alsoResolve) await resolveContentFlag(hubId, flag.id);
       queryClient.invalidateQueries({ queryKey: ['faqs', hubId] });
       queryClient.invalidateQueries({ queryKey: ['flagged-content', hubId] });
       onClose();
     } catch (e) {
-      console.error('[moderation] saveFaq failed', e);
       setError((e as Error).message);
     } finally {
       setSaving(false);
@@ -980,7 +975,7 @@ function ContentEditModal({
 
         {!isFaq && guide && (
           <>
-            <div className="gmodal__title-edit" style={{ marginTop: 8 }}>
+            <div className="gmodal__title-edit">
               <input
                 type="text"
                 className="hdash__form-input gmodal__title-input"
@@ -1044,7 +1039,7 @@ function ContentEditModal({
         )}
 
         {error && (
-          <p style={{ color: 'var(--status-failed)', fontSize: '0.75rem', margin: '8px 0 0' }}>{error}</p>
+          <p className="admin__edit-error">{error}</p>
         )}
 
         {(faq || guide) && (

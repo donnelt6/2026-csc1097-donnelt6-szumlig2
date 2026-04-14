@@ -68,7 +68,7 @@ class AnalyticsStoreMixin:
                 source_counts[source_id]["opens"] += 1
             elif row.get("event_type") == CitationFeedbackEventType.flagged_incorrect.value:
                 source_counts[source_id]["flags"] += 1
-        ranked_sources = sorted(source_counts.items(), key=lambda item: (max(item[1]["returns"], item[1]["opens"]), item[1]["opens"], item[1]["flags"], item[0]), reverse=True)
+        ranked_sources = sorted(source_counts.items(), key=lambda item: (max(item[1]["returns"], item[1]["opens"]), item[1]["opens"], item[1]["flags"], item[0]), reverse=True)[:60]
 
         # Fetch every complete source in the hub once so we can (a) name the ranked list and
         # (b) surface "never cited" sources for coverage gaps.
@@ -79,7 +79,7 @@ class AnalyticsStoreMixin:
         never_cited_ids.sort(key=lambda sid: hub_source_name_map.get(sid, ""))
         never_cited_sources = [
             NeverCitedSource(source_id=sid, source_name=hub_source_name_map.get(sid) or None)
-            for sid in never_cited_ids
+            for sid in never_cited_ids[:60]
         ]
         source_name_map = hub_source_name_map
         return ChatAnalyticsSummary(

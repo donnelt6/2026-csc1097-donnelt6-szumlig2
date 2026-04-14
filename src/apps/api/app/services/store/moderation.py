@@ -436,7 +436,7 @@ class ModerationStoreMixin:
         content_id: str,
         payload: ContentFlagRequest,
     ) -> ContentFlagResponse:
-        table = "faqs" if content_type == ContentFlagType.faq else "guide_entries"
+        table = "faq_entries" if content_type == ContentFlagType.faq else "guide_entries"
         row = (
             self.service_client.table(table)
             .select("id, hub_id")

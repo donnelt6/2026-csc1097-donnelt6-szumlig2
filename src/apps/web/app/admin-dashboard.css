@@ -932,6 +932,12 @@
   gap: 8px;
 }
 
+.admin__edit-error {
+  color: var(--status-failed);
+  font-size: 0.75rem;
+  margin: 8px 0 0;
+}
+
 @media (max-width: 1024px) {
   .admin__main {
     grid-template-columns: 1fr;

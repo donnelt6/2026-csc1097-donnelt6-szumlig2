@@ -9,6 +9,7 @@ import "./navbar.css";
 import "./dashboard.css";
 import "./hubs.css";
 import "./sources.css";
+import "./hub-analytics.css";
 import "./chat.css";
 import "./filters.css";
 import "./responsive.css";
