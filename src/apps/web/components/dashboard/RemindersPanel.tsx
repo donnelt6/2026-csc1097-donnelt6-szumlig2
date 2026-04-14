@@ -88,13 +88,11 @@ export function RemindersPanel({ variant }: RemindersPanelProps) {
     ? monthReminders.filter((r) => new Date(r.due_at).getDate() === selectedDay)
     : [];
 
-  // Sidebar fallback: closest reminders to "now" when no day is selected
-  const sortedReminders = [...(reminders ?? [])].sort((a, b) => {
-    const aTime = Math.abs(new Date(a.due_at).getTime() - Date.now());
-    const bTime = Math.abs(new Date(b.due_at).getTime() - Date.now());
-    return aTime - bTime;
-  });
-  const closestReminders = sortedReminders.slice(0, 4);
+  // Keep the compact home sidebar aligned with the full upcoming view: future scheduled reminders only.
+  const upcomingReminders = [...(reminders ?? [])]
+    .filter((r) => r.status === 'scheduled' && new Date(r.due_at).getTime() >= now.getTime())
+    .sort((a, b) => new Date(a.due_at).getTime() - new Date(b.due_at).getTime());
+  const closestReminders = upcomingReminders.slice(0, 4);
 
   // Page variant: upcoming reminders grouped by day (today onwards, chronological)
   const upcomingByDay = (() => {
