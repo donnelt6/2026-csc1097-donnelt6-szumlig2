@@ -196,7 +196,7 @@ export function GuidesPage({ hubId, sources, canEdit }: Props) {
   const [filterTab, setFilterTab] = useState<'recent' | 'favourites'>('recent');
 
   const [topic, setTopic] = useState("");
-  const [stepCountInput, setStepCountInput] = useState("8");
+  const [stepCountInput, setStepCountInput] = useState("5");
   const [createSourceIds, setCreateSourceIds] = useState<string[]>([]);
 
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -295,7 +295,7 @@ export function GuidesPage({ hubId, sources, canEdit }: Props) {
 
   const startGeneration = () => {
     const id = crypto.randomUUID();
-    const count = Math.max(1, Math.min(20, Number(stepCountInput) || 1));
+    const count = Math.max(1, Math.min(20, Number(stepCountInput) || 5));
     const sourceIds = [...createSourceIds];
     const topicVal = topic.trim() || undefined;
 
@@ -751,7 +751,7 @@ export function GuidesPage({ hubId, sources, canEdit }: Props) {
                   value={stepCountInput}
                   onChange={(e) => setStepCountInput(e.target.value)}
                   onBlur={() => {
-                    const v = Math.max(1, Math.min(20, Number(stepCountInput) || 1));
+                    const v = Math.max(1, Math.min(20, Number(stepCountInput) || 5));
                     setStepCountInput(String(v));
                   }}
                 />
