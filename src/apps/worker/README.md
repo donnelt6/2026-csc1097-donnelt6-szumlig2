@@ -1,39 +1,113 @@
-# Caddie Worker (Celery)
+# Caddie Worker
 
-Celery worker that handles ingestion, parsing, chunking, and embedding, and writes chunks to Supabase/pgvector. Web URLs are crawled into a pseudo-document snapshot before chunking. YouTube ingestion pulls captions with `yt-dlp` and stores a transcript snapshot.
-The worker is now split into focused modules inside `worker/`, with `worker.tasks` kept as the Celery task registration and orchestration entrypoint.
+This app is the Celery worker for Caddie. It handles asynchronous ingestion and reminder-related background work that should not run inside the request-response cycle of the API.
 
-## Run locally
-```bash
-cd apps/worker
-python -m venv .venv && .venv/Scripts/activate  # PowerShell: .venv\\Scripts\\Activate.ps1
-pip install -r requirements.txt
-celery -A worker.tasks worker --loglevel=info
-celery -A worker.tasks beat --loglevel=info
+The worker is intentionally split into focused modules under `worker/`, with `worker.tasks` kept as the task registration and orchestration layer.
+
+## Main Responsibilities
+
+- Process uploaded source files
+- Crawl and ingest supported web pages
+- Fetch and ingest YouTube captions
+- Extract and normalize text from source material
+- Chunk content and generate embeddings
+- Write chunk records and snapshot artefacts back to Supabase
+- Support reminder and other background task flows owned by the worker
+
+## Run Locally
+
+```powershell
+cd 2026-csc1097-donnelt6-szumlig2/src/apps/worker
+python -m venv .venv
+.\.venv\Scripts\python -m pip install -r requirements.txt
+.\.venv\Scripts\python -m celery -A worker.tasks worker --loglevel=info -P solo
+.\.venv\Scripts\python -m celery -A worker.tasks beat --loglevel=info
 ```
 
-Configure `REDIS_URL`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and `OPENAI_API_KEY` in `.env.example` for local development. Web ingestion also respects `WEB_MAX_BYTES`, `WEB_USER_AGENT`, `WEB_TIMEOUT_SECONDS`, and `WEB_RESPECT_ROBOTS`. YouTube ingestion uses `YOUTUBE_DEFAULT_LANGUAGE`, `YOUTUBE_ALLOW_AUTO_CAPTIONS`, and `YOUTUBE_MAX_BYTES`. The worker uses the service role key so it can write chunks through RLS.
-Reminder delivery uses `DEFAULT_TIMEZONE`.
-For reminder detection, install a spaCy English model (e.g. `python -m spacy download en_core_web_sm`).
+## Required Configuration
 
-## Monitoring notes
-- Run both the worker and beat processes in deployment; treat either process being down as an incident.
-- Watch logs for stable failure prefixes including `worker.ingest.failed`, `worker.web_ingest.failed`, `worker.youtube_ingest.failed`, and `worker.source_suggestions.failed`.
-- Repeated failures on the same task type should block deployment promotion until the underlying source/config issue is understood.
+See `.env.example`.
 
-## Files and purpose
-- `.env.example` - Template for required env vars (no secrets).
-- `README.md` - Setup notes for running the worker locally.
-- `pyproject.toml` - Project metadata and dependency list.
-- `requirements.txt` - Editable install entrypoint for local dev.
-- `worker/__init__.py` - Marks the worker package.
-- `worker/app.py` - Shared Celery app, logger, and settings.
-- `worker/common.py` - Shared worker helpers such as text normalization, batching, and ISO parsing.
-- `worker/config.py` - Loads worker settings from env.
-- `worker/content.py` - File extraction helpers for PDF, DOCX, and text-like uploads.
-- `worker/response_utils.py` - Defensive helpers for parsing OpenAI SDK responses.
-- `worker/storage.py` - Supabase Storage and source-row helper functions.
-- `worker/web.py` - Public-URL validation, robots.txt checks, fetching, and HTML extraction helpers.
-- `worker/youtube.py` - YouTube caption selection, transcript parsing, and pseudo-document helpers.
-- `worker/main.py` - Minimal entrypoint that re-exports the shared Celery app.
-- `worker/tasks.py` - Celery task entrypoints plus task-local orchestration that calls the owned helper modules directly.
+Typical local requirements:
+
+- `REDIS_URL`
+- `SUPABASE_URL`
+- `SUPABASE_SERVICE_ROLE_KEY`
+- `OPENAI_API_KEY`
+
+Worker-specific settings include:
+
+- `WEB_MAX_BYTES`
+- `WEB_USER_AGENT`
+- `WEB_TIMEOUT_SECONDS`
+- `WEB_RESPECT_ROBOTS`
+- `YOUTUBE_DEFAULT_LANGUAGE`
+- `YOUTUBE_ALLOW_AUTO_CAPTIONS`
+- `YOUTUBE_MAX_BYTES`
+- `DEFAULT_TIMEZONE`
+
+Reminder detection also requires a spaCy English model such as `en_core_web_sm`.
+
+## End-To-End Ingestion Flow
+
+File upload ingestion:
+
+1. The web app creates or uploads a source through the API
+2. The API stores source metadata and enqueues a worker task
+3. The worker downloads the stored file from Supabase Storage
+4. `worker/content.py` extracts text from the uploaded content
+5. The worker normalizes and chunks the extracted text
+6. The worker generates embeddings and writes `source_chunks`
+7. The source status is updated so the web app can use it for chat and generated content
+
+Web URL ingestion:
+
+1. The API creates a source with `type="web"`
+2. The worker validates the URL and blocks unsupported or non-public targets
+3. `worker/web.py` checks `robots.txt`, fetches the page, and extracts readable text
+4. The worker stores a pseudo-document snapshot in Supabase Storage
+5. The worker chunks, embeds, and writes retrieval records
+6. Refresh re-crawls the live page, while reprocess uses the stored snapshot
+
+YouTube ingestion:
+
+1. The API creates a source with `type="youtube"`
+2. `worker/youtube.py` fetches metadata and captions with `yt-dlp`
+3. Captions are cleaned to transcript text
+4. The worker stores a transcript snapshot in Supabase Storage
+5. The worker chunks, embeds, and writes retrieval records
+6. Refresh re-fetches metadata and captions, while reprocess uses the stored snapshot
+
+## Module Ownership
+
+The `worker/` package is split by responsibility:
+
+- `worker/tasks.py`: Celery task entrypoints and task-level orchestration
+- `worker/app.py`: shared Celery app, logger, and settings bootstrap
+- `worker/config.py`: environment-backed worker settings
+- `worker/content.py`: file extraction helpers for uploaded documents
+- `worker/web.py`: web crawling, validation, robots, and extraction helpers
+- `worker/youtube.py`: YouTube metadata, caption selection, and transcript helpers
+- `worker/storage.py`: Supabase Storage and source-row helper operations
+- `worker/common.py`: shared normalization, batching, and parsing helpers
+- `worker/response_utils.py`: defensive OpenAI response parsing helpers
+- `worker/main.py`: minimal worker entrypoint
+
+If a change is source-type-specific, it usually belongs in `content.py`, `web.py`, or `youtube.py`. If a change is task orchestration or retries, it usually belongs in `tasks.py`.
+
+## Operational Notes
+
+- Run both the worker and beat processes in deployed environments
+- The worker uses the Supabase service role key because ingestion and storage-side writes need privileged access
+
+
+## Tests
+
+Worker tests focus on helper logic and avoid live networked dependencies.
+
+Run them with:
+
+```powershell
+cd 2026-csc1097-donnelt6-szumlig2/src/apps/worker
+python -m pytest
+```

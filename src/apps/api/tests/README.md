@@ -1,33 +1,81 @@
-# API Tests
+# API Test Guide
 
-These tests cover the FastAPI service logic. External services
-are mocked so tests run offline and do not touch Supabase, Redis, or OpenAI.
+This folder documents the backend test strategy for the Caddie API.
 
-What is tested
-- Auth helpers in `app/dependencies.py`.
-- Rate limiting behavior in `app/services/rate_limit.py`.
-- PostgREST error mapping in `app/routers/errors.py`.
-- Router behavior for hubs, sources, chat, FAQs, memberships, and users.
-- Chat flow in `app/services/store/` with stubbed matches and LLM output.
-- FAQ generation logic in `app/services/store/` with stubbed LLM output.
-- Source creation cleanup in `app/services/store/` when upload URL generation fails.
+The API uses two main layers:
 
-How it works
-- `tests/conftest.py` sets safe env defaults and overrides FastAPI dependencies.
-- Routers are exercised via `TestClient` and store calls are monkeypatched.
-- The goal is to validate request handling, status codes, and response shapes.
-- Store unit tests use lightweight fake clients and tables instead of Supabase.
-- `tests/integration/` adds a thin higher-level layer that hits the real FastAPI app with shared in-memory doubles for auth, store, and queue edges.
+- fast offline tests for units, helpers, routers, and store behavior
+- a thin integration layer that exercises the real FastAPI app with in-memory doubles at key boundaries
 
-Run the tests
-```
+## Test Layers
+
+Unit and route tests:
+
+- Live across `tests/`
+- Mock Supabase, Redis, queueing, and OpenAI boundaries
+- Best for router behavior, status codes, response shapes, access control checks, and store/helper logic
+
+Integration tests:
+
+- Live in `tests/integration/`
+- Run the real FastAPI application through `TestClient`
+- Replace auth, store, and queue edges with shared in-memory doubles
+- Best for higher-confidence checks of full request handling without requiring a real deployed stack
+
+## Which Layer To Run
+
+Run the standard test suite when:
+
+- you changed router logic
+- you changed dependencies, schemas, or store helpers
+- you want fast feedback during normal backend development
+
+Run the integration layer when:
+
+- you changed request flow across multiple backend modules
+- you changed dependency wiring or route registration
+- you want confidence that the real FastAPI app still behaves correctly end-to-end at the HTTP layer
+
+## Dependencies
+
+The standard test suite requires:
+
+- the API Python environment
+- `pip install -r requirements.txt`
+
+The integration layer uses the same Python environment and remains offline. It does not require a live Supabase project, Redis instance, or OpenAI access.
+
+`tests/conftest.py` sets safe defaults and overrides shared dependencies so the suite can run deterministically.
+
+## Coverage Areas
+
+Current coverage includes:
+
+- auth helpers in `app/dependencies.py`
+- rate limiting in `app/services/rate_limit.py`
+- PostgREST error mapping in `app/routers/errors.py`
+- router behavior for hubs, sources, chat, FAQs, memberships, and users
+- chat and FAQ logic in `app/services/store/` with stubbed collaborators
+- thin integration coverage for authenticated hub, source, and chat flows
+
+## Commands
+
+Run the full backend suite:
+
+```powershell
 cd 2026-csc1097-donnelt6-szumlig2/src/apps/api
-pip install -r requirements.txt
-pytest
+python -m pytest
 ```
 
-Run only the integration layer
-```
+Run only the integration layer:
+
+```powershell
 cd 2026-csc1097-donnelt6-szumlig2/src/apps/api
-pytest tests/integration -q
+python -m pytest -q tests/integration
 ```
+
+## Notes
+
+- Start with the standard suite unless the change crosses module boundaries in a way unit-level mocking might miss.
+- Keep the integration layer small and focused on high-value request paths.
+

@@ -1,47 +1,121 @@
-# Caddie Web (Next.js)
+# Caddie Web
 
-Next.js 14 frontend with hubs list, hub detail page, upload widget (file + URL ingestion with retry/refresh/delete), reminder suggestions/management, and chat flow (hub-only or hub + web search) with per-source selection.
+This app is the Next.js frontend for Caddie. It is the main user-facing surface for authentication, hub management, source ingestion, reminders, guides, FAQs, moderation, analytics, and chat.
 
-## Run locally
-```bash
-cd apps/web
+## Main Responsibilities
+
+- Authenticate users with Supabase Auth
+- Render hub and dashboard workflows
+- Call the FastAPI backend for product actions
+- Maintain client-side session, selection, and UI state
+- Provide browser-based test entrypoints for component tests and E2E suites
+
+## Run Locally
+
+```powershell
+cd 2026-csc1097-donnelt6-szumlig2/src/apps/web
 npm install
 npm run dev
 ```
 
-Environment variables: see `.env.example`. Set `NEXT_PUBLIC_API_BASE_URL` to your FastAPI host and provide `NEXT_PUBLIC_SUPABASE_URL` + `NEXT_PUBLIC_SUPABASE_ANON_KEY` for auth.
+Required environment variables live in `.env.example`.
 
-## Files and purpose
-- `.env.example` - Template for required env vars (no secrets).
-- `.eslintrc.json` - ESLint rules for consistent linting.
-- `README.md` - Setup notes for running the web app.
-- `next.config.mjs` - Next.js configuration.
-- `next-env.d.ts` - Next.js TypeScript declarations.
-- `package.json` - Web app dependencies and scripts.
-- `tsconfig.json` - TypeScript settings for the web app.
-- `app/layout.tsx` - Root layout wrapper.
-- `app/page.tsx` - Home page listing hubs.
-- `app/auth/page.tsx` - Email/password sign in and sign up.
-- `app/globals.css` - Global styles and theme variables.
-- `app/hubs/[hubId]/page.tsx` - Hub detail page with upload, reminders, and chat.
-- `components/ChatPanel.tsx` - Chat UI with citations, hub/global scope, and selected sources.
-- `components/FaqPanel.tsx` - FAQ generation panel with pin/edit controls and citation chips.
-- `components/GuidePanel.tsx` - Guide generation panel with checklist steps, per-user progress, and drag-and-drop ordering.
-- `components/HubsList.tsx` - Hub list with filtering and sorting.
-- `components/InvitesPanel.tsx` - Pending invite list and accept actions.
-- `components/MembersPanel.tsx` - Member list and role management.
-- `components/Providers.tsx` - React Query + auth provider setup.
-- `components/ReminderCandidatesPanel.tsx` - Suggested reminders from detected due dates.
-- `components/RemindersPanel.tsx` - Reminder list and management actions.
-- `components/UploadPanel.tsx` - Upload widget with file + URL submission, status list, source selection checkboxes, refresh/reprocess for web sources, and retry/delete for failures.
-- `components/auth/AuthProvider.tsx` - Supabase session provider.
-- `components/auth/AuthGate.tsx` - Route guard for authenticated pages.
-- `components/auth/UserMenu.tsx` - Current user menu and sign out.
-- `components/navigation/NotificationsMenu.tsx` - In-app notifications menu for invites and reminders.
-- `lib/api.ts` - API client helpers.
-- `lib/useSourceSelection.ts` - Hook for persisting per-hub source selection.
-- `lib/supabaseClient.ts` - Supabase client initialization.
-- `lib/types.ts` - Shared TypeScript types.
+At minimum, local development needs:
+
+- `NEXT_PUBLIC_API_BASE_URL`
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+
+## Route Structure
+
+Top-level routes are organised under `app/`.
+
+Important routes include:
+
+- `app/page.tsx`: main landing page and hub list entry
+- `app/auth/page.tsx`: sign-in and sign-up flow
+- `app/auth/callback/`: auth callback handling
+- `app/auth/forgot-password/`: recovery request flow
+- `app/auth/reset-password/`: password reset completion flow
+- `app/hubs/[hubId]/page.tsx`: hub-level workspace for sources, chat, members, reminders, dashboard content, and moderation/admin features
+- `app/settings/`: user settings
+
+## Auth Flow
+
+The web app uses Supabase Auth in the browser.
+
+High-level flow:
+
+1. The user signs in or signs up through the auth pages
+2. `components/auth/AuthProvider.tsx` tracks the browser session
+3. `components/auth/AuthGate.tsx` protects authenticated routes
+4. API calls from `lib/api.ts` include the Supabase JWT when required
+5. Recovery flows are handled through the auth callback, forgot-password, and reset-password routes
+
+For local development, recovery links are built from the current browser origin. Hosted environments should set `NEXT_PUBLIC_AUTH_REDIRECT_BASE_URL` correctly.
+
+## Folder Guide
+
+- `app/`: route entrypoints and layout files
+- `components/`: UI components grouped by feature area
+- `components/auth/`: auth-specific client components
+- `components/dashboard/`: dashboard-specific UI
+- `components/hub-dashboard/`: hub dashboard pages and related controls
+- `components/navigation/`: sidebar, notifications, theme, and profile navigation
+- `lib/api.ts`: API client helpers
+- `lib/supabaseClient.ts`: browser Supabase client setup
+- `lib/e2eAuth.ts`: deterministic fake auth surface used by mocked E2E runs
+- `lib/useSourceSelection.ts`: per-hub selected-source persistence
+- `tests/`: jsdom component tests
+- `e2e/`: Playwright suites
+
+## UI Feature Areas
+
+Important component groups include:
+
+- `HubsList` and related hub navigation components
+- `UploadPanel` and source management controls
+- `ChatPanel` and source selection controls
+- `FaqPanel` and `GuidePanel`
+- `MembersPanel` and moderation/admin panels
+- reminders, notifications, and dashboard views
+
+## Test Layers
+
+The frontend has three distinct test layers.
+
+Component tests:
+
+- Live in `tests/`
+- Run in jsdom
+- Mock API calls and Next.js helpers
+- Best for component behavior, state transitions, and permissions-driven UI cases
+
+Mocked E2E:
+
+- Live in `e2e/`
+- Run the real Next.js app in a browser
+- Use deterministic fake auth plus mocked API responses
+- Best for stable browser-journey coverage in CI without requiring the full backend stack
+
+True E2E:
+
+- Live in `e2e/true/`
+- Run against the real web app, API, worker, Redis, Supabase auth/storage, and live OpenAI-backed flows
+- Best for highest-confidence end-to-end checks, but also the heaviest and least convenient layer
+
+Commands:
+
+```powershell
+npm run test
+npm run test:e2e
+npm run test:e2e:true
+```
+
+See `tests/README.md` for test selection guidance.
 
 ## Notes
-- Drag-and-drop ordering in Guides uses `@dnd-kit` (`@dnd-kit/core`, `@dnd-kit/sortable`, `@dnd-kit/utilities`).
+
+- Drag-and-drop guide ordering uses `@dnd-kit`.
+- The app relies on the API for product behavior; mocked E2E intentionally does not validate real backend integration.
+- When debugging auth or upload issues, verify both browser env vars and the matching API configuration.

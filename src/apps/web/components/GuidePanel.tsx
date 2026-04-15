@@ -184,7 +184,7 @@ export function GuidePanel({ hubId, selectedSourceIds, hasSelectableSources, can
   const queryClient = useQueryClient();
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [topic, setTopic] = useState("");
-  const [stepCountInput, setStepCountInput] = useState("8");
+  const [stepCountInput, setStepCountInput] = useState("5");
   const [editingGuideId, setEditingGuideId] = useState<string | null>(null);
   const [editingStepId, setEditingStepId] = useState<string | null>(null);
   const [guideDrafts, setGuideDrafts] = useState<Record<string, string>>({});
@@ -213,7 +213,7 @@ export function GuidePanel({ hubId, selectedSourceIds, hasSelectableSources, can
 
   const generateMutation = useMutation({
     mutationFn: () => {
-      const requestedStepCount = Math.max(1, Math.min(20, Number(stepCountInput) || 1));
+      const requestedStepCount = Math.max(1, Math.min(20, Number(stepCountInput) || 5));
       return generateGuide({
         hub_id: hubId,
         source_ids: selectedSourceIds,
@@ -222,7 +222,7 @@ export function GuidePanel({ hubId, selectedSourceIds, hasSelectableSources, can
       });
     },
     onSuccess: (data) => {
-      const requestedStepCount = Math.max(1, Math.min(20, Number(stepCountInput) || 1));
+      const requestedStepCount = Math.max(1, Math.min(20, Number(stepCountInput) || 5));
       const actualSteps = data.entry?.steps?.length ?? 0;
       setStatusMessage(`Generated ${actualSteps} of ${requestedStepCount} steps.`);
       queryClient.invalidateQueries({ queryKey: ["guides", hubId] });
@@ -446,7 +446,7 @@ export function GuidePanel({ hubId, selectedSourceIds, hasSelectableSources, can
               setStepCountInput(event.target.value);
             }}
             onBlur={() => {
-              const value = Math.max(1, Math.min(20, Number(stepCountInput) || 1));
+              const value = Math.max(1, Math.min(20, Number(stepCountInput) || 5));
               setStepCountInput(String(value));
             }}
           />

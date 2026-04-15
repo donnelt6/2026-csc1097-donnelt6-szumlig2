@@ -4,6 +4,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   PlusIcon,
   XMarkIcon,
@@ -156,6 +157,7 @@ type StatusFilter = "all" | "active" | "pending";
 
 export function MembersPanel({ hubId, role }: Props) {
   const queryClient = useQueryClient();
+  const router = useRouter();
   const { user } = useAuth();
   const { searchQuery } = useSearch();
   const [showInviteModal, setShowInviteModal] = useState(false);
@@ -229,6 +231,30 @@ export function MembersPanel({ hubId, role }: Props) {
     }
   };
 
+  const handleLeaveHub = async () => {
+    if (!user?.id) return;
+    if (typeof window !== "undefined") {
+      const confirmed = window.confirm("Leave this hub? You will lose access until another member invites you back.");
+      if (!confirmed) return;
+    }
+    setDeletingMemberIds((prev) => new Set(prev).add(user.id));
+    try {
+      await removeMember(hubId, user.id);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["members", hubId] }),
+        queryClient.invalidateQueries({ queryKey: ["hubs"] }),
+      ]);
+      router.push("/hubs");
+    } catch (err) {
+      setDeletingMemberIds((prev) => {
+        const next = new Set(prev);
+        next.delete(user.id);
+        return next;
+      });
+      showStatus(`Leave failed: ${(err as Error).message}`, "error");
+    }
+  };
+
   const transferMutation = useMutation({
     mutationFn: (userId: string) => transferHubOwnership(hubId, userId),
     onSuccess: () => {
@@ -244,6 +270,14 @@ export function MembersPanel({ hubId, role }: Props) {
   });
 
   const isOwner = role === "owner";
+  const canLeaveHub = !!user?.id && role !== "owner";
+  const isLeavingHub = !!user?.id && deletingMemberIds.has(user.id);
+  const canRemoveMember = (member: HubMember, isSelf: boolean): boolean => {
+    if (isSelf || member.role === "owner") return false;
+    if (role === "owner") return true;
+    if (role === "admin") return member.role === "editor" || member.role === "viewer";
+    return false;
+  };
   const acceptedAdmins = useMemo(
     () => (data ?? []).filter((member) => member.accepted_at && member.role === "admin"),
     [data]
@@ -454,7 +488,7 @@ export function MembersPanel({ hubId, role }: Props) {
 
                   {/* Actions cell */}
                   <div className="members__cell members__cell--actions">
-                    {isOwner && !isSelf && !isMemberOwner && (
+                    {canRemoveMember(member, isSelf) && (
                       <button
                         className="members__action-btn members__action-btn--danger"
                         type="button"
@@ -527,6 +561,18 @@ export function MembersPanel({ hubId, role }: Props) {
               />
             </div>
           </div>
+          {canLeaveHub && (
+            <div className="members__leave-card">
+              <button
+                className="members__leave-btn"
+                type="button"
+                onClick={() => handleLeaveHub()}
+                disabled={isLeavingHub}
+              >
+                {isLeavingHub ? "Leaving hub..." : "Leave this hub"}
+              </button>
+            </div>
+          )}
         </aside>
       </div>
 

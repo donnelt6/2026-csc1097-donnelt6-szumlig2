@@ -1,134 +1,178 @@
-# Caddie Repo Structure
+# Caddie Workspace Guide
 
-This `src/` folder contains the scaffold for Caddie: a Next.js frontend, FastAPI backend, Celery ingestion worker, and shared contracts.
+This `src/` directory is the developer workspace for Caddie. It contains the running application code, shared contracts, local test entrypoints, and the deployment-facing configuration used by the web app, API, and worker.
 
-## Structure
-- `apps/web/` - Next.js frontend with hubs list, hub detail, file/URL upload widget, and chat flow.
-- `apps/api/` - FastAPI service exposing hubs, sources, and chat endpoints backed by Supabase + OpenAI.
-- `apps/worker/` - Celery ingestion worker package that downloads from Supabase Storage, crawls web URLs, or fetches YouTube transcripts; extracts text, chunks, embeds, and writes to pgvector.
-- `packages/shared/` - Shared TypeScript and Pydantic models to keep contracts aligned.
-- `Makefile` - Convenience commands for running services locally.
+Use the repository root `README.md` for the project overview. Use this file when you need to run, test, or deploy the codebase.
 
-## Quickstart
-1) Install Node deps: `cd src && npm install && cd apps/web && npm install`
-2) Set env vars from `.env.example` in each app (Supabase/OpenAI/Redis). Worker also accepts web crawl settings (`WEB_MAX_BYTES`, `WEB_USER_AGENT`, `WEB_RESPECT_ROBOTS`) and YouTube caption settings (`YOUTUBE_DEFAULT_LANGUAGE`, `YOUTUBE_ALLOW_AUTO_CAPTIONS`).
-3) Run API: `cd apps/api && uvicorn app.main:app --reload --port 8000`
-4) Run worker: `cd apps/worker && celery -A worker.tasks worker --loglevel=info`
-5) Run beat (reminders): `cd apps/worker && celery -A worker.tasks beat --loglevel=info`
-6) Run web: `cd apps/web && npm run dev` (expects `NEXT_PUBLIC_API_BASE_URL=http://localhost:8000`)
+## Workspace Layout
 
-Supabase/OpenAI/Redis env placeholders live in each app's `.env.example`. The API and worker require these to run.
-Note: the API expects Supabase Auth JWTs for user-scoped access and uses the service role key only for storage/admin tasks.
-Reminder detection uses spaCy; install `en_core_web_sm` in the worker env for due-date suggestions.
-Web URL ingestion respects robots.txt by default; set `WEB_RESPECT_ROBOTS=false` in the worker env to override.
-The worker is split into focused modules under `apps/worker/worker/`; `worker.tasks` now stays focused on Celery task registration and task-level orchestration.
+- `apps/web/`: Next.js frontend
+- `apps/api/`: FastAPI backend
+- `apps/worker/`: Celery worker and beat scheduler
+- `packages/shared/`: shared TypeScript contracts
+- `packages/shared/python/`: shared Python schemas
+- `package.json`: workspace-level web and E2E scripts
 
-## How URL ingestion works
-- The user submits a URL from the hub upload panel.
-- The API creates a `sources` row with `type="web"` and stores the URL in `ingestion_metadata`.
-- The worker validates the URL (public host only), checks `robots.txt`, and fetches the page.
-- HTML is cleaned with readability (fallback to basic HTML-to-text), then normalized.
-- The worker stores a pseudo-document snapshot in Supabase Storage (Markdown with title/URL/crawl time).
-- The extracted text is chunked, embedded, and stored in `source_chunks`.
-- Reprocess uses the stored snapshot; Refresh re-crawls the URL and updates the snapshot/metadata.
+## Local Development Flow
 
-## How YouTube ingestion works
-- The user submits a YouTube URL from the hub upload panel.
-- The API creates a `sources` row with `type="youtube"` and stores the URL + caption preferences in `ingestion_metadata`.
-- The worker uses `yt-dlp` to fetch video metadata and captions (manual first, auto if allowed).
-- Captions are cleaned to plain text, normalized, and stored as a pseudo-document snapshot in Supabase Storage.
-- The transcript text is chunked, embedded, and stored in `source_chunks`.
-- Reprocess uses the stored snapshot; Refresh re-fetches captions and updates the snapshot/metadata.
+Typical local setup uses four long-running processes:
 
-## Daily run commands (PowerShell)
-Use three terminals so each process keeps running.
+1. FastAPI API
+2. Celery worker
+3. Celery beat
+4. Next.js web app
+
+The web app talks to the API over HTTP. The API uses Supabase for data/storage/auth integration and Redis for queueing/rate-limit support. The worker handles ingestion and reminder background work.
+
+## Install Dependencies
+
+Node workspace:
+
+```powershell
+cd 2026-csc1097-donnelt6-szumlig2/src
+npm install
+cd apps/web
+npm install
+```
+
+API Python environment:
+
+```powershell
+cd 2026-csc1097-donnelt6-szumlig2/src/apps/api
+python -m venv .venv
+.\.venv\Scripts\python -m pip install -r requirements.txt
+```
+
+Worker Python environment:
+
+```powershell
+cd 2026-csc1097-donnelt6-szumlig2/src/apps/worker
+python -m venv .venv
+.\.venv\Scripts\python -m pip install -r requirements.txt
+```
+
+Reminder detection also needs a spaCy English model in the worker environment:
+
+```powershell
+cd 2026-csc1097-donnelt6-szumlig2/src/apps/worker
+.\.venv\Scripts\python -m spacy download en_core_web_sm
+```
+
+## Environment Variables
+
+Each app has its own `.env.example`.
+
+Core services used across the stack:
+
+- Supabase
+- OpenAI
+- Redis
+
+Common requirements:
+
+- The web app needs `NEXT_PUBLIC_API_BASE_URL`, `NEXT_PUBLIC_SUPABASE_URL`, and `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
+- The API needs Supabase credentials, Redis access, and `OPENAI_API_KEY`.
+- The worker needs Supabase credentials, Redis access, and `OPENAI_API_KEY`.
+
+Additional worker-only configuration includes:
+
+- Web crawling settings such as `WEB_MAX_BYTES`, `WEB_USER_AGENT`, `WEB_TIMEOUT_SECONDS`, and `WEB_RESPECT_ROBOTS`
+- YouTube caption settings such as `YOUTUBE_DEFAULT_LANGUAGE`, `YOUTUBE_ALLOW_AUTO_CAPTIONS`, and `YOUTUBE_MAX_BYTES`
+- `DEFAULT_TIMEZONE` for reminder delivery defaults
+
+## Run Locally
 
 API:
-```
+
+```powershell
 cd 2026-csc1097-donnelt6-szumlig2/src/apps/api
 .\.venv\Scripts\python -m uvicorn app.main:app --reload --port 8000
 ```
 
 Worker:
-```
+
+```powershell
 cd 2026-csc1097-donnelt6-szumlig2/src/apps/worker
 .\.venv\Scripts\python -m celery -A worker.tasks worker --loglevel=info -P solo
 ```
 
-Beat (reminders):
-```
+Beat:
+
+```powershell
 cd 2026-csc1097-donnelt6-szumlig2/src/apps/worker
 .\.venv\Scripts\python -m celery -A worker.tasks beat --loglevel=info
 ```
 
 Web:
-```
+
+```powershell
 cd 2026-csc1097-donnelt6-szumlig2/src/apps/web
 npm run dev
 ```
 
+## How The Main Flows Fit Together
 
-## Auth note
-Sign in via `/auth` using Supabase email/password auth. The web app stores the Supabase session and sends `Authorization: Bearer <JWT>` on API requests. The API enforces RLS with the user token and only uses the service role key for storage/admin tasks (ingestion, member lookups).
-Password recovery is Supabase-native:
-- `/auth/forgot-password` requests a recovery email through Supabase.
-- `/auth/reset-password` completes the recovery flow and updates the password through Supabase.
-- Local development builds auth email links from the current browser origin, so localhost testing does not depend on `NEXT_PUBLIC_AUTH_REDIRECT_BASE_URL`.
-- Non-local/deployed environments must set `NEXT_PUBLIC_AUTH_REDIRECT_BASE_URL` to the real site base URL; placeholder values are rejected so email links fail closed instead of pointing at the wrong app.
-- Supabase project setup must include recovery email enabled, the deployed recovery redirect URL allowlisted, and recovery token expiry set to 30 minutes if supported by the project settings.
+Authentication:
 
-## Chat note
-Chat supports hub-only context or hub + web search when `global` scope is selected. Users can also select which completed sources to include when answering a question. Streaming is not implemented yet; it is planned as a future improvement.
+- The web app signs users in through Supabase Auth.
+- The web app sends `Authorization: Bearer <JWT>` on API requests.
+- The API uses the user token for user-scoped access and the service role key only for privileged storage/admin operations.
 
-## RAG evals and analytics
-- Offline chat evals live in `apps/api/evals/`.
-- Run `python evals/run_eval.py --dataset evals/dataset.jsonl` from `apps/api` to write a JSON report under `eval-results/`.
-- Optional extras:
-- `pip install -e .[evals]` for Ragas answer-level metrics
-- `pip install -e .[observability]` for Langfuse trace export
-- Hub owners/admins now get chat analytics based on question, answer, citation, copy, and feedback events.
+File ingestion:
 
-## Rate limits (API)
-Defaults (configurable in `apps/api/.env`):
-- Chat: 20 requests per minute
-- Sources: 30 requests per minute
-- Read endpoints: 120 requests per minute
-- Write endpoints: 60 requests per minute
-- Health endpoint: 60 requests per minute
+- The web app creates a source through the API and uploads or references the source material.
+- The API stores source metadata and enqueues worker processing.
+- The worker extracts text, chunks it, generates embeddings, and writes chunk records for retrieval.
 
-Chat read/write hardening also applies the standard read/write limiter to:
-- `GET /chat/sessions`
-- `GET /chat/sessions/{id}/messages`
-- `GET /chat/history`
-- `PATCH /chat/sessions/{id}`
-- `DELETE /chat/sessions/{id}`
+Web URL ingestion:
 
-## Pre-Deployment Checks
-- Set `ALLOWED_ORIGINS` explicitly for every non-local API environment. The API now fails fast on startup if `ENVIRONMENT != local` and no valid allowlist is configured.
-- Local API development can omit `ALLOWED_ORIGINS`; it falls back to explicit localhost origins only, never `*`.
-- For GitLab-driven production promotion, configure `GITHUB_MIRROR_REPO`, `GITHUB_MIRROR_USERNAME`, `GITHUB_MIRROR_TOKEN`, and `PRODUCTION_API_HEALTH_URL` in GitLab CI/CD variables before triggering `promote_production`.
-- Verify `/health` returns `{"status":"ok"}` from the deployed API.
-- Verify the worker process and beat process are both running after deploy.
-- Review recent API and worker logs for stable failure prefixes such as `api.startup.config_invalid`, `rate_limit.redis_unavailable`, `worker.ingest.failed`, `worker.web_ingest.failed`, and `worker.youtube_ingest.failed`.
-- Treat default-branch CI failures, repeated worker task failures, failed health checks, and startup config validation failures as deploy blockers.
+- The API creates a `web` source and stores the requested URL in source metadata.
+- The worker validates the host, checks `robots.txt`, fetches the page, extracts readable content, stores a pseudo-document snapshot, and writes chunks.
+- Reprocess uses the stored snapshot. Refresh re-crawls the live page.
 
-## GitLab Promotion Flow
-1. Merge the approved change into `main` on GitLab.
-2. Wait for the `lint`, `test`, and `build` stages to pass.
-3. Trigger the manual `promote_production` job only when the hosted environment should be brought online.
-4. Let Netlify and Railway deploy from the mirrored GitHub `main` commit.
-5. Confirm the `post_deploy_health` job passes against the production Railway API.
+YouTube ingestion:
 
-## Higher-level tests
-- API integration tests: `cd apps/api && python -m pytest -q tests/integration`
-- Web E2E tests: `npm --workspace apps/web run test:e2e`
-- Web true E2E tests: `npm --workspace apps/web run test:e2e:true`
-- The API integration layer uses the real FastAPI app with offline doubles for auth, store, and queue collaborators.
-- The web E2E layer runs the real Next.js app in a browser with E2E-only fake auth and mocked API responses for critical journeys.
-- The true E2E layer runs the real web app, API, worker, Redis, Supabase auth/storage, and live OpenAI-backed ingestion/chat.
+- The API creates a `youtube` source and stores the URL plus caption preferences.
+- The worker fetches metadata and captions with `yt-dlp`, stores a transcript snapshot, then chunks and embeds it.
+- Reprocess uses the stored snapshot. Refresh re-fetches captions and metadata.
 
-## True E2E setup
-- Required secrets: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_STORAGE_BUCKET`, `OPENAI_API_KEY`.
-- Required test credentials: `CADDIE_TRUE_E2E_PASSWORD`. Optional: `CADDIE_TRUE_E2E_EMAIL`, `CADDIE_TRUE_E2E_RUN_ID`, `CADDIE_TRUE_E2E_QUESTION`.
-- The setup script creates or reuses one dedicated hub namespace per run id, clears prior chat/source data for that hub, then Playwright drives the real `/auth`, upload, ingestion, and chat flow.
-- Local run order: start Redis, API, worker, and web with the real env vars, then run `npm --workspace apps/web run test:e2e:true`.
+Chat:
+
+- The web app sends a hub-scoped or global-scope question to the API.
+- The API retrieves matching chunks, builds prompt context, and returns an answer with citations.
+- Users can also restrict chat to selected completed sources.
+
+## Test Layers
+
+Use the smallest useful layer first.
+
+- API unit and route tests: fast, offline, good for backend behavior and response-shape checks
+- API integration tests: real FastAPI app with in-memory doubles at the auth/store/queue edges
+- Worker tests: pure helper/module tests without live external services
+- Web component tests: jsdom tests with mocked API and Next.js helpers
+- Web mocked E2E tests: real browser plus real Next.js app, but fake auth and mocked API traffic
+- Web true E2E tests: real browser against the live local stack and real external integrations
+
+Useful commands:
+
+- `cd apps/api && python -m pytest`
+- `cd apps/api && python -m pytest -q tests/integration`
+- `cd apps/worker && python -m pytest`
+- `npm --workspace apps/web run test`
+- `npm --workspace apps/web run test:e2e`
+- `npm --workspace apps/web run test:e2e:true`
+
+## Evals And Analytics
+
+- Offline chat evals live in `apps/api/evals/`
+- Run `python evals/run_eval.py --dataset evals/dataset.jsonl` from `apps/api`
+- Reports are written under `apps/api/eval-results/`
+
+Hub owners and admins also have product-side analytics based on chat and feedback events.
+
+## Deployment Notes
+
+- Local API development can omit `ALLOWED_ORIGINS`; non-local environments must set an explicit allowlist.
+- `/health` is the baseline API health probe.
+- Worker and beat should both be treated as required deployed processes.
+- Promotion and deploy checks are coordinated through `.gitlab-ci.yml`.

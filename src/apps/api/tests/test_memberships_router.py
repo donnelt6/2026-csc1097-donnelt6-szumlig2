@@ -202,6 +202,78 @@ def test_remove_member_rejects_direct_owner_removal(client, monkeypatch) -> None
     assert resp.status_code == 400
 
 
+def test_remove_member_allows_admin_to_remove_viewer(client, monkeypatch) -> None:
+    admin = HubMember(
+        hub_id="11111111-1111-1111-1111-111111111111",
+        user_id="00000000-0000-0000-0000-000000000001",
+        role=MembershipRole.admin,
+        accepted_at=datetime.utcnow(),
+    )
+    viewer = HubMember(
+        hub_id="11111111-1111-1111-1111-111111111111",
+        user_id="00000000-0000-0000-0000-000000000002",
+        role=MembershipRole.viewer,
+        accepted_at=datetime.utcnow(),
+    )
+    monkeypatch.setattr(
+        store_module.store,
+        "get_member_role",
+        lambda _client, _hub_id, user_id: admin if str(user_id).endswith("1") else viewer,
+    )
+    monkeypatch.setattr(store_module.store, "remove_member", lambda _client, _hub_id, _user_id: None)
+    monkeypatch.setattr(store_module.store, "log_activity", lambda *_args, **_kwargs: None)
+
+    resp = client.delete(
+        "/hubs/11111111-1111-1111-1111-111111111111/members/00000000-0000-0000-0000-000000000002"
+    )
+
+    assert resp.status_code == 204
+
+
+def test_remove_member_rejects_admin_removing_admin(client, monkeypatch) -> None:
+    admin_actor = HubMember(
+        hub_id="11111111-1111-1111-1111-111111111111",
+        user_id="00000000-0000-0000-0000-000000000001",
+        role=MembershipRole.admin,
+        accepted_at=datetime.utcnow(),
+    )
+    admin_target = HubMember(
+        hub_id="11111111-1111-1111-1111-111111111111",
+        user_id="00000000-0000-0000-0000-000000000002",
+        role=MembershipRole.admin,
+        accepted_at=datetime.utcnow(),
+    )
+    monkeypatch.setattr(
+        store_module.store,
+        "get_member_role",
+        lambda _client, _hub_id, user_id: admin_actor if str(user_id).endswith("1") else admin_target,
+    )
+
+    resp = client.delete(
+        "/hubs/11111111-1111-1111-1111-111111111111/members/00000000-0000-0000-0000-000000000002"
+    )
+
+    assert resp.status_code == 403
+
+
+def test_remove_member_allows_admin_to_leave_hub(client, monkeypatch) -> None:
+    admin = HubMember(
+        hub_id="11111111-1111-1111-1111-111111111111",
+        user_id="00000000-0000-0000-0000-000000000001",
+        role=MembershipRole.admin,
+        accepted_at=datetime.utcnow(),
+    )
+    monkeypatch.setattr(store_module.store, "get_member_role", lambda _client, _hub_id, _user_id: admin)
+    monkeypatch.setattr(store_module.store, "remove_member", lambda _client, _hub_id, _user_id: None)
+    monkeypatch.setattr(store_module.store, "log_activity", lambda *_args, **_kwargs: None)
+
+    resp = client.delete(
+        "/hubs/11111111-1111-1111-1111-111111111111/members/00000000-0000-0000-0000-000000000001"
+    )
+
+    assert resp.status_code == 204
+
+
 # Verifies that transfer ownership requires admin target.
 def test_transfer_ownership_requires_admin_target(client, monkeypatch) -> None:
     owner = HubMember(

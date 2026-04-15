@@ -2,8 +2,10 @@ import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MembersPanel } from "../../components/MembersPanel";
-import { listMembers, transferHubOwnership } from "../../lib/api";
+import { listMembers, removeMember, transferHubOwnership } from "../../lib/api";
 import { renderWithQueryClient } from "../test-utils";
+
+let mockUserId = "owner-1";
 
 vi.mock("../../lib/api", () => ({
   inviteMember: vi.fn(),
@@ -15,12 +17,22 @@ vi.mock("../../lib/api", () => ({
 
 vi.mock("../../components/auth/AuthProvider", () => ({
   useAuth: () => ({
-    user: { id: "owner-1" },
+    user: { id: mockUserId },
+  }),
+}));
+
+const pushMock = vi.fn();
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({
+    push: pushMock,
   }),
 }));
 
 describe("MembersPanel", () => {
   afterEach(() => {
+    mockUserId = "owner-1";
+    pushMock.mockReset();
     vi.clearAllMocks();
   });
 
@@ -158,5 +170,115 @@ describe("MembersPanel", () => {
 
     // confirm() returned false, so the API should not have been called
     expect(transferHubOwnership).not.toHaveBeenCalled();
+  });
+
+  it("shows admin remove actions only for editor and viewer members", async () => {
+    mockUserId = "admin-1";
+    vi.mocked(listMembers).mockResolvedValue([
+      {
+        hub_id: "hub-1",
+        user_id: "owner-1",
+        role: "owner",
+        accepted_at: "2026-03-22T10:00:00Z",
+        email: "owner@example.com",
+      },
+      {
+        hub_id: "hub-1",
+        user_id: "admin-1",
+        role: "admin",
+        accepted_at: "2026-03-22T10:00:00Z",
+        email: "admin@example.com",
+      },
+      {
+        hub_id: "hub-1",
+        user_id: "admin-2",
+        role: "admin",
+        accepted_at: "2026-03-22T10:00:00Z",
+        email: "admin2@example.com",
+      },
+      {
+        hub_id: "hub-1",
+        user_id: "editor-1",
+        role: "editor",
+        accepted_at: "2026-03-22T10:00:00Z",
+        email: "editor@example.com",
+      },
+      {
+        hub_id: "hub-1",
+        user_id: "viewer-1",
+        role: "viewer",
+        accepted_at: "2026-03-22T10:00:00Z",
+        email: "viewer@example.com",
+      },
+    ]);
+
+    renderWithQueryClient(<MembersPanel hubId="hub-1" role="admin" />);
+
+    const ownerRow = (await screen.findByText("owner@example.com")).closest(".members__row") as HTMLElement;
+    const selfRow = screen.getByText("admin@example.com").closest(".members__row") as HTMLElement;
+    const otherAdminRow = screen.getByText("admin2@example.com").closest(".members__row") as HTMLElement;
+    const editorRow = screen.getByText("editor@example.com").closest(".members__row") as HTMLElement;
+    const viewerRow = screen.getByText("viewer@example.com").closest(".members__row") as HTMLElement;
+
+    expect(within(ownerRow).queryByTitle("Remove member")).not.toBeInTheDocument();
+    expect(within(selfRow).queryByTitle("Remove member")).not.toBeInTheDocument();
+    expect(within(otherAdminRow).queryByTitle("Remove member")).not.toBeInTheDocument();
+    expect(within(editorRow).getByTitle("Remove member")).toBeInTheDocument();
+    expect(within(viewerRow).getByTitle("Remove member")).toBeInTheDocument();
+  });
+
+  it("shows a leave hub action below capacity for non-owners", async () => {
+    mockUserId = "editor-1";
+    vi.mocked(listMembers).mockResolvedValue([
+      {
+        hub_id: "hub-1",
+        user_id: "owner-1",
+        role: "owner",
+        accepted_at: "2026-03-22T10:00:00Z",
+        email: "owner@example.com",
+      },
+      {
+        hub_id: "hub-1",
+        user_id: "editor-1",
+        role: "editor",
+        accepted_at: "2026-03-22T10:00:00Z",
+        email: "editor@example.com",
+      },
+    ]);
+
+    renderWithQueryClient(<MembersPanel hubId="hub-1" role="editor" />);
+
+    await screen.findByText("editor@example.com");
+    expect(screen.getByRole("button", { name: "Leave this hub" })).toBeInTheDocument();
+  });
+
+  it("lets non-owners leave the hub from the sidebar action", async () => {
+    mockUserId = "viewer-1";
+    vi.mocked(listMembers).mockResolvedValue([
+      {
+        hub_id: "hub-1",
+        user_id: "owner-1",
+        role: "owner",
+        accepted_at: "2026-03-22T10:00:00Z",
+        email: "owner@example.com",
+      },
+      {
+        hub_id: "hub-1",
+        user_id: "viewer-1",
+        role: "viewer",
+        accepted_at: "2026-03-22T10:00:00Z",
+        email: "viewer@example.com",
+      },
+    ]);
+    vi.mocked(removeMember).mockResolvedValue(undefined);
+    vi.stubGlobal("confirm", vi.fn(() => true));
+
+    const user = userEvent.setup();
+    renderWithQueryClient(<MembersPanel hubId="hub-1" role="viewer" />);
+
+    await user.click(await screen.findByRole("button", { name: "Leave this hub" }));
+
+    await waitFor(() => expect(removeMember).toHaveBeenCalledWith("hub-1", "viewer-1"));
+    await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/hubs"));
   });
 });
