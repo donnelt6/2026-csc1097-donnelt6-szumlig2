@@ -149,6 +149,27 @@ export function NotificationsMenu() {
     [reminderNotifications]
   );
 
+  const orderedEntries = useMemo(() => {
+    const toTime = (value?: string | null) => {
+      if (!value) return 0;
+      const parsed = new Date(value).getTime();
+      return Number.isNaN(parsed) ? 0 : parsed;
+    };
+    const reminderEntries = visibleReminders.map((notice) => ({
+      kind: "reminder" as const,
+      key: `reminder-${notice.id}`,
+      sortAt: toTime(notice.sent_at ?? notice.scheduled_for),
+      notice,
+    }));
+    const inviteEntries = visibleInvites.map((invite) => ({
+      kind: "invite" as const,
+      key: `invite-${invite.hub.id}`,
+      sortAt: toTime(invite.invited_at),
+      invite,
+    }));
+    return [...reminderEntries, ...inviteEntries].sort((a, b) => b.sortAt - a.sortAt);
+  }, [visibleReminders, visibleInvites]);
+
   const count = visibleInvites.length + visibleReminders.length;
   const summaryLabel = useMemo(() => {
     if (!count) return "Notifications";
@@ -198,20 +219,24 @@ export function NotificationsMenu() {
           {!isLoading && !error && !remindersLoading && !remindersError && count === 0 && (
             <p className="notifications-empty">No new notifications</p>
           )}
-          {visibleReminders.map((notice) => (
-            <ReminderNotificationCard
-              key={notice.id}
-              notice={notice}
-              onDismiss={(notificationId) => dismissReminderMutation.mutate(notificationId)}
-              onComplete={(reminderId) => completeReminderMutation.mutate({ reminderId })}
-              isDismissing={dismissReminderMutation.variables === notice.id}
-              isCompleting={completeReminderMutation.variables?.reminderId === notice.reminder_id}
-            />
-          ))}
-          {visibleInvites.map((invite) => {
+          {orderedEntries.map((entry) => {
+            if (entry.kind === "reminder") {
+              const notice = entry.notice;
+              return (
+                <ReminderNotificationCard
+                  key={entry.key}
+                  notice={notice}
+                  onDismiss={(notificationId) => dismissReminderMutation.mutate(notificationId)}
+                  onComplete={(reminderId) => completeReminderMutation.mutate({ reminderId })}
+                  isDismissing={dismissReminderMutation.variables === notice.id}
+                  isCompleting={completeReminderMutation.variables?.reminderId === notice.reminder_id}
+                />
+              );
+            }
+            const invite = entry.invite;
             const hubLabel = truncateLabel(invite.hub.name, 25);
             return (
-              <div key={invite.hub.id} className="notification-card">
+              <div key={entry.key} className="notification-card">
                 <div className="notification-content">
                   <div className="notification-icon" aria-hidden="true">
                     !
