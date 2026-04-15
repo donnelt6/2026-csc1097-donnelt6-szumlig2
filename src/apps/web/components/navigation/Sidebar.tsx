@@ -11,6 +11,7 @@ import {
   ChatBubbleLeftRightIcon,
   DocumentTextIcon,
   UsersIcon,
+  ArrowLeftIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
   XMarkIcon,
@@ -243,6 +244,23 @@ export function Sidebar({ state, onStateChange, mobileOpen, onMobileClose, onCre
       </div>
 
       <nav className="sidebar-nav">
+        {isOnHub && (
+          <div className="sidebar-section sidebar-hub-back">
+            <button
+              className="sidebar-item sidebar-item--back"
+              title={isCollapsed ? 'Back to Your Hubs' : undefined}
+              onClick={() => {
+                router.push('/hubs');
+                handleLinkClick();
+              }}
+              type="button"
+            >
+              <ArrowLeftIcon className="sidebar-item-icon" />
+              <span className="sidebar-item-text">Back to Your Hubs</span>
+            </button>
+          </div>
+        )}
+
         <ul className="sidebar-nav-list">
           {[
             { key: 'chat' as const, label: 'Chat', Icon: ChatBubbleLeftRightIcon },

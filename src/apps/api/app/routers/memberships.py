@@ -28,6 +28,17 @@ def _require_owner(member: HubMember) -> None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Owner role required.")
 
 
+# Allow owners to remove any non-owner member, and admins to remove only editors/viewers.
+def _require_member_removal_permission(actor: HubMember, target: HubMember) -> None:
+    if actor.user_id == target.user_id and target.role != MembershipRole.owner:
+        return
+    if actor.role == MembershipRole.owner:
+        return
+    if actor.role == MembershipRole.admin and target.role in {MembershipRole.editor, MembershipRole.viewer}:
+        return
+    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient role to remove this member.")
+
+
 # Attach profile data so membership responses include user-facing details.
 def _attach_profiles(members: list[HubMember]) -> list[HubMember]:
     profile_by_id = store.resolve_user_profiles_by_ids({member.user_id for member in members})
@@ -213,7 +224,8 @@ def remove_member(
     try:
         member = store.get_member_role(client, hub_id, current_user.id)
         _require_accepted(member)
-        _require_owner(member)
+        target_member = store.get_member_role(client, hub_id, user_id)
+        _require_member_removal_permission(member, target_member)
         store.remove_member(client, hub_id, user_id)
         store.log_activity(client, str(hub_id), current_user.id, "removed", "member", str(user_id))
     except ValueError as exc:
