@@ -148,6 +148,8 @@ class ContentStoreMixin:
 
     # Apply partial updates to an FAQ entry.
     def update_faq(self, client: Client, faq_id: str, payload: dict) -> FaqEntry:
+        if "answer" in payload:
+            payload = {**payload, "citations": [], "confidence": 1.0}
         response = client.table("faq_entries").update(payload).eq("id", str(faq_id)).execute()
         if not response.data:
             raise KeyError("FAQ entry not found")
@@ -342,6 +344,8 @@ class ContentStoreMixin:
         return GuideStep(**row.data[0])
 
     def update_guide_step(self, client: Client, step_id: str, payload: dict) -> GuideStep:
+        if "instruction" in payload:
+            payload = {**payload, "citations": [], "confidence": 1.0}
         response = client.table("guide_steps").update(payload).eq("id", str(step_id)).execute()
         if not response.data:
             raise KeyError("Guide step not found")

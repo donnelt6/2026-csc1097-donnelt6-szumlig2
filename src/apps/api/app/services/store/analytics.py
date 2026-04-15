@@ -68,7 +68,24 @@ class AnalyticsStoreMixin:
                 source_counts[source_id]["opens"] += 1
             elif row.get("event_type") == CitationFeedbackEventType.flagged_incorrect.value:
                 source_counts[source_id]["flags"] += 1
-        ranked_sources = sorted(source_counts.items(), key=lambda item: (max(item[1]["returns"], item[1]["opens"]), item[1]["opens"], item[1]["flags"], item[0]), reverse=True)[:60]
+        per_metric_cap = 60
+        def _top_by(metric: str) -> list[str]:
+            return [
+                sid for sid, _ in sorted(
+                    source_counts.items(),
+                    key=lambda item: (item[1][metric], item[1]["opens"], item[1]["returns"], item[1]["flags"], item[0]),
+                    reverse=True,
+                )[:per_metric_cap]
+                if source_counts[sid][metric] > 0
+            ]
+        kept_ids: set[str] = set()
+        for metric in ("returns", "opens", "flags"):
+            kept_ids.update(_top_by(metric))
+        ranked_sources = sorted(
+            ((sid, source_counts[sid]) for sid in kept_ids),
+            key=lambda item: (max(item[1]["returns"], item[1]["opens"]), item[1]["opens"], item[1]["flags"], item[0]),
+            reverse=True,
+        )
 
         # Fetch every complete source in the hub once so we can (a) name the ranked list and
         # (b) surface "never cited" sources for coverage gaps.
