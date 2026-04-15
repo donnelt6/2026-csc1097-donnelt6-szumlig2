@@ -5,7 +5,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronDownIcon } from "@heroicons/react/24/outline";
+import { ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon } from "@heroicons/react/24/outline";
+
+const TOP_SOURCES_PAGE_SIZE = 6;
 
 import { getHubAnalyticsSummary, getHubAnalyticsTrends } from "../lib/api";
 import type { AnalyticsTopSource, ChatAnalyticsTrendPoint, MembershipRole } from "../lib/types";
@@ -55,19 +57,70 @@ function HubAnalyticsTrendSkeleton() {
 }
 
 function HubAnalyticsSourcesSkeleton() {
+  const barHeights = [72, 58, 48, 40, 32, 24];
+  const axisTicks = [0, 1, 2, 3];
   return (
-    <section className="card hub-analytics__panel" aria-hidden="true" data-testid="hub-analytics-sources-skeleton">
+    <section
+      className="card hub-analytics__panel hub-analytics__panel--span-2"
+      aria-hidden="true"
+      data-testid="hub-analytics-sources-skeleton"
+    >
       <div className="hub-analytics__panel-header">
         <span className="hub-analytics__panel-title-skeleton dash-skeleton" />
         <span className="hub-analytics__panel-meta-skeleton dash-skeleton" />
       </div>
-      <div className="hub-analytics__source-list">
+      <div className="hub-analytics__bar-chart">
+        <div className="hub-analytics__bar-chart-plot">
+          <div className="hub-analytics__bar-chart-axis">
+            {axisTicks.map((tick) => (
+              <span key={tick} className="hub-analytics__bar-chart-tick-skeleton dash-skeleton" />
+            ))}
+          </div>
+          <div className="hub-analytics__bar-chart-bars">
+            {axisTicks.map((tick) => (
+              <span
+                key={`grid-${tick}`}
+                className="hub-analytics__bar-chart-grid"
+                style={{ bottom: `${(tick / (axisTicks.length - 1)) * 100}%` }}
+              />
+            ))}
+            {barHeights.map((height, index) => (
+              <div key={index} className="hub-analytics__bar-chart-bar">
+                <span
+                  className="hub-analytics__bar-chart-fill hub-analytics__bar-chart-fill--skeleton dash-skeleton"
+                  style={{ height: `${height}%` }}
+                />
+                <span className="hub-analytics__bar-chart-label-skeleton dash-skeleton" />
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="hub-analytics__bar-chart-footer">
+          <span className="hub-analytics__bar-chart-caption-skeleton dash-skeleton" />
+          <div className="hub-analytics__bar-chart-pager">
+            <span className="hub-analytics__bar-chart-pager-skeleton dash-skeleton" />
+            <span className="hub-analytics__bar-chart-pager-count-skeleton dash-skeleton" />
+            <span className="hub-analytics__bar-chart-pager-skeleton dash-skeleton" />
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function HubAnalyticsUnusedSkeleton() {
+  return (
+    <section className="card hub-analytics__panel" aria-hidden="true" data-testid="hub-analytics-unused-skeleton">
+      <div className="hub-analytics__panel-header">
+        <span className="hub-analytics__panel-title-skeleton dash-skeleton" />
+        <span className="hub-analytics__panel-meta-skeleton dash-skeleton" />
+      </div>
+      <div className="hub-analytics__chart hub-analytics__chart--dormant">
         {Array.from({ length: 5 }, (_, index) => (
-          <div key={index} className="hub-analytics__source-row">
-            <span className="hub-analytics__source-name-skeleton dash-skeleton" />
-            <div className="hub-analytics__source-stats">
-              <span className="hub-analytics__source-stat-skeleton dash-skeleton" />
-              <span className="hub-analytics__source-stat-skeleton hub-analytics__source-stat-skeleton--short dash-skeleton" />
+          <div key={index} className="hub-analytics__chart-row hub-analytics__chart-row--compact">
+            <div className="hub-analytics__chart-label">
+              <span className="hub-analytics__chart-name-skeleton dash-skeleton" />
+              <span className="hub-analytics__chart-value-skeleton dash-skeleton" />
             </div>
           </div>
         ))}
@@ -85,6 +138,7 @@ function HubAnalyticsLoadingSkeleton() {
       <div className="hub-analytics__grid">
         <HubAnalyticsTrendSkeleton />
         <HubAnalyticsSourcesSkeleton />
+        <HubAnalyticsUnusedSkeleton />
       </div>
     </div>
   );
@@ -133,12 +187,17 @@ export function HubAnalyticsPanel({
 }) {
   const router = useRouter();
   const canViewAnalytics = hubRole === "owner" || hubRole === "admin";
-  const [topSourcesMode, setTopSourcesMode] = useState<TopSourcesMode>("opens");
+  const [topSourcesMode, setTopSourcesMode] = useState<TopSourcesMode>("returns");
   const [topSourcesMenuOpen, setTopSourcesMenuOpen] = useState(false);
+  const [topSourcesPage, setTopSourcesPage] = useState(0);
   const topSourcesMenuRef = useRef<HTMLDivElement>(null);
 
+  useEffect(() => {
+    setTopSourcesPage(0);
+  }, [topSourcesMode, hubId]);
+
   const handleSourceClick = (sourceId: string) => {
-    router.push(`/hubs/${hubId}?tab=sources&focusSource=${sourceId}`);
+    router.push(`/hubs/${hubId}?tab=sources&openSource=${sourceId}`);
   };
 
   useEffect(() => {
@@ -207,13 +266,30 @@ export function HubAnalyticsPanel({
   }
 
   const latencyStatus = getLatencyStatus(summary.average_latency_ms);
+  const topSourcesPrimaryField: keyof AnalyticsTopSource =
+    topSourcesMode === "opens" ? "citation_opens"
+    : topSourcesMode === "returns" ? "citation_returns"
+    : "citation_flags";
   const sortedTopSources = [...summary.top_sources]
-    .filter((source) => topSourcesMode !== "flags" || source.citation_flags > 0)
-    .sort((left, right) => compareTopSources(left, right, topSourcesMode))
-    .slice(0, 5);
+    .filter((source) => Number(source[topSourcesPrimaryField] ?? 0) > 0)
+    .sort((left, right) => compareTopSources(left, right, topSourcesMode));
+  const topSourcesMaxValue = sortedTopSources.reduce(
+    (max, source) => Math.max(max, Number(source[topSourcesPrimaryField] ?? 0)),
+    0,
+  );
+  const topSourcesPageCount = Math.max(1, Math.ceil(sortedTopSources.length / TOP_SOURCES_PAGE_SIZE));
+  const clampedPage = Math.min(topSourcesPage, topSourcesPageCount - 1);
+  const pageStart = clampedPage * TOP_SOURCES_PAGE_SIZE;
+  const pagedTopSources = sortedTopSources.slice(pageStart, pageStart + TOP_SOURCES_PAGE_SIZE);
+  const topSourcesAxisMax = Math.max(topSourcesMaxValue, 1);
+  const topSourcesYTicks = buildYAxisTicks(topSourcesAxisMax);
+  const topSourcesUnitLabel =
+    topSourcesMode === "opens" ? "opens"
+    : topSourcesMode === "returns" ? "uses"
+    : "flags";
   const topSourcesModeLabel =
-    topSourcesMode === "opens" ? "By citation opens"
-    : topSourcesMode === "returns" ? "By citations returned"
+    topSourcesMode === "opens" ? "By source opens"
+    : topSourcesMode === "returns" ? "By times used"
     : "By flags";
   const neverCitedSources = summary.never_cited_sources ?? [];
   const neverCitedCount = summary.never_cited_count ?? neverCitedSources.length;
@@ -225,14 +301,14 @@ export function HubAnalyticsPanel({
         <MetricCard label="Questions" value={String(summary.total_questions)} hint={`Last ${summary.window_days} days`} />
         <MetricCard label="Helpful rate" value={formatPercent(summary.helpful_rate)} hint={`${summary.helpful_count} helpful`} />
         <MetricCard
-          label="Citation opens"
+          label="Source opens"
           value={String(summary.citation_open_count)}
-          hint={`${formatPercent(summary.citation_open_rate)} of total citations returned`}
+          hint={`Across ${summary.total_answers} answers`}
         />
         <MetricCard
-          label="Citation flags"
+          label="Source flags"
           value={String(summary.citation_flag_count)}
-          hint={`${formatPercent(summary.citation_flag_rate)} of total citations returned`}
+          hint={`Across ${summary.total_answers} answers`}
         />
         <MetricCard
           label="Avg latency"
@@ -264,9 +340,9 @@ export function HubAnalyticsPanel({
           </div>
         </section>
 
-        <section className="card hub-analytics__panel">
+        <section className="card hub-analytics__panel hub-analytics__panel--span-2">
           <div className="hub-analytics__panel-header">
-            <h4>Top cited sources</h4>
+            <h4>Top used sources</h4>
             <div className="hub-analytics__source-filter" ref={topSourcesMenuRef}>
               <button
                 type="button"
@@ -289,7 +365,7 @@ export function HubAnalyticsPanel({
                     }}
                     role="menuitem"
                   >
-                    By citation opens
+                    By source opens
                   </button>
                   <button
                     type="button"
@@ -300,7 +376,7 @@ export function HubAnalyticsPanel({
                     }}
                     role="menuitem"
                   >
-                    By citations returned
+                    By times used
                   </button>
                   <button
                     type="button"
@@ -321,57 +397,109 @@ export function HubAnalyticsPanel({
             <p className="muted">
               {topSourcesMode === "flags"
                 ? "No sources have been flagged in this window."
-                : "No citation interactions recorded yet."}
+                : "No source usage recorded yet."}
             </p>
           ) : (
-            <div className="hub-analytics__source-list">
-              {sortedTopSources.map((source) => (
-                <button
-                  key={source.source_id}
-                  type="button"
-                  className="hub-analytics__source-row hub-analytics__source-row--clickable"
-                  onClick={() => handleSourceClick(source.source_id)}
-                  title={source.source_name ?? source.source_id}
-                >
-                  <strong className="hub-analytics__source-name">{source.source_name ?? source.source_id}</strong>
-                  <div className="hub-analytics__source-stats">
-                    <span>{source.citation_returns} returned</span>
-                    <span>{source.citation_opens} opens</span>
-                    <span>{source.citation_flags} flags</span>
-                  </div>
-                </button>
-              ))}
+            <div className="hub-analytics__bar-chart">
+              <div className="hub-analytics__bar-chart-plot">
+                <div className="hub-analytics__bar-chart-axis" aria-hidden="true">
+                  {topSourcesYTicks.map((tick) => (
+                    <span key={tick} className="hub-analytics__bar-chart-tick">{tick}</span>
+                  ))}
+                </div>
+                <div className="hub-analytics__bar-chart-bars" role="list">
+                  {topSourcesYTicks.map((tick) => (
+                    <span
+                      key={`grid-${tick}`}
+                      className="hub-analytics__bar-chart-grid"
+                      style={{ bottom: `${(tick / topSourcesAxisMax) * 100}%` }}
+                      aria-hidden="true"
+                    />
+                  ))}
+                  {pagedTopSources.map((source) => {
+                    const primaryValue = Number(source[topSourcesPrimaryField] ?? 0);
+                    const barHeight = topSourcesAxisMax > 0
+                      ? Math.max(primaryValue > 0 ? 4 : 0, (primaryValue / topSourcesAxisMax) * 100)
+                      : 0;
+                    const displayName = source.source_name ?? source.source_id;
+                    return (
+                      <button
+                        key={source.source_id}
+                        type="button"
+                        role="listitem"
+                        className="hub-analytics__bar-chart-bar"
+                        onClick={() => handleSourceClick(source.source_id)}
+                        title={`${displayName}: ${primaryValue} ${topSourcesUnitLabel}`}
+                        aria-label={`${displayName}: ${primaryValue} ${topSourcesUnitLabel}`}
+                      >
+                        <span className="hub-analytics__bar-chart-value">{primaryValue}</span>
+                        <span
+                          className="hub-analytics__bar-chart-fill"
+                          style={{ height: `${barHeight}%` }}
+                        />
+                        <span className="hub-analytics__bar-chart-label">{displayName}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <div className="hub-analytics__bar-chart-footer">
+                <span className="muted">{`Citations (${topSourcesUnitLabel})`}</span>
+                <div className="hub-analytics__bar-chart-pager">
+                  <button
+                    type="button"
+                    className="hub-analytics__bar-chart-pager-btn"
+                    onClick={() => setTopSourcesPage((current) => Math.max(0, current - 1))}
+                    disabled={clampedPage === 0}
+                    aria-label="Previous sources"
+                  >
+                    <ChevronLeftIcon />
+                  </button>
+                  <span className="muted">{`${clampedPage + 1} / ${topSourcesPageCount}`}</span>
+                  <button
+                    type="button"
+                    className="hub-analytics__bar-chart-pager-btn"
+                    onClick={() => setTopSourcesPage((current) => Math.min(topSourcesPageCount - 1, current + 1))}
+                    disabled={clampedPage >= topSourcesPageCount - 1}
+                    aria-label="Next sources"
+                  >
+                    <ChevronRightIcon />
+                  </button>
+                </div>
+              </div>
             </div>
           )}
         </section>
 
         <section className="card hub-analytics__panel">
           <div className="hub-analytics__panel-header">
-            <h4>Coverage gaps</h4>
+            <h4>Unused sources</h4>
             <span className="muted">
               {totalCompleteSources > 0
-                ? `${neverCitedCount} of ${totalCompleteSources} never cited`
+                ? `${neverCitedCount} of ${totalCompleteSources} never used`
                 : "No sources"}
             </span>
           </div>
           {neverCitedSources.length === 0 ? (
             <p className="muted">
               {neverCitedCount === 0 && totalCompleteSources > 0
-                ? "Every source has been cited at least once. Nice."
+                ? "Every source has been used at least once. Nice."
                 : "No sources to show."}
             </p>
           ) : (
-            <div className="hub-analytics__source-list">
+            <div className="hub-analytics__chart hub-analytics__chart--dormant hub-analytics__chart--scroll">
               {neverCitedSources.map((source) => (
                 <button
                   key={source.source_id}
                   type="button"
-                  className="hub-analytics__source-row hub-analytics__source-row--clickable"
+                  className="hub-analytics__chart-row hub-analytics__chart-row--compact"
                   onClick={() => handleSourceClick(source.source_id)}
                   title={source.source_name ?? source.source_id}
                 >
-                  <strong className="hub-analytics__source-name">{source.source_name ?? source.source_id}</strong>
-                  <span className="hub-analytics__coverage-tag">Never cited</span>
+                  <div className="hub-analytics__chart-label">
+                    <span className="hub-analytics__chart-name">{source.source_name ?? source.source_id}</span>
+                    <span className="hub-analytics__chart-value hub-analytics__chart-value--muted">0 uses</span>
+                  </div>
                 </button>
               ))}
             </div>
@@ -380,6 +508,19 @@ export function HubAnalyticsPanel({
       </div>
     </div>
   );
+}
+
+function buildYAxisTicks(max: number): number[] {
+  if (max <= 1) return [0, 1];
+  const step = Math.max(1, Math.ceil(max / 4));
+  const ticks: number[] = [];
+  for (let value = 0; value <= max; value += step) {
+    ticks.push(value);
+  }
+  if (ticks[ticks.length - 1] !== max) {
+    ticks.push(max);
+  }
+  return ticks;
 }
 
 function compareTopSources(left: AnalyticsTopSource, right: AnalyticsTopSource, mode: TopSourcesMode): number {

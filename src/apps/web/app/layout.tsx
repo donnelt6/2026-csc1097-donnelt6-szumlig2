@@ -1,7 +1,18 @@
 // layout.tsx: Root Next.js layout with font loading, metadata, and provider wrappers.
 
 import type { Metadata } from "next";
-import "./globals.css";
+import "./theme.css";
+import "./layout.css";
+import "./shared-ui.css";
+import "./sidebar.css";
+import "./navbar.css";
+import "./dashboard.css";
+import "./hubs.css";
+import "./sources.css";
+import "./hub-analytics.css";
+import "./chat.css";
+import "./filters.css";
+import "./responsive.css";
 import "./members.css";
 import "./hub-dashboard.css";
 import "./admin-dashboard.css";

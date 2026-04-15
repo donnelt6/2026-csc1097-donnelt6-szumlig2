@@ -219,6 +219,12 @@ export default function HubDetail({ params }: { params: { hubId: string } }) {
                 p.delete('focusSource');
                 router.replace(`/hubs/${params.hubId}?${p.toString()}`, { scroll: false });
               }}
+              openSourceId={searchParams.get('openSource') ?? undefined}
+              onOpenHandled={() => {
+                const p = new URLSearchParams(searchParams.toString());
+                p.delete('openSource');
+                router.replace(`/hubs/${params.hubId}?${p.toString()}`, { scroll: false });
+              }}
             />
           )}
           {activeTab === 'members' && (

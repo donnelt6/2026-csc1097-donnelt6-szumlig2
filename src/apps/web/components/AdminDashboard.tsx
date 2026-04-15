@@ -2,7 +2,7 @@
 
 // AdminDashboard.tsx: Admin-only overview dashboard with platform-wide statistics.
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowPathIcon,
@@ -15,16 +15,22 @@ import {
   XMarkIcon,
 } from '@heroicons/react/24/outline';
 import {
+  createGuideStep,
   decideSourceSuggestion,
   dismissContentFlag,
   dismissFlaggedChat,
   getFlaggedChat,
+  listFaqs,
   listFlaggedChats,
   listFlaggedContent,
+  listGuides,
   listSourceSuggestions,
   listSources,
   regenerateFlaggedChat,
   resolveContentFlag,
+  updateFaq,
+  updateGuide,
+  updateGuideStep,
   createFlaggedChatRevision,
   applyFlaggedChatRevision,
 } from '../lib/api';
@@ -32,8 +38,10 @@ import { HubAnalyticsPanel } from './HubAnalyticsPanel';
 import { useHubDashboardTab } from '../lib/HubDashboardTabContext';
 import type {
   Citation,
+  FaqEntry,
   FlaggedContentQueueItem,
   FlaggedChatQueueItem,
+  GuideEntry,
   MembershipRole,
   SourceSuggestion,
 } from '../lib/types';
@@ -117,6 +125,7 @@ export function AdminDashboard({ hubId, hubRole, onSwitchTab }: AdminDashboardPr
   const [editFlagId, setEditFlagId] = useState<string | null>(null);
   const [draftContent, setDraftContent] = useState('');
   const [draftCitations, setDraftCitations] = useState('[]');
+  const [editingContentFlag, setEditingContentFlag] = useState<FlaggedContentQueueItem | null>(null);
   const [busySugIds, setBusySugIds] = useState<Map<string, 'accepted' | 'declined'>>(new Map());
 
   const { data: sources = [], isLoading: sourcesLoading } = useQuery({
@@ -554,6 +563,7 @@ export function AdminDashboard({ hubId, hubRole, onSwitchTab }: AdminDashboardPr
                   <ContentFlagRow
                     key={item.id}
                     item={item}
+                    onEdit={() => setEditingContentFlag(item)}
                     onResolve={() => resolveContentMutation.mutate(item.id)}
                     onDismiss={() => dismissContentMutation.mutate(item.id)}
                     disabled={resolveContentMutation.isPending || dismissContentMutation.isPending}
@@ -572,6 +582,7 @@ export function AdminDashboard({ hubId, hubRole, onSwitchTab }: AdminDashboardPr
                   <ContentFlagRow
                     key={item.id}
                     item={item}
+                    onEdit={() => setEditingContentFlag(item)}
                     onResolve={() => resolveContentMutation.mutate(item.id)}
                     onDismiss={() => dismissContentMutation.mutate(item.id)}
                     disabled={resolveContentMutation.isPending || dismissContentMutation.isPending}
@@ -648,6 +659,14 @@ export function AdminDashboard({ hubId, hubRole, onSwitchTab }: AdminDashboardPr
             </div>
           </div>
         </div>
+      )}
+
+      {editingContentFlag && (
+        <ContentEditModal
+          hubId={hubId}
+          flag={editingContentFlag}
+          onClose={() => setEditingContentFlag(null)}
+        />
       )}
       </>
       )}
@@ -749,27 +768,301 @@ function ChatFlagRow({ item, onRegenerate, onEdit, onDismiss, regenerating, dism
   );
 }
 
-function ContentFlagRow({ item, onResolve, onDismiss, disabled }: {
-  item: FlaggedContentQueueItem; onResolve: () => void; onDismiss: () => void; disabled: boolean;
+function ContentFlagRow({ item, onEdit, onResolve, onDismiss, disabled }: {
+  item: FlaggedContentQueueItem; onEdit: () => void; onResolve: () => void; onDismiss: () => void; disabled: boolean;
 }) {
+  const reasonLabel = REASON_LABELS[item.reason] || item.reason;
+  const typeLabel = item.content_type === 'faq' ? 'FAQ' : 'Guide';
   return (
-    <div className="admin__mod-row">
-      <div className="admin__mod-row-top">
-        <span className="admin__mod-status admin__mod-status--open">
-          <span className="admin__mod-status-dot" />
-          {item.reason}
+    <div className="admin__flag-card">
+      <div className="admin__flag-card-top">
+        <span className={`admin__flag-badge admin__flag-badge--${item.status}`}>
+          Flagged: {reasonLabel}
         </span>
-        <span className="admin__mod-session">{item.title}</span>
-        <span className="admin__mod-time">{new Date(item.flagged_at).toLocaleDateString('en-IE')}</span>
+        <span className="admin__flag-time">{new Date(item.flagged_at).toLocaleDateString('en-IE')}</span>
       </div>
-      <div className="admin__mod-row-body">
-        <div className="admin__mod-row-content">
-          {item.preview && <p className="admin__mod-row-a">{item.preview}</p>}
+
+      <div className="admin__flag-section">
+        <p className="admin__flag-label">{typeLabel} Title</p>
+        <p className="admin__flag-text">&ldquo;{item.title}&rdquo;</p>
+      </div>
+
+      {item.preview && (
+        <div className="admin__flag-section">
+          <p className="admin__flag-label">Preview</p>
+          <p className="admin__flag-text">&ldquo;{item.preview}&rdquo;</p>
         </div>
-        <div className="admin__mod-row-actions">
-          <button className="admin__mod-btn admin__mod-btn--primary" type="button" onClick={onResolve} disabled={disabled}>Resolve</button>
-          <button className="admin__mod-btn admin__mod-btn--danger" type="button" onClick={onDismiss} disabled={disabled}>Dismiss</button>
+      )}
+
+      <div className="admin__flag-section">
+        <p className="admin__flag-label">Flag Reason</p>
+        <p className="admin__flag-reason-text">{reasonLabel}</p>
+      </div>
+
+      <div className="admin__flag-actions">
+        <button className="admin__flag-btn admin__flag-btn--primary" type="button" onClick={onEdit} disabled={disabled}>
+          <PencilSquareIcon />
+          Edit
+        </button>
+        <button className="admin__flag-btn" type="button" onClick={onResolve} disabled={disabled}>
+          <CheckIcon />
+          Resolve
+        </button>
+        <button className="admin__flag-btn admin__flag-btn--danger" type="button" onClick={onDismiss} disabled={disabled}>
+          Dismiss
+        </button>
+      </div>
+    </div>
+  );
+}
+
+interface StepDraft { title: string; instruction: string }
+
+function ContentEditModal({
+  hubId,
+  flag,
+  onClose,
+}: {
+  hubId: string;
+  flag: FlaggedContentQueueItem;
+  onClose: () => void;
+}) {
+  const queryClient = useQueryClient();
+  const isFaq = flag.content_type === 'faq';
+
+  const faqsQuery = useQuery({
+    queryKey: ['faqs', hubId],
+    queryFn: () => listFaqs(hubId),
+    enabled: isFaq,
+    staleTime: 0,
+  });
+  const guidesQuery = useQuery({
+    queryKey: ['guides', hubId],
+    queryFn: () => listGuides(hubId),
+    enabled: !isFaq,
+    staleTime: 0,
+  });
+
+  const faq: FaqEntry | undefined = isFaq ? faqsQuery.data?.find((f) => f.id === flag.content_id) : undefined;
+  const guide: GuideEntry | undefined = !isFaq ? guidesQuery.data?.find((g) => g.id === flag.content_id) : undefined;
+
+  const [faqDraft, setFaqDraft] = useState<{ question: string; answer: string } | null>(null);
+  const [titleDraft, setTitleDraft] = useState<string>('');
+  const [stepDrafts, setStepDrafts] = useState<Record<string, StepDraft>>({});
+  const [newStep, setNewStep] = useState<StepDraft>({ title: '', instruction: '' });
+  const [hydratedId, setHydratedId] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (isFaq && faq && hydratedId !== faq.id) {
+      setFaqDraft({ question: faq.question, answer: faq.answer });
+      setHydratedId(faq.id);
+    }
+    if (!isFaq && guide && hydratedId !== guide.id) {
+      setTitleDraft(guide.title);
+      const drafts: Record<string, StepDraft> = {};
+      for (const s of guide.steps) drafts[s.id] = { title: s.title ?? '', instruction: s.instruction };
+      setStepDrafts(drafts);
+      setHydratedId(guide.id);
+    }
+  }, [isFaq, faq, guide, hydratedId]);
+
+  const saveFaq = async (alsoResolve: boolean) => {
+    if (!faq || !faqDraft) {
+      setError('FAQ data not loaded yet.');
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      const updates: { question?: string; answer?: string } = {};
+      if (faqDraft.question.trim() !== faq.question) updates.question = faqDraft.question.trim();
+      if (faqDraft.answer.trim() !== faq.answer) updates.answer = faqDraft.answer.trim();
+      if (Object.keys(updates).length > 0) {
+        await updateFaq(faq.id, updates);
+      }
+      if (alsoResolve) await resolveContentFlag(hubId, flag.id);
+      queryClient.invalidateQueries({ queryKey: ['faqs', hubId] });
+      queryClient.invalidateQueries({ queryKey: ['flagged-content', hubId] });
+      onClose();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const saveGuide = async (alsoResolve: boolean) => {
+    if (!guide) return;
+    setSaving(true);
+    setError(null);
+    try {
+      if (titleDraft.trim() && titleDraft.trim() !== guide.title) {
+        await updateGuide(guide.id, { title: titleDraft.trim() });
+      }
+      for (const step of guide.steps) {
+        const d = stepDrafts[step.id];
+        if (!d) continue;
+        const newTitle = d.title.trim() || undefined;
+        const oldTitle = step.title || undefined;
+        const newInstr = d.instruction.trim();
+        if (newTitle !== oldTitle || newInstr !== step.instruction) {
+          if (!newInstr) throw new Error(`Step ${step.step_index}: instructions cannot be blank.`);
+          await updateGuideStep(step.id, { title: newTitle, instruction: newInstr });
+        }
+      }
+      if (newStep.instruction.trim()) {
+        await createGuideStep(guide.id, {
+          title: newStep.title.trim() || undefined,
+          instruction: newStep.instruction.trim(),
+        });
+        setNewStep({ title: '', instruction: '' });
+      }
+      if (alsoResolve) await resolveContentFlag(hubId, flag.id);
+      queryClient.invalidateQueries({ queryKey: ['guides', hubId] });
+      queryClient.invalidateQueries({ queryKey: ['flagged-content', hubId] });
+      onClose();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const loading = isFaq ? faqsQuery.isLoading : guidesQuery.isLoading;
+  const loaded = isFaq ? !!faqsQuery.data : !!guidesQuery.data;
+  const notFound = loaded && !(isFaq ? faq : guide);
+  const onSave = (alsoResolve: boolean) => (isFaq ? saveFaq(alsoResolve) : saveGuide(alsoResolve));
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="gmodal" onClick={(e) => e.stopPropagation()}>
+        <div className="gmodal__header">
+          <span className="gmodal__badge">{isFaq ? 'FAQ' : 'GUIDE'}</span>
+          <button className="gmodal__icon-btn" type="button" title="Close" onClick={onClose}>
+            <XMarkIcon />
+          </button>
         </div>
+
+        {loading && <p className="admin__section-empty">Loading...</p>}
+        {notFound && <p className="admin__section-empty">This item no longer exists. It may have been archived.</p>}
+
+        {isFaq && faq && faqDraft && (
+          <>
+            <div className="faq-modal__question-section">
+              <span className="faq-modal__label">QUESTION</span>
+              <textarea
+                className="hdash__form-input hdash__form-textarea faq-modal__edit-question"
+                value={faqDraft.question}
+                onChange={(e) => setFaqDraft({ ...faqDraft, question: e.target.value })}
+                autoFocus
+              />
+            </div>
+            <div className="faq-modal__answer-section">
+              <div className="faq-modal__answer-header">
+                <span className="faq-modal__label">ANSWER</span>
+                <span className="faq-modal__confidence">{Math.round((faq.confidence || 0) * 100)}% confidence</span>
+              </div>
+              <textarea
+                className="hdash__form-input hdash__form-textarea faq-modal__edit-answer"
+                value={faqDraft.answer}
+                onChange={(e) => setFaqDraft({ ...faqDraft, answer: e.target.value })}
+              />
+            </div>
+          </>
+        )}
+
+        {!isFaq && guide && (
+          <>
+            <div className="gmodal__title-edit">
+              <input
+                type="text"
+                className="hdash__form-input gmodal__title-input"
+                value={titleDraft}
+                onChange={(e) => setTitleDraft(e.target.value)}
+                placeholder="Guide title"
+              />
+            </div>
+
+            <div className="gmodal__steps-header">
+              <span className="gmodal__steps-label">STEP-BY-STEP</span>
+              <span className="gmodal__steps-count">{guide.steps.length} steps</span>
+            </div>
+
+            <div className="gmodal__steps-list">
+              {guide.steps.map((step, i) => {
+                const d = stepDrafts[step.id] ?? { title: step.title ?? '', instruction: step.instruction };
+                return (
+                  <div key={step.id} className="gmodal__step">
+                    <div className="gmodal__step-row">
+                      <span className="gmodal__step-num">{i + 1}</span>
+                      <div className="gmodal__step-content">
+                        <div className="gmodal__step-edit-form">
+                          <input
+                            type="text"
+                            className="hdash__form-input"
+                            placeholder="Step title (optional)"
+                            value={d.title}
+                            onChange={(e) => setStepDrafts((p) => ({ ...p, [step.id]: { ...d, title: e.target.value } }))}
+                          />
+                          <textarea
+                            className="hdash__form-input hdash__form-textarea"
+                            placeholder="Step instructions"
+                            value={d.instruction}
+                            onChange={(e) => setStepDrafts((p) => ({ ...p, [step.id]: { ...d, instruction: e.target.value } }))}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+
+              <div className="gmodal__add-step">
+                <input
+                  type="text"
+                  className="hdash__form-input"
+                  placeholder="New step title (optional)"
+                  value={newStep.title}
+                  onChange={(e) => setNewStep({ ...newStep, title: e.target.value })}
+                />
+                <textarea
+                  className="hdash__form-input hdash__form-textarea"
+                  placeholder="New step instructions (leave blank to skip adding)"
+                  value={newStep.instruction}
+                  onChange={(e) => setNewStep({ ...newStep, instruction: e.target.value })}
+                />
+              </div>
+            </div>
+          </>
+        )}
+
+        {error && (
+          <p className="admin__edit-error">{error}</p>
+        )}
+
+        {(faq || guide) && (
+          <div className="admin__edit-actions">
+            <button className="admin__mod-btn" type="button" onClick={onClose} disabled={saving}>Cancel</button>
+            <button
+              className="admin__mod-btn"
+              type="button"
+              disabled={saving}
+              onClick={() => onSave(false)}
+            >
+              {saving ? 'Saving...' : 'Save changes'}
+            </button>
+            <button
+              className="admin__mod-btn admin__mod-btn--primary"
+              type="button"
+              disabled={saving}
+              onClick={() => onSave(true)}
+            >
+              {saving ? 'Saving...' : 'Save & Resolve flag'}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

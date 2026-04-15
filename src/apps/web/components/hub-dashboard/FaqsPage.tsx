@@ -219,6 +219,7 @@ export function FaqsPage({ hubId, sources, canEdit }: Props) {
     onSuccess: () => {
       setFlagTargetId(null);
       setStatusMessage("FAQ flagged for review.");
+      queryClient.invalidateQueries({ queryKey: ["flagged-content", hubId] });
     },
     onError: (err) => setStatusMessage((err as Error).message),
   });

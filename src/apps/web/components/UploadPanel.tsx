@@ -45,6 +45,8 @@ interface Props {
   onModalOpened?: () => void;
   focusSourceId?: string;
   onFocusHandled?: () => void;
+  openSourceId?: string;
+  onOpenHandled?: () => void;
 }
 
 export function UploadPanel({
@@ -62,6 +64,8 @@ export function UploadPanel({
   onModalOpened,
   focusSourceId,
   onFocusHandled,
+  openSourceId,
+  onOpenHandled,
 }: Props) {
   const queryClient = useQueryClient();
   const { searchQuery } = useSearch();
@@ -83,6 +87,7 @@ export function UploadPanel({
   const [highlightedSourceId, setHighlightedSourceId] = useState<string | null>(null);
   const sourceRowRefs = useRef<Map<string, HTMLDivElement>>(new Map());
   const focusHandledFor = useRef<string | null>(null);
+  const openHandledFor = useRef<string | null>(null);
 
   // Close error popover on click outside
   useEffect(() => {
@@ -250,6 +255,18 @@ export function UploadPanel({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusSourceId, sourcesLoading, sortedSources.length, pageSize]);
+
+  useEffect(() => {
+    if (!openSourceId || openHandledFor.current === openSourceId) return;
+    if (sourcesLoading || sortedSources.length === 0) return;
+    const match = sortedSources.find((s) => s.id === openSourceId);
+    openHandledFor.current = openSourceId;
+    if (match) {
+      handleViewChunks(match);
+    }
+    onOpenHandled?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openSourceId, sourcesLoading, sortedSources.length]);
 
   const filteredSources = useMemo(() => {
     let result = sortedSources;
