@@ -470,7 +470,6 @@
   border: 1px solid var(--border);
   border-radius: 14px;
   position: relative;
-  overflow: hidden;
   transition: border-color var(--transition-fast), background var(--transition-fast);
 }
 
@@ -486,17 +485,7 @@
 .sources__row--selected {
   border-color: var(--text-secondary);
   background: color-mix(in srgb, var(--text) 4%, var(--card));
-}
-
-.sources__row--selected::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 4px;
-  border-radius: 0 999px 999px 0;
-  background: var(--text);
+  box-shadow: inset 4px 0 0 var(--text);
 }
 
 .sources__row--selected:hover {
