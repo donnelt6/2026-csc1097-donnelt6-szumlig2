@@ -1,39 +1,98 @@
-# Web Tests
+# Web Test Guide
 
-These tests cover UI components with mocked API calls and Next.js helpers.
-They run in a jsdom environment and do not require a backend.
+This folder documents the frontend test strategy for Caddie.
 
-What is tested
-- Auth routing behavior in `AuthGate`.
-- Hub listing and filtering in `HubsList`.
-- Upload flow, retries, and permissions in `UploadPanel`.
-- FAQ generation UI in `FaqPanel`.
+The web app uses three layers. Choose the lightest layer that can catch the regression you care about.
 
-Run the tests
-```
+## Test Layers
+
+Component tests:
+
+- Live in `tests/`
+- Run in jsdom
+- Mock API calls and selected Next.js helpers
+- Best for isolated UI behavior, permissions-driven rendering, form interactions, and component state changes
+
+Mocked E2E:
+
+- Live in `../e2e/`
+- Run the real Next.js app in Playwright
+- Replace browser auth with the deterministic fake auth client in `lib/e2eAuth.ts`
+- Mock API traffic so CI does not need a live backend, worker, Redis, or Supabase project
+- Best for stable browser journeys such as auth entry, upload UX, and chat UI flows
+
+True E2E:
+
+- Live in `../e2e/true/`
+- Run the real web app against the real local stack and external integrations
+- Best for highest-confidence checks across auth, ingestion, and chat
+- Most expensive layer to run and maintain
+
+## Which Layer To Run
+
+Run component tests when:
+
+- you changed UI rendering logic
+- you changed local component state or props
+- you changed API error handling or empty/loading states
+
+Run mocked E2E when:
+
+- you changed a full browser journey
+- you need confidence in route-level integration between pages and components
+- you want a CI-friendly end-to-end check without the real backend stack
+
+Run true E2E when:
+
+- you changed real auth, ingestion, worker, storage, or retrieval integration
+- you need to verify the whole stack together
+- you are preparing for a release or final acceptance pass
+
+## Dependencies
+
+Component tests require:
+
+- `npm install`
+
+Mocked E2E requires:
+
+- `npm install`
+- Playwright browser support
+- the local Next.js app launched by the test command
+
+True E2E requires:
+
+- `npm install`
+- Playwright browser support
+- running web, API, worker, and Redis services
+- valid Supabase and OpenAI credentials
+- true E2E env vars and test credentials
+
+## Commands
+
+Component tests:
+
+```powershell
 cd 2026-csc1097-donnelt6-szumlig2/src/apps/web
-npm install
 npm run test
 ```
 
-Playwright E2E
-- `apps/web/e2e/` runs a very small browser suite against the real Next.js app.
-- E2E mode swaps in a deterministic fake auth client and uses mocked API responses, so CI does not need a live Supabase project or backend stack.
+Mocked E2E:
 
-Run the E2E suite
-```
+```powershell
 cd 2026-csc1097-donnelt6-szumlig2/src/apps/web
-npm install
 npm run test:e2e
 ```
 
-True E2E
-- `apps/web/e2e/true/` runs a separate real-stack browser suite against the real Next.js app, API, worker, Redis, Supabase auth/storage, and live OpenAI-backed ingestion/chat.
-- The setup and cleanup scripts reset a dedicated hub namespace for the current run id instead of mocking auth or API traffic.
+True E2E:
 
-Run the true E2E suite
-```
+```powershell
 cd 2026-csc1097-donnelt6-szumlig2/src/apps/web
-npm install
 npm run test:e2e:true
 ```
+
+## Notes
+
+- Mocked E2E is the default browser-layer choice for CI.
+- True E2E should stay small and high-value, because it depends on the real stack.
+- If a change can be covered well by a component test, prefer that over expanding the heavier suites.

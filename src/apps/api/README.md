@@ -1,48 +1,126 @@
-# Caddie API (FastAPI)
+# Caddie API
 
-FastAPI backend exposing hubs, sources, and chat endpoints backed by Supabase/Postgres and pgvector.
+This app is the FastAPI backend for Caddie. It handles hubs, sources, memberships, reminders, generated content, analytics, and chat over ingested knowledge.
 
-## Run locally
-```bash
-cd apps/api
-python -m venv .venv && .venv/Scripts/activate  # PowerShell: .venv\\Scripts\\Activate.ps1
-pip install -r requirements.txt
-uvicorn app.main:app --reload --port 8000
+It sits between the Next.js frontend and the backing services used for auth, storage, retrieval, queueing, and embeddings.
+
+## Main Responsibilities
+
+- Expose HTTP endpoints for the web app
+- Enforce authentication and role-based access rules
+- Validate request and response shapes with Pydantic models
+- Read and write product data through the store layer
+- Enqueue background ingestion work for the worker
+- Run chat retrieval and answer generation
+- Produce FAQ and guide content using stored source material
+
+## Run Locally
+
+```powershell
+cd 2026-csc1097-donnelt6-szumlig2/src/apps/api
+python -m venv .venv
+.\.venv\Scripts\python -m pip install -r requirements.txt
+.\.venv\Scripts\python -m uvicorn app.main:app --reload --port 8000
 ```
 
-Environment variables live in `.env.example`. Provide `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `REDIS_URL`, and `OPENAI_API_KEY` for local development. The API expects a Supabase Auth JWT in the `Authorization: Bearer` header for user-scoped routes. Optional rate-limit settings include `RATE_LIMIT_READ_PER_MINUTE`, `RATE_LIMIT_WRITE_PER_MINUTE`, `RATE_LIMIT_HEALTH_PER_MINUTE`, `RATE_LIMIT_IP_MULTIPLIER`, and `TRUST_PROXY_HEADERS`.
+## Required Configuration
 
-## Deployment-sensitive config
-- `ENVIRONMENT=local` can omit `ALLOWED_ORIGINS`; the API falls back to `http://localhost:3000` and `http://127.0.0.1:3000`.
-- Any non-local environment must set a non-empty comma-separated `ALLOWED_ORIGINS` allowlist. Invalid or empty values now fail startup instead of silently using `*`.
-- `/health` is the baseline health probe and should be checked after every deploy.
-- Startup/config and auth lookup failures are logged with stable prefixes including `api.startup.config_invalid`, `api.startup.ready`, `api.auth.lookup_unreachable`, and `api.auth.lookup_failed`.
+See `.env.example`.
 
-## Files and purpose
-- `.env.example` - Template for required env vars (no secrets).
-- `README.md` - Setup notes for running the API locally.
-- `pyproject.toml` - Project metadata and dependency list.
-- `requirements.txt` - Editable install entrypoint for local dev.
-- `app/__init__.py` - Marks the package for imports.
-- `app/main.py` - FastAPI app entrypoint and router wiring.
-- `app/dependencies.py` - Auth helpers (JWT, Supabase clients).
-- `app/schemas.py` - Pydantic request/response models including memberships.
-- `app/core/config.py` - Settings loader and defaults.
-- `app/routers/__init__.py` - Router module export.
-- `app/routers/analytics.py` - Hub-scoped AI analytics endpoints for owners/admins.
-- `app/routers/chat.py` - Chat endpoint (hub-only or hub + web search).
-- `app/routers/faqs.py` - FAQ generation/list/edit endpoints.
-- `app/routers/guides.py` - Guide generation/list/edit endpoints with step progress.
-- `app/routers/hubs.py` - Hubs CRUD endpoints.
-- `app/routers/sources.py` - Source upload/status endpoints (signed upload URL, fail, enqueue), plus web URL ingestion and refresh.
-- `app/routers/reminders.py` - Reminder CRUD, candidate review, and notifications endpoints.
-- `app/routers/memberships.py` - Invites and member management endpoints.
-- `app/routers/users.py` - Current user endpoint.
-- `app/routers/errors.py` - PostgREST error mapper.
-- `app/services/__init__.py` - Services package marker.
-- `app/services/queue.py` - Celery task enqueue helper.
-- `app/services/rate_limit.py` - Simple rate limiting utility.
-- `app/services/store/` - Split Supabase-backed store package with domain mixins, helper modules, and the compatibility facade exported from `app.services.store`.
-- `evals/` - Offline RAG eval runner and starter dataset.
-- FAQ generation runs synchronously in the API (no worker task). It reuses stored embeddings and citations and is triggered manually from the web UI.
+Typical local requirements:
 
+- `SUPABASE_URL`
+- `SUPABASE_ANON_KEY`
+- `SUPABASE_SERVICE_ROLE_KEY`
+- `REDIS_URL`
+- `OPENAI_API_KEY`
+
+The API expects a Supabase Auth JWT in `Authorization: Bearer <token>` for user-scoped routes.
+
+Optional operational settings include rate-limit values and proxy/header configuration.
+
+## Request Flow
+
+Most requests follow this path:
+
+1. FastAPI routes the request in `app/main.py`
+2. Dependencies in `app/dependencies.py` resolve auth, clients, and common guards
+3. Router handlers in `app/routers/` validate inputs and enforce access rules
+4. The store layer in `app/services/store/` performs domain logic and persistence work
+5. The API returns a validated response schema from `app/schemas.py`
+
+Background ingestion adds one more step:
+
+6. `app/services/queue.py` enqueues worker jobs for asynchronous processing
+
+## Folder Guide
+
+- `app/main.py`: FastAPI entrypoint and router registration
+- `app/dependencies.py`: auth/client dependency helpers
+- `app/schemas.py`: request and response models
+- `app/core/config.py`: settings loader and defaults
+- `app/routers/`: HTTP boundary layer grouped by feature
+- `app/services/queue.py`: worker task enqueue helper
+- `app/services/rate_limit.py`: rate-limit utilities
+- `app/services/store/`: split Supabase-backed store package
+- `tests/`: backend unit, route, and integration tests
+- `evals/`: offline RAG evaluation harness and datasets
+- `migrations/`: SQL migrations for schema and data-layer changes
+
+## Store Layer
+
+The store package has been split into smaller domain-focused modules under `app/services/store/`.
+
+Key point:
+
+- Router files should stay thin and delegate data and domain logic into the store layer.
+
+Examples of owned areas inside the store package:
+
+- hubs
+- sources
+- chat
+- reminders
+- memberships
+- moderation
+- analytics
+- shared helpers and internals
+
+The compatibility import path remains `app.services.store`.
+
+## Evals
+
+Offline chat evaluation lives in `evals/`.
+
+Run from this folder:
+
+```powershell
+python evals/run_eval.py --dataset evals/dataset.jsonl
+```
+
+
+## Tests
+
+There are two main backend test layers:
+
+- `tests/`: unit, helper, and route-level tests with mocked external boundaries
+- `tests/integration/`: thin higher-level integration tests using the real FastAPI app with shared in-memory doubles
+
+Run everything:
+
+```powershell
+python -m pytest
+```
+
+Run only the integration layer:
+
+```powershell
+python -m pytest -q tests/integration
+```
+
+See `tests/README.md` for test-layer detail.
+
+## Deployment-Sensitive Notes
+
+- `ENVIRONMENT=local` can omit `ALLOWED_ORIGINS`
+- Non-local environments must set a non-empty `ALLOWED_ORIGINS` allowlist
