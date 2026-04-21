@@ -22,10 +22,12 @@ vi.mock("../../components/auth/AuthProvider", () => ({
 }));
 
 const pushMock = vi.fn();
+const replaceMock = vi.fn();
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({
     push: pushMock,
+    replace: replaceMock,
   }),
 }));
 
@@ -33,6 +35,7 @@ describe("MembersPanel", () => {
   afterEach(() => {
     mockUserId = "owner-1";
     pushMock.mockReset();
+    replaceMock.mockReset();
     vi.clearAllMocks();
   });
 
@@ -279,6 +282,6 @@ describe("MembersPanel", () => {
     await user.click(await screen.findByRole("button", { name: "Leave this hub" }));
 
     await waitFor(() => expect(removeMember).toHaveBeenCalledWith("hub-1", "viewer-1"));
-    await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/hubs"));
+    await waitFor(() => expect(replaceMock).toHaveBeenCalledWith("/hubs"));
   });
 });
