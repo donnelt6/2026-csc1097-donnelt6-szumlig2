@@ -1,10 +1,10 @@
 import userEvent from "@testing-library/user-event";
-import { screen } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { HubsList } from "../../components/HubsList";
 import type { HubsFilterState } from "../../components/HubsToolbar";
-import { archiveHub, listHubs, toggleHubFavourite, unarchiveHub, updateHub } from "../../lib/api";
+import { archiveHub, listHubs, removeMember, toggleHubFavourite, unarchiveHub, updateHub } from "../../lib/api";
 import { renderWithQueryClient } from "../test-utils";
 
 vi.mock("next/link", () => ({
@@ -21,6 +21,15 @@ vi.mock("../../lib/api", () => ({
   updateHub: vi.fn(),
   archiveHub: vi.fn(),
   unarchiveHub: vi.fn(),
+  removeMember: vi.fn(),
+}));
+
+let mockUserId = "user-1";
+
+vi.mock("../../components/auth/AuthProvider", () => ({
+  useAuth: () => ({
+    user: { id: mockUserId },
+  }),
 }));
 
 const defaultFilters: HubsFilterState = {
@@ -33,6 +42,7 @@ const defaultFilters: HubsFilterState = {
 
 describe("HubsList", () => {
   afterEach(() => {
+    mockUserId = "user-1";
     vi.clearAllMocks();
   });
 
@@ -300,7 +310,8 @@ describe("HubsList", () => {
     expect(await screen.findByText("Failed to save hub changes: Owner or admin role required.")).toBeInTheDocument();
   });
 
-  it("only shows the appearance menu for owners and admins", async () => {
+  it("shows edit actions only for owners and admins", async () => {
+    const user = userEvent.setup();
     vi.mocked(listHubs).mockResolvedValue([
       {
         id: "hub-owner",
@@ -333,7 +344,11 @@ describe("HubsList", () => {
     expect(await screen.findByText("Owner Hub")).toBeInTheDocument();
     expect(screen.getByLabelText("Hub options for Owner Hub")).toBeInTheDocument();
     expect(screen.getByLabelText("Hub options for Admin Hub")).toBeInTheDocument();
-    expect(screen.queryByLabelText("Hub options for Editor Hub")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Hub options for Editor Hub")).toBeInTheDocument();
+
+    await user.click(screen.getByLabelText("Hub options for Editor Hub"));
+    expect(screen.queryByRole("button", { name: "Edit hub" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Leave hub" })).toBeInTheDocument();
   });
 
   it("shows archive hub only for owners and calls archiveHub on confirm", async () => {
@@ -380,6 +395,63 @@ describe("HubsList", () => {
 
     await user.click(screen.getByLabelText("Hub options for Admin Hub"));
     expect(screen.queryByRole("button", { name: "Archive hub" })).not.toBeInTheDocument();
+
+    confirmSpy.mockRestore();
+  });
+
+  it("lets non-owners leave a hub from the card menu", async () => {
+    mockUserId = "editor-1";
+    const user = userEvent.setup();
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    vi.mocked(listHubs).mockResolvedValueOnce([
+      {
+        id: "hub-editor",
+        owner_id: "user-2",
+        name: "Shared Hub",
+        description: "Docs",
+        created_at: "2025-01-03T00:00:00Z",
+        role: "editor",
+      },
+    ]).mockResolvedValue([]);
+    vi.mocked(removeMember).mockResolvedValue(undefined);
+
+    renderWithQueryClient(<HubsList searchQuery="" filters={defaultFilters} />);
+
+    await screen.findByText("Shared Hub");
+    await user.click(screen.getByLabelText("Hub options for Shared Hub"));
+    await user.click(screen.getByRole("button", { name: "Leave hub" }));
+
+    expect(confirmSpy).toHaveBeenCalledWith("Leave this hub? You will lose access until another member invites you back.");
+    await waitFor(() => expect(removeMember).toHaveBeenCalledWith("hub-editor", "editor-1"));
+    await waitFor(() => expect(screen.queryByText("Shared Hub")).not.toBeInTheDocument());
+
+    confirmSpy.mockRestore();
+  });
+
+  it("shows an inline error when leaving a hub fails", async () => {
+    mockUserId = "viewer-1";
+    const user = userEvent.setup();
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    vi.mocked(listHubs).mockResolvedValue([
+      {
+        id: "hub-viewer",
+        owner_id: "user-2",
+        name: "Viewer Hub",
+        description: "Docs",
+        created_at: "2025-01-03T00:00:00Z",
+        role: "viewer",
+      },
+    ]);
+    vi.mocked(removeMember).mockRejectedValue(new Error("Cannot remove member."));
+
+    renderWithQueryClient(<HubsList searchQuery="" filters={defaultFilters} />);
+
+    await screen.findByText("Viewer Hub");
+    await user.click(screen.getByLabelText("Hub options for Viewer Hub"));
+    await user.click(screen.getByRole("button", { name: "Leave hub" }));
+
+    expect(await screen.findByText("Failed to leave hub: Cannot remove member.")).toBeInTheDocument();
+    expect(screen.getByText("Viewer Hub")).toBeInTheDocument();
 
     confirmSpy.mockRestore();
   });

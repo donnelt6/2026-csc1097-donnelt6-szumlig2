@@ -13,9 +13,10 @@ import {
   ChevronRightIcon,
   SwatchIcon,
   ArchiveBoxIcon,
+  TrashIcon,
 } from "@heroicons/react/24/outline";
 import { DocumentIcon, StarIcon as StarSolid, UserIcon } from "@heroicons/react/24/solid";
-import { archiveHub, listHubs, toggleHubFavourite, unarchiveHub, updateHub } from "../lib/api";
+import { archiveHub, listHubs, removeMember, toggleHubFavourite, unarchiveHub, updateHub } from "../lib/api";
 import {
   DEFAULT_HUB_COLOR_KEY,
   DEFAULT_HUB_ICON_KEY,
@@ -26,6 +27,7 @@ import {
 import type { Hub } from "../lib/types";
 import { formatRelativeTime } from "../lib/utils";
 import type { HubsFilterState } from "./HubsToolbar";
+import { useAuth } from "./auth/AuthProvider";
 import { HubAppearanceModal } from "./HubAppearanceModal";
 import { ProfileAvatar } from "./profile/ProfileAvatar";
 
@@ -39,6 +41,7 @@ interface HubsListProps {
 
 export function HubsList({ searchQuery, filters, onHubCountChange, onPaginationVisibleChange, onCreateHub }: HubsListProps) {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [editingHub, setEditingHub] = useState<Hub | null>(null);
   const [mutationError, setMutationError] = useState<string | null>(null);
@@ -110,6 +113,26 @@ export function HubsList({ searchQuery, filters, onHubCountChange, onPaginationV
         queryClient.setQueryData(["hubs"], context.previousHubs);
       }
       setMutationError(`Failed to unarchive hub: ${(_error as Error).message}`);
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["hubs"] });
+    },
+  });
+  const leaveHubMutation = useMutation({
+    mutationFn: (payload: { hubId: string; userId: string }) => removeMember(payload.hubId, payload.userId),
+    onMutate: async ({ hubId }) => {
+      setMutationError(null);
+      await queryClient.cancelQueries({ queryKey: ["hubs"] });
+      const previousHubs = queryClient.getQueryData<Hub[]>(["hubs"]) ?? [];
+      queryClient.setQueryData<Hub[]>(["hubs"], (current = []) => current.filter((hub) => hub.id !== hubId));
+      setOpenMenuId(null);
+      return { previousHubs };
+    },
+    onError: (_error, _payload, context) => {
+      if (context?.previousHubs) {
+        queryClient.setQueryData(["hubs"], context.previousHubs);
+      }
+      setMutationError(`Failed to leave hub: ${(_error as Error).message}`);
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["hubs"] });
@@ -266,6 +289,19 @@ export function HubsList({ searchQuery, filters, onHubCountChange, onPaginationV
     archiveHubMutation.mutate(hub.id);
   };
 
+  const leaveHub = (hub: Hub, event: React.MouseEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!user?.id) {
+      setMutationError("Failed to leave hub: You must be signed in to continue.");
+      setOpenMenuId(null);
+      return;
+    }
+    const confirmed = window.confirm("Leave this hub? You will lose access until another member invites you back.");
+    if (!confirmed) return;
+    leaveHubMutation.mutate({ hubId: hub.id, userId: user.id });
+  };
+
   return (
     <>
     <div className="hubs-list-container">
@@ -289,7 +325,8 @@ export function HubsList({ searchQuery, filters, onHubCountChange, onPaginationV
           const HubIcon = appearance.icon.icon;
           const canEditAppearance = hub.role === "owner" || hub.role === "admin";
           const canArchiveHub = hub.role === "owner";
-          const canOpenMenu = canEditAppearance || canArchiveHub;
+          const canLeaveHub = !!user?.id && hub.role !== "owner";
+          const canOpenMenu = canEditAppearance || canArchiveHub || canLeaveHub;
           const isPendingHub = hub.id.startsWith("temp-hub-") || hub._isPendingClientSync;
           const memberProfiles = hub.member_profiles ?? [];
           const memberEmails = hub.member_emails ?? [];
@@ -366,6 +403,17 @@ export function HubsList({ searchQuery, filters, onHubCountChange, onPaginationV
                           >
                             <span>{hub.archived_at ? "Unarchive hub" : "Archive hub"}</span>
                             <ArchiveBoxIcon className="hub-card-menu__item-icon" />
+                          </button>
+                        )}
+                        {canLeaveHub && (
+                          <button
+                            type="button"
+                            className="hub-card-menu__item hub-card-menu__item--danger"
+                            onClick={(e) => leaveHub(hub, e)}
+                            disabled={leaveHubMutation.isPending}
+                          >
+                            <span>{leaveHubMutation.isPending ? "Leaving hub..." : "Leave hub"}</span>
+                            <TrashIcon className="hub-card-menu__item-icon" />
                           </button>
                         )}
                       </div>
