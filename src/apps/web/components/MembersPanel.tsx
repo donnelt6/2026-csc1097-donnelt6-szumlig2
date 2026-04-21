@@ -244,7 +244,7 @@ export function MembersPanel({ hubId, role }: Props) {
         queryClient.invalidateQueries({ queryKey: ["members", hubId] }),
         queryClient.invalidateQueries({ queryKey: ["hubs"] }),
       ]);
-      router.push("/hubs");
+      router.push("/");
     } catch (err) {
       setDeletingMemberIds((prev) => {
         const next = new Set(prev);

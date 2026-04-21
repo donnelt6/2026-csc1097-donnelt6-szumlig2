@@ -166,6 +166,4 @@ class MembershipStoreMixin:
         target_member = self.get_member_role(client, hub_id, user_id)
         if target_member.role == MembershipRole.owner:
             raise ValueError("Transfer ownership before removing or changing the owner.")
-        response = client.table("hub_members").delete().eq("hub_id", str(hub_id)).eq("user_id", str(user_id)).execute()
-        if not response.data:
-            raise KeyError("Member not found")
+        self.service_client.table("hub_members").delete().eq("hub_id", str(hub_id)).eq("user_id", str(user_id)).execute()
