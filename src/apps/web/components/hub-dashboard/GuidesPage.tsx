@@ -916,7 +916,6 @@ export function GuidesPage({ hubId, sources, canEdit }: Props) {
               )}
 
               <div className="gmodal__steps-header">
-                <span className="gmodal__steps-label">STEP-BY-STEP EXECUTION</span>
                 <span className="gmodal__steps-count">{completed} of {total} Steps Completed</span>
               </div>
 
