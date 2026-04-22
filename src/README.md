@@ -77,7 +77,7 @@ Common requirements:
 Additional worker-only configuration includes:
 
 - Web crawling settings such as `WEB_MAX_BYTES`, `WEB_USER_AGENT`, `WEB_TIMEOUT_SECONDS`, and `WEB_RESPECT_ROBOTS`
-- YouTube caption settings such as `YOUTUBE_DEFAULT_LANGUAGE`, `YOUTUBE_ALLOW_AUTO_CAPTIONS`, `YOUTUBE_MAX_BYTES`, and optional YouTube cookie settings for hosted bot checks
+- YouTube caption settings such as `YOUTUBE_DEFAULT_LANGUAGE`, `YOUTUBE_ALLOW_AUTO_CAPTIONS`, `YOUTUBE_MAX_BYTES`, `YOUTUBE_REQUEST_TIMEOUT_SECONDS`, `YOUTUBE_METADATA_RETRIES`, and optional YouTube cookie settings for hosted bot checks
 - `DEFAULT_TIMEZONE` for reminder delivery defaults
 
 ## Run Locally

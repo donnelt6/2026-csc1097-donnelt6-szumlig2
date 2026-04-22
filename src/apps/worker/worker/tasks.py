@@ -14,6 +14,7 @@ from zoneinfo import ZoneInfo
 import dateparser
 import redis
 import spacy
+from celery.exceptions import SoftTimeLimitExceeded
 from openai import OpenAI
 from supabase import Client
 
@@ -117,7 +118,14 @@ def ingest_web_source(self, source_id: str, hub_id: str, url: str, storage_path:
 
 
 # Ingests a YouTube source by downloading captions and storing the transcript content.
-@celery_app.task(bind=True, name="ingest_youtube_source", max_retries=3, default_retry_delay=15)
+@celery_app.task(
+    bind=True,
+    name="ingest_youtube_source",
+    max_retries=3,
+    default_retry_delay=15,
+    soft_time_limit=settings.youtube_task_soft_time_limit_seconds,
+    time_limit=settings.youtube_task_time_limit_seconds,
+)
 def ingest_youtube_source(
     self,
     source_id: str,
@@ -175,6 +183,15 @@ def ingest_youtube_source(
             logger.warning("worker.youtube_ingest.title_update_failed source_id=%s", source_id, exc_info=True)
         logger.info("worker.youtube_ingest.complete source_id=%s", source_id)
         return {"source_id": source_id, "hub_id": hub_id, "chunks": chunk_count}
+    except SoftTimeLimitExceeded as exc:
+        logger.exception("worker.youtube_ingest.timeout source_id=%s", source_id)
+        _update_source(
+            client,
+            source_id,
+            status="failed",
+            failure_reason="YouTube ingestion timed out while fetching captions or generating chunks",
+        )
+        raise
     except Exception as exc:
         logger.exception("worker.youtube_ingest.failed source_id=%s", source_id)
         _update_source(client, source_id, status="failed", failure_reason=str(exc)[:500])

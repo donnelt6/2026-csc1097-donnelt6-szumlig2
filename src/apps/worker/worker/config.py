@@ -30,6 +30,10 @@ class Settings:
     youtube_default_language: str = os.getenv("YOUTUBE_DEFAULT_LANGUAGE", "en")
     youtube_allow_auto_captions: bool = os.getenv("YOUTUBE_ALLOW_AUTO_CAPTIONS", "true").lower() in {"1", "true", "yes"}
     youtube_max_bytes: int = int(os.getenv("YOUTUBE_MAX_BYTES", "2000000"))
+    youtube_request_timeout_seconds: int = int(os.getenv("YOUTUBE_REQUEST_TIMEOUT_SECONDS", os.getenv("WEB_TIMEOUT_SECONDS", "20")))
+    youtube_metadata_retries: int = int(os.getenv("YOUTUBE_METADATA_RETRIES", "2"))
+    youtube_task_soft_time_limit_seconds: int = int(os.getenv("YOUTUBE_TASK_SOFT_TIME_LIMIT_SECONDS", "600"))
+    youtube_task_time_limit_seconds: int = int(os.getenv("YOUTUBE_TASK_TIME_LIMIT_SECONDS", "660"))
     youtube_cookies_file: str = os.getenv("YOUTUBE_COOKIES_FILE", "")
     youtube_cookies_b64: str = os.getenv("YOUTUBE_COOKIES_B64", "")
     youtube_cookies_raw: str = os.getenv("YOUTUBE_COOKIES_RAW", "")
