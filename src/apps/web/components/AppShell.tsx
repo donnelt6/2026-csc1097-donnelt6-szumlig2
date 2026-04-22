@@ -11,9 +11,9 @@ import { ThemeToggle } from './navigation/ThemeToggle';
 import { ProfileMenu } from './navigation/ProfileMenu';
 import { NotificationsMenu } from './navigation/NotificationsMenu';
 import { useAuth } from './auth/AuthProvider';
-import { useSearch } from '../lib/SearchContext';
-import { useHubTab } from '../lib/HubTabContext';
-import { useHubDashboardTab, type HubDashboardTab } from '../lib/HubDashboardTabContext';
+import { SearchProvider, useSearch } from '../lib/SearchContext';
+import { HubTabProvider, useHubTab } from '../lib/HubTabContext';
+import { HubDashboardTabProvider, useHubDashboardTab, type HubDashboardTab } from '../lib/HubDashboardTabContext';
 import { listHubs, searchChatMessages } from '../lib/api';
 import { CurrentHubProvider } from '../lib/CurrentHubContext';
 import { resolveHubAppearance } from '../lib/hubAppearance';
@@ -25,6 +25,27 @@ interface AppShellProps {
 }
 
 export function AppShell({ children }: AppShellProps) {
+  const pathname = usePathname();
+  const { user, loading } = useAuth();
+  const isAuthPage = pathname.startsWith('/auth');
+  const showChrome = !isAuthPage && !loading && !!user;
+
+  if (!showChrome) {
+    return <div className="app-shell app-shell--no-chrome">{children}</div>;
+  }
+
+  return (
+    <SearchProvider>
+      <HubTabProvider>
+        <HubDashboardTabProvider>
+          <AppShellChrome>{children}</AppShellChrome>
+        </HubDashboardTabProvider>
+      </HubTabProvider>
+    </SearchProvider>
+  );
+}
+
+function AppShellChrome({ children }: AppShellProps) {
   const [sidebarState, setSidebarState] = useState<SidebarState | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [transitionsReady, setTransitionsReady] = useState(false);
@@ -35,7 +56,6 @@ export function AppShell({ children }: AppShellProps) {
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { user, loading } = useAuth();
   const { searchQuery, setSearchQuery } = useSearch();
   const { activeTab } = useHubTab();
   const { activeDashTab, setActiveDashTab } = useHubDashboardTab();
@@ -54,17 +74,15 @@ export function AppShell({ children }: AppShellProps) {
     { key: 'faqs', label: 'FAQs' },
   ];
 
-  const isAuthPage = pathname.startsWith('/auth');
   const isHome = pathname === '/';
   const isSettingsPage = pathname === '/settings';
   const isHubRoute = pathname.startsWith('/hubs/');
   const isOnHub = isHubRoute;
   const hubId = isHubRoute ? params?.hubId ?? null : null;
-  const showChrome = !isAuthPage && !loading && !!user;
   const { data: hubs, isLoading: hubsLoading } = useQuery({
     queryKey: ["hubs"],
     queryFn: listHubs,
-    enabled: showChrome && !!hubId,
+    enabled: !!hubId,
   });
   const currentHub = useMemo(
     () => hubs?.find((hub) => hub.id === hubId) ?? null,
@@ -169,10 +187,6 @@ export function AppShell({ children }: AppShellProps) {
   }, []);
 
   const sidebarHidden = effectiveSidebarState === 'hidden';
-
-  if (!showChrome) {
-    return <div className="app-shell app-shell--no-chrome">{children}</div>;
-  }
 
   return (
     <CurrentHubProvider value={{ currentHub, isLoading: isHubRoute && hubsLoading }}>

@@ -22,7 +22,7 @@ import { useHubDashboardTab } from "../../../lib/HubDashboardTabContext";
 import type { HubDashboardTab } from "../../../lib/HubDashboardTabContext";
 import { useSearch } from "../../../lib/SearchContext";
 import type { HubTab } from "../../../lib/HubTabContext";
-import type { Hub } from "../../../lib/types";
+import type { Hub } from "@shared/index";
 
 const VALID_TABS: HubTab[] = ['chat', 'sources', 'dashboard', 'members', 'admin'];
 

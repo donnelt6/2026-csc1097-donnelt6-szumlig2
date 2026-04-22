@@ -8,7 +8,7 @@ import { listReminders, listReminderCandidates } from '../../lib/api';
 import { FullCalendar } from './FullCalendar';
 import { ReminderModal } from './ReminderModal';
 import { RemindersSidebar } from './RemindersSidebar';
-import type { Reminder } from '../../lib/types';
+import type { Reminder } from '@shared/index';
 
 type ModalState =
   | { mode: 'closed' }

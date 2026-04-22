@@ -4,7 +4,7 @@
 
 import { useMemo } from 'react';
 import { ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/24/outline';
-import type { Reminder, ReminderCandidate } from '../../lib/types';
+import type { Reminder, ReminderCandidate } from '@shared/index';
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MONTH_NAMES = [

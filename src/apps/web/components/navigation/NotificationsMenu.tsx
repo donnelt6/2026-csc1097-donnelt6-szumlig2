@@ -15,7 +15,7 @@ import {
 } from "../../lib/api";
 import { formatIrelandDateTime } from "../../lib/dateUtils";
 import { useAuth } from "../auth/AuthProvider";
-import type { NotificationEvent, PendingInvite, Reminder } from "../../lib/types";
+import type { NotificationEvent, PendingInvite, Reminder } from "@shared/index";
 
 function formatTimeAgo(value?: string | null) {
   if (!value) return "recently";

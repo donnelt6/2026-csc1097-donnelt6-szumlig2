@@ -17,7 +17,7 @@ import {
 import { inviteMember, listMembers, removeMember, transferHubOwnership, updateMemberRole } from "../lib/api";
 import { resolveProfile } from "../lib/profile";
 import { useSearch } from "../lib/SearchContext";
-import type { AssignableMembershipRole, HubMember, MembershipRole } from "../lib/types";
+import type { AssignableMembershipRole, HubMember, MembershipRole } from "@shared/index";
 import { useAuth } from "./auth/AuthProvider";
 import { ProfileAvatar } from "./profile/ProfileAvatar";
 

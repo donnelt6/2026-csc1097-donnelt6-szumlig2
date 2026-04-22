@@ -44,7 +44,7 @@ import type {
   GuideEntry,
   MembershipRole,
   SourceSuggestion,
-} from '../lib/types';
+} from '@shared/index';
 import type { HubTab } from '../lib/HubTabContext';
 
 type ModTab = 'chats' | 'faqs' | 'guides';

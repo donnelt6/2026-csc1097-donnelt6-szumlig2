@@ -44,7 +44,7 @@ import {
   updateGuideStep,
   updateGuideStepProgress,
 } from "../../lib/api";
-import type { Citation, FlagReason, GuideEntry, GuideStep, Source } from "../../lib/types";
+import type { Citation, FlagReason, GuideEntry, GuideStep, Source } from "@shared/index";
 import { FlagModal } from "./FlagModal";
 import { formatRelativeTime } from "../../lib/utils";
 import { useSearch } from "../../lib/SearchContext";

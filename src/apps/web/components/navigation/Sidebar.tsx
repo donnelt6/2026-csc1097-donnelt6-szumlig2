@@ -23,7 +23,7 @@ import {
 import { useHubTab } from '../../lib/HubTabContext';
 import { useCurrentHub } from '../../lib/CurrentHubContext';
 import { listChatSessions, deleteChatSession, renameChatSession } from '../../lib/api';
-import type { ChatSessionSummary } from '../../lib/types';
+import type { ChatSessionSummary } from '@shared/index';
 
 type SidebarState = 'open' | 'collapsed' | 'hidden';
 

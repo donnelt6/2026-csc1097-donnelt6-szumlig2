@@ -1,11 +1,11 @@
 'use client';
 
-// RemindersPanel.tsx: Reminder list and management panel within a hub.
+// HubRemindersPanel.tsx: Reminder list and management panel within a hub.
 
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createReminder, deleteReminder, listReminders, updateReminder } from "../lib/api";
-import type { Reminder, ReminderStatus, ReminderUpdateAction } from "../lib/types";
+import type { Reminder, ReminderStatus, ReminderUpdateAction } from "@shared/index";
 import { formatLocal, toLocalInputValue, toIsoFromLocalInput } from "../lib/dateUtils";
 
 interface Props {
@@ -20,7 +20,7 @@ type ReminderUpdatePayload = {
   snooze_minutes?: number;
 };
 
-export function RemindersPanel({ hubId }: Props) {
+export function HubRemindersPanel({ hubId }: Props) {
   const queryClient = useQueryClient();
   const timezone = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC", []);
   const [dueAt, setDueAt] = useState("");

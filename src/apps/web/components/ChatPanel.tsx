@@ -36,7 +36,7 @@ import type {
   MembershipRole,
   SessionMessage,
   Source,
-} from "../lib/types";
+} from "@shared/index";
 import { SourceSelector } from "./SourceSelector";
 import { useAuth } from "./auth/AuthProvider";
 import { ProfileAvatar } from "./profile/ProfileAvatar";

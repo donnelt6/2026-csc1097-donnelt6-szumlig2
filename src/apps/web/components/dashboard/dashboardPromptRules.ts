@@ -1,6 +1,6 @@
 // dashboardPromptRules.ts: Rules for generating contextual prompt suggestions on the dashboard.
 
-import type { Hub, Reminder } from "../../lib/types";
+import type { Hub, Reminder } from "@shared/index";
 
 export interface DashboardPromptSuggestion {
   id: string;

@@ -10,7 +10,7 @@ import {
   listFlaggedChats,
   regenerateFlaggedChat,
 } from "../../lib/api";
-import type { FlagCase, FlaggedChatDetail, FlaggedChatQueueItem, MessageRevision } from "../../lib/types";
+import type { FlagCase, FlaggedChatDetail, FlaggedChatQueueItem, MessageRevision } from "@shared/index";
 import { renderWithQueryClient } from "../test-utils";
 
 vi.mock("../../lib/api", () => ({

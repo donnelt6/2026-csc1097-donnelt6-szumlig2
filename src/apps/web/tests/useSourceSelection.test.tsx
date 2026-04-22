@@ -1,7 +1,7 @@
 import { renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it } from "vitest";
 import { useSourceSelection } from "../lib/useSourceSelection";
-import type { Source } from "../lib/types";
+import type { Source } from "@shared/index";
 
 const buildSource = (overrides: Partial<Source>): Source => ({
   id: "src-1",

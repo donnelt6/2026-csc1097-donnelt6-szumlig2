@@ -42,11 +42,10 @@ Primary domain mixins:
 
 Shared support modules:
 
-- `base.py`: base class and shared store exceptions
+- `base.py`: base class, shared store exceptions, and low-level retrieval helpers
 - `chat_helpers.py`: chat-specific helper functions
 - `source_helpers.py`: source naming, path, URL, and ID helpers
 - `common_helpers.py`: shared utility helpers used across domains
-- `internals.py`: internal helper logic used by store modules
 
 ## How To Navigate Changes
 

@@ -1,7 +1,7 @@
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { RemindersPanel } from "../../components/RemindersPanel";
+import { HubRemindersPanel } from "../../components/HubRemindersPanel";
 import { listReminders, updateReminder } from "../../lib/api";
 import { renderWithQueryClient } from "../test-utils";
 
@@ -12,7 +12,7 @@ vi.mock("../../lib/api", () => ({
   createReminder: vi.fn(),
 }));
 
-describe("RemindersPanel", () => {
+describe("HubRemindersPanel", () => {
   afterEach(() => {
     vi.clearAllMocks();
   });
@@ -41,7 +41,7 @@ describe("RemindersPanel", () => {
       },
     ]);
 
-    renderWithQueryClient(<RemindersPanel hubId="hub-1" />);
+    renderWithQueryClient(<HubRemindersPanel hubId="hub-1" />);
 
     expect(await screen.findByText("Postpone")).toBeInTheDocument();
     expect(await screen.findByText("Retrigger")).toBeInTheDocument();
@@ -61,7 +61,7 @@ describe("RemindersPanel", () => {
       },
     ]);
 
-    renderWithQueryClient(<RemindersPanel hubId="hub-1" />);
+    renderWithQueryClient(<HubRemindersPanel hubId="hub-1" />);
 
     expect(await screen.findByText(/24\/01\/2026/)).toBeInTheDocument();
   });
@@ -94,7 +94,7 @@ describe("RemindersPanel", () => {
     });
 
     const user = userEvent.setup();
-    renderWithQueryClient(<RemindersPanel hubId="hub-1" />);
+    renderWithQueryClient(<HubRemindersPanel hubId="hub-1" />);
 
     await screen.findByText("Postpone");
     await user.click(screen.getByRole("button", { name: "Postpone" }));

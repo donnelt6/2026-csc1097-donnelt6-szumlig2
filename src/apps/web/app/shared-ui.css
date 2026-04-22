@@ -847,49 +847,6 @@ textarea {
   transform: none;
 }
 
-/* Tab Switcher */
-
-.tab-switcher {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px;
-  border-radius: 10px;
-  background: var(--input-bg);
-  border: 1px solid var(--border);
-}
-
-.tab-switcher-tab {
-  padding: 8px 16px;
-  border-radius: 8px;
-  border: none;
-  background: transparent;
-  color: var(--muted);
-  font-family: var(--font-sans);
-  font-size: 0.875rem;
-  font-weight: var(--font-medium);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-  white-space: nowrap;
-}
-
-.tab-switcher-tab:hover:not(.tab-switcher-tab--active) {
-  color: var(--text-secondary);
-  background: rgba(59, 130, 246, 0.06);
-}
-
-.tab-switcher-tab--active {
-  background: var(--accent);
-  color: white;
-  box-shadow: var(--shadow-sm);
-}
-
-.tab-switcher-tab:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 3px var(--accent-glow);
-}
-
-
 .button--small {
   padding: 7px 14px;
   font-size: 0.8125rem;

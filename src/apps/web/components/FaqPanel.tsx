@@ -5,7 +5,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { archiveFaq, generateFaqs, listFaqs, updateFaq } from "../lib/api";
-import type { Citation, FaqEntry } from "../lib/types";
+import type { Citation, FaqEntry } from "@shared/index";
 
 interface Props {
   hubId: string;

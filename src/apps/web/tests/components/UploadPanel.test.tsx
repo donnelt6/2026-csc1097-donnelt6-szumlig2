@@ -11,7 +11,7 @@ import {
   deleteSource,
   enqueueSource,
 } from "../../lib/api";
-import type { Source } from "../../lib/types";
+import type { Source } from "@shared/index";
 import { renderWithQueryClient } from "../test-utils";
 
 vi.mock("../../lib/api", () => ({

@@ -12,7 +12,7 @@ import {
   SparklesIcon,
 } from "@heroicons/react/24/outline";
 import { decideSourceSuggestion, listSourceSuggestions } from "../lib/api";
-import type { SourceSuggestion } from "../lib/types";
+import type { SourceSuggestion } from "@shared/index";
 
 interface Props {
   hubId: string;

@@ -4,7 +4,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { ChevronDownIcon } from '@heroicons/react/24/outline';
-import type { Hub } from '../../lib/types';
+import type { Hub } from '@shared/index';
 
 interface HubDropdownProps {
   hubs: Hub[];

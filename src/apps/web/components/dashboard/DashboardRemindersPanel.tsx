@@ -1,6 +1,6 @@
 'use client';
 
-// RemindersPanel.tsx: Dashboard reminders sidebar showing upcoming and past-due reminders.
+// DashboardRemindersPanel.tsx: Dashboard reminders sidebar showing upcoming and past-due reminders.
 
 import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
@@ -17,16 +17,16 @@ import { MiniCalendar } from './MiniCalendar';
 import { FullCalendar } from '../hub-dashboard/FullCalendar';
 import { buildHubNameMap } from './dashboardUtils';
 import { formatLocal } from '../../lib/dateUtils';
-import type { Reminder } from '../../lib/types';
+import type { Reminder } from '@shared/index';
 
 const HOURS = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0'));
 const MINUTES = Array.from({ length: 12 }, (_, i) => String(i * 5).padStart(2, '0'));
 
-interface RemindersPanelProps {
+interface DashboardRemindersPanelProps {
   variant: 'sidebar' | 'page';
 }
 
-export function RemindersPanel({ variant }: RemindersPanelProps) {
+export function DashboardRemindersPanel({ variant }: DashboardRemindersPanelProps) {
   const queryClient = useQueryClient();
   const now = new Date();
   const [calMonth, setCalMonth] = useState(now.getMonth());

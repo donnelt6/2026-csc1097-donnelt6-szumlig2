@@ -4,7 +4,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { ChevronDownIcon } from '@heroicons/react/24/outline';
-import type { Source } from '../lib/types';
+import type { Source } from '@shared/index';
 
 interface Props {
   sources: Source[];

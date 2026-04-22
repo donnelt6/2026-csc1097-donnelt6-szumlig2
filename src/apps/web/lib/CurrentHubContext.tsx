@@ -3,7 +3,7 @@
 // CurrentHubContext.tsx: React context providing the currently active hub to child components.
 
 import { createContext, useContext } from "react";
-import type { Hub } from "./types";
+import type { Hub } from "@shared/index";
 
 interface CurrentHubContextValue {
   currentHub?: Hub | null;
