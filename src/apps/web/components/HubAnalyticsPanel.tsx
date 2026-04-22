@@ -7,7 +7,23 @@ import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon } from "@heroicons/react/24/outline";
 
-const TOP_SOURCES_PAGE_SIZE = 6;
+const TOP_SOURCES_PAGE_SIZE_DESKTOP = 6;
+const TOP_SOURCES_PAGE_SIZE_PHONE = 5;
+
+function useIsPhone() {
+  const [isPhone, setIsPhone] = useState(false);
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+      return;
+    }
+    const mq = window.matchMedia("(max-width: 480px)");
+    const update = () => setIsPhone(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
+  return isPhone;
+}
 
 import { getHubAnalyticsSummary, getHubAnalyticsTrends } from "../lib/api";
 import type { AnalyticsTopSource, ChatAnalyticsTrendPoint, MembershipRole } from "@shared/index";
@@ -191,6 +207,8 @@ export function HubAnalyticsPanel({
   const [topSourcesMenuOpen, setTopSourcesMenuOpen] = useState(false);
   const [topSourcesPage, setTopSourcesPage] = useState(0);
   const topSourcesMenuRef = useRef<HTMLDivElement>(null);
+  const isPhone = useIsPhone();
+  const topSourcesPageSize = isPhone ? TOP_SOURCES_PAGE_SIZE_PHONE : TOP_SOURCES_PAGE_SIZE_DESKTOP;
 
   useEffect(() => {
     setTopSourcesPage(0);
@@ -277,10 +295,10 @@ export function HubAnalyticsPanel({
     (max, source) => Math.max(max, Number(source[topSourcesPrimaryField] ?? 0)),
     0,
   );
-  const topSourcesPageCount = Math.max(1, Math.ceil(sortedTopSources.length / TOP_SOURCES_PAGE_SIZE));
+  const topSourcesPageCount = Math.max(1, Math.ceil(sortedTopSources.length / topSourcesPageSize));
   const clampedPage = Math.min(topSourcesPage, topSourcesPageCount - 1);
-  const pageStart = clampedPage * TOP_SOURCES_PAGE_SIZE;
-  const pagedTopSources = sortedTopSources.slice(pageStart, pageStart + TOP_SOURCES_PAGE_SIZE);
+  const pageStart = clampedPage * topSourcesPageSize;
+  const pagedTopSources = sortedTopSources.slice(pageStart, pageStart + topSourcesPageSize);
   const topSourcesAxisMax = Math.max(topSourcesMaxValue, 1);
   const topSourcesYTicks = buildYAxisTicks(topSourcesAxisMax);
   const topSourcesUnitLabel =

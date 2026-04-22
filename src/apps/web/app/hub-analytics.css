@@ -68,6 +68,33 @@
   }
 }
 
+@media (max-width: 480px) {
+  .hub-analytics {
+    padding: 0;
+  }
+
+  .hub-analytics__metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .hub-analytics__metric {
+    padding: 14px;
+  }
+
+  .hub-analytics__metric-value {
+    font-size: 1.3rem;
+  }
+
+  .hub-analytics__metric-label {
+    font-size: 0.8rem;
+  }
+
+  .hub-analytics__panel {
+    padding: 14px;
+  }
+}
+
 .hub-analytics__panel {
   padding: 18px;
   display: flex;

@@ -1,3 +1,25 @@
+.hub-moderation__layout {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(320px, 420px) minmax(0, 1fr);
+}
+
+.hub-moderation__compare {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+@media (max-width: 900px) {
+  .hub-moderation__layout {
+    grid-template-columns: 1fr;
+  }
+
+  .hub-moderation__compare {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* ===== Hub Dashboard — Shared Utilities ===== */
 
 .hdash__icon--sm { width: 14px; height: 14px; }
@@ -1686,6 +1708,35 @@
 @media (max-width: 900px) {
   .hdash__overview {
     grid-template-columns: 1fr;
+    padding: 20px;
+    gap: 20px;
+  }
+}
+
+@media (max-width: 480px) {
+  .hdash__overview {
+    padding: 16px;
+    gap: 16px;
+  }
+
+  .hdash__content-tabs {
+    padding: 0 12px;
+  }
+
+  .hdash__content-tab {
+    padding: 10px 12px;
+  }
+
+  .hdash__guide-preview {
+    padding: 16px;
+  }
+
+  .hdash__guide-step {
+    padding: 12px;
+  }
+
+  .hdash__aside-card {
+    padding: 14px;
   }
 }
 
@@ -2977,5 +3028,33 @@
   .gmodal {
     padding: 20px;
     width: 100%;
+  }
+}
+
+@media (max-width: 768px) {
+  .hdash__faqs .hubs-pagination,
+  .hdash__guides .hubs-pagination {
+    position: static;
+    left: auto;
+    right: auto;
+    padding: 12px 0 0;
+    margin-top: 8px;
+    background: transparent;
+  }
+
+  .hdash__faqs,
+  .hdash__guides {
+    padding-bottom: 16px;
+  }
+}
+
+@media (max-width: 480px) {
+  .hdash__reminders {
+    padding: 12px;
+    gap: 14px;
+  }
+
+  .hdash__cal {
+    padding: 12px;
   }
 }

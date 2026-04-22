@@ -193,7 +193,7 @@ export function HubModerationPanel({ hubId, hubRole }: HubModerationPanelProps) 
         </label>
       </div>
 
-      <div style={{ display: "grid", gap: "16px", gridTemplateColumns: "minmax(320px, 420px) minmax(0, 1fr)" }}>
+      <div className="hub-moderation__layout">
         <section className="card grid" style={{ gap: "10px", alignContent: "start" }}>
           <h3 style={{ margin: 0 }}>Flagged chats</h3>
           {queueQuery.isLoading && <p className="muted">Loading queue...</p>}
@@ -295,7 +295,7 @@ export function HubModerationPanel({ hubId, hubRole }: HubModerationPanelProps) 
                 </div>
               </div>
 
-              <div style={{ display: "grid", gap: "16px", gridTemplateColumns: "repeat(2, minmax(0, 1fr))" }}>
+              <div className="hub-moderation__compare">
                 <div className="grid" style={{ gap: "8px" }}>
                   <h4 style={{ margin: 0 }}>Manual edit draft</h4>
                   <textarea
