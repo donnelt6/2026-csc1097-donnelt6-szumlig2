@@ -149,6 +149,22 @@ def test_build_youtube_ydl_opts_includes_cookiefile() -> None:
     assert opts["cookiefile"] == "cookies.txt"
 
 
+# Verifies that hosted YouTube metadata extraction has bounded retries and avoids video manifests.
+def test_build_youtube_ydl_opts_bounds_metadata_requests(monkeypatch) -> None:
+    monkeypatch.setattr(youtube.settings, "youtube_request_timeout_seconds", 12)
+    monkeypatch.setattr(youtube.settings, "youtube_metadata_retries", 1)
+
+    opts = youtube._build_youtube_ydl_opts()
+
+    assert opts["socket_timeout"] == 12
+    assert opts["retries"] == 1
+    assert opts["extractor_retries"] == 1
+    assert opts["file_access_retries"] == 1
+    assert opts["fragment_retries"] == 1
+    assert opts["ignore_no_formats_error"] is True
+    assert opts["extractor_args"]["youtube"]["skip"] == ["dash", "hls", "translated_subs"]
+
+
 # Verifies that base64 cookie secrets are decoded before temporary file handoff.
 def test_decode_configured_youtube_cookies_prefers_base64(monkeypatch) -> None:
     monkeypatch.setattr(youtube.settings, "youtube_cookies_b64", "I05ldHNjYXBlIGNvb2tpZXM=")
@@ -230,6 +246,38 @@ def test_ingest_youtube_source_success(monkeypatch) -> None:
     assert result["chunks"] == 3
     assert updates[0]["status"] == "processing"
     assert updates[-1]["status"] == "complete"
+
+
+# Verifies that a Celery soft timeout leaves the source failed instead of stuck in processing.
+def test_ingest_youtube_source_timeout_marks_failed(monkeypatch) -> None:
+    updates: list[dict] = []
+
+    monkeypatch.setattr(tasks._common, "_get_supabase_client", lambda: object())
+
+    def fake_fetch(*_args, **_kwargs):
+        raise tasks.SoftTimeLimitExceeded()
+
+    def fake_update(_client, _source_id, status, **kwargs):
+        updates.append({"status": status, **kwargs})
+
+    monkeypatch.setattr(tasks._youtube, "_fetch_youtube_transcript", fake_fetch)
+    monkeypatch.setattr(tasks, "_update_source", fake_update)
+
+    try:
+        tasks.ingest_youtube_source.run(
+            source_id="src-yt-timeout",
+            hub_id="hub-1",
+            url="https://www.youtube.com/watch?v=abc123def45",
+            storage_path="hub-1/src-yt-timeout/youtube.md",
+        )
+    except tasks.SoftTimeLimitExceeded:
+        pass
+    else:
+        raise AssertionError("Expected SoftTimeLimitExceeded")
+
+    assert updates[0]["status"] == "processing"
+    assert updates[-1]["status"] == "failed"
+    assert "timed out" in updates[-1]["failure_reason"].lower()
 
 
 # Suggested source selection helpers.

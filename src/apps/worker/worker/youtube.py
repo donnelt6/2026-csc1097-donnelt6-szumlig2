@@ -73,12 +73,25 @@ def _fetch_youtube_transcript(
 
 
 def _build_youtube_ydl_opts(cookiefile: Optional[str] = None) -> dict:
-    # Keep yt-dlp metadata-only and let deployment-provided cookies handle hosted bot checks.
+    # Keep yt-dlp metadata-only and skip video manifests; caption ingestion only
+    # needs subtitle URLs, so this avoids long hosted hangs on DASH/HLS probing.
+    retry_count = max(0, settings.youtube_metadata_retries)
     opts = {
         "quiet": True,
         "no_warnings": True,
         "skip_download": True,
         "noplaylist": True,
+        "socket_timeout": max(1, settings.youtube_request_timeout_seconds),
+        "retries": retry_count,
+        "extractor_retries": retry_count,
+        "file_access_retries": retry_count,
+        "fragment_retries": retry_count,
+        "ignore_no_formats_error": True,
+        "extractor_args": {
+            "youtube": {
+                "skip": ["dash", "hls", "translated_subs"],
+            },
+        },
     }
     if cookiefile:
         opts["cookiefile"] = cookiefile
