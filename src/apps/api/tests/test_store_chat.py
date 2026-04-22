@@ -92,7 +92,7 @@ def test_store_facade_reexports_helper_symbols() -> None:
     assert _normalize_chat_session_title is chat_helpers._normalize_chat_session_title
     assert _is_vague_follow_up is chat_helpers._is_vague_follow_up
     assert common_helpers._extract_response_text is not None
-    assert source_helpers._canonicalize_web_url is not None
+    assert source_helpers.canonicalize_web_url is not None
 
 
 # Replaces chat session helpers with deterministic test doubles.

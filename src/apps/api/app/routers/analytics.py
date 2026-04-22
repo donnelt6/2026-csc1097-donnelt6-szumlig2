@@ -13,6 +13,7 @@ from .access import require_accepted, require_hub_member, require_owner_or_admin
 from .errors import raise_postgrest_error
 
 router = APIRouter(prefix="/hubs/{hub_id}/analytics", tags=["analytics"])
+ANALYTICS_ROLE_DETAIL = "Only hub owners and admins can view analytics."
 
 
 # Analytics routes.
@@ -33,7 +34,7 @@ def get_summary(
         # Validate both membership and role before exposing analytics data.
         member = require_hub_member(client, str(hub_id), current_user.id)
         require_accepted(member)
-        require_owner_or_admin(member, detail="Only hub owners and admins can view analytics.")
+        require_owner_or_admin(member, detail=ANALYTICS_ROLE_DETAIL)
         summary = store.get_hub_chat_analytics_summary(str(hub_id), days=days)
         store.log_activity(
             client,
@@ -68,7 +69,7 @@ def get_trends(
     try:
         member = require_hub_member(client, str(hub_id), current_user.id)
         require_accepted(member)
-        require_owner_or_admin(member, detail="Only hub owners and admins can view analytics.")
+        require_owner_or_admin(member, detail=ANALYTICS_ROLE_DETAIL)
         trends = store.get_hub_chat_analytics_trends(str(hub_id), days=days)
         store.log_activity(
             client,

@@ -145,16 +145,13 @@ def _build_pseudo_doc(title: Optional[str], url: str, crawl_at: str, content_typ
     return "\n".join(lines)
 
 
-_canonicalize_web_url = canonicalize_web_url
-
-
 __all__ = [
     "_allowed_by_robots",
     "_build_pseudo_doc",
-    "_canonicalize_web_url",
     "_ensure_public_host",
     "_extract_web_text",
     "_fetch_url_content",
     "_html_to_text",
     "_validate_public_url",
+    "canonicalize_web_url",
 ]

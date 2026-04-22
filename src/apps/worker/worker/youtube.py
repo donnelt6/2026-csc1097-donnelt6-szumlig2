@@ -292,10 +292,6 @@ def _build_youtube_pseudo_doc(info: dict, url: str, fetched_at: str, captions_me
     return "\n".join(lines)
 
 
-_extract_youtube_video_id = extract_youtube_video_id
-_normalize_youtube_id = normalize_youtube_id
-
-
 def _canonicalize_youtube_url(video_id: str) -> str:
     return f"https://www.youtube.com/watch?v={video_id}"
 
@@ -304,12 +300,10 @@ __all__ = [
     "_build_youtube_pseudo_doc",
     "_canonicalize_youtube_url",
     "_download_caption_text",
-    "_extract_youtube_video_id",
     "_fetch_youtube_transcript",
     "_format_duration",
     "_format_upload_date",
     "_normalize_language",
-    "_normalize_youtube_id",
     "_parse_caption_text",
     "_parse_json3",
     "_pick_caption_any",
@@ -318,4 +312,6 @@ __all__ = [
     "_select_caption_track",
     "_strip_xml",
     "_strip_vtt_srt",
+    "extract_youtube_video_id",
+    "normalize_youtube_id",
 ]

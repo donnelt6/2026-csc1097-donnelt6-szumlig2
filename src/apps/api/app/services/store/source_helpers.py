@@ -53,11 +53,6 @@ def _build_youtube_source_name(url: str, video_id: str) -> str:
     return display[:255]
 
 
-_canonicalize_web_url = canonicalize_web_url
-_extract_youtube_video_id = extract_youtube_video_id
-_normalize_youtube_id = normalize_youtube_id
-
-
 def _trim_text(text: str, max_chars: int) -> str:
     cleaned = " ".join((text or "").split()).strip()
     if len(cleaned) <= max_chars:
@@ -68,11 +63,11 @@ def _trim_text(text: str, max_chars: int) -> str:
 __all__ = [
     "_build_web_source_name",
     "_build_youtube_source_name",
-    "_canonicalize_web_url",
-    "_extract_youtube_video_id",
-    "_normalize_youtube_id",
     "_sanitize_filename",
     "_trim_text",
     "_web_storage_path",
     "_youtube_storage_path",
+    "canonicalize_web_url",
+    "extract_youtube_video_id",
+    "normalize_youtube_id",
 ]

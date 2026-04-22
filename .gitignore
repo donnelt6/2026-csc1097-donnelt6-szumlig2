@@ -15,4 +15,5 @@ src/apps/api/migrations/
 
 # True E2E runtime state and ad-hoc logs
 src/apps/web/e2e/true/.runtime/
+src/apps/web/test-results/
 src/.e2e-logs/
