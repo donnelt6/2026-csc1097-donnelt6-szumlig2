@@ -1,9 +1,13 @@
 """YouTube transcript and caption helpers."""
 
+import base64
 import json
+import os
 import re
+import tempfile
 import time
-from datetime import datetime
+from contextlib import contextmanager
+from pathlib import Path
 from typing import Optional
 
 import httpx
@@ -29,14 +33,18 @@ def _fetch_youtube_transcript(
     preferred_language = (language or settings.youtube_default_language or "").strip() or None
     allow_auto = settings.youtube_allow_auto_captions if allow_auto_captions is None else bool(allow_auto_captions)
 
-    ydl_opts = {
-        "quiet": True,
-        "no_warnings": True,
-        "skip_download": True,
-        "noplaylist": True,
-    }
-    with YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(url, download=False)
+    with _youtube_cookiefile_path() as cookiefile:
+        ydl_opts = _build_youtube_ydl_opts(cookiefile)
+        with YoutubeDL(ydl_opts) as ydl:
+            try:
+                info = ydl.extract_info(url, download=False)
+            except Exception as exc:
+                if _is_youtube_bot_check_error(exc):
+                    raise ValueError(
+                        "YouTube blocked the hosted worker with a bot check. "
+                        "Configure YOUTUBE_COOKIES_FILE or YOUTUBE_COOKIES_B64 with exported YouTube cookies."
+                    ) from exc
+                raise
     if not info:
         raise ValueError("Unable to fetch YouTube metadata")
 
@@ -62,6 +70,62 @@ def _fetch_youtube_transcript(
         "ext": caption_ext,
     }
     return transcript, info_payload, captions_meta
+
+
+def _build_youtube_ydl_opts(cookiefile: Optional[str] = None) -> dict:
+    # Keep yt-dlp metadata-only and let deployment-provided cookies handle hosted bot checks.
+    opts = {
+        "quiet": True,
+        "no_warnings": True,
+        "skip_download": True,
+        "noplaylist": True,
+    }
+    if cookiefile:
+        opts["cookiefile"] = cookiefile
+    return opts
+
+
+@contextmanager
+def _youtube_cookiefile_path():
+    configured_file = settings.youtube_cookies_file.strip()
+    if configured_file:
+        yield configured_file
+        return
+
+    cookie_bytes = _decode_configured_youtube_cookies()
+    if not cookie_bytes:
+        yield None
+        return
+
+    fd, path = tempfile.mkstemp(prefix="caddie-youtube-cookies-", suffix=".txt")
+    try:
+        with os.fdopen(fd, "wb") as handle:
+            handle.write(cookie_bytes)
+        yield path
+    finally:
+        try:
+            Path(path).unlink(missing_ok=True)
+        except OSError:
+            logger.warning("Failed to remove temporary YouTube cookies file: %s", path, exc_info=True)
+
+
+def _decode_configured_youtube_cookies() -> Optional[bytes]:
+    encoded = settings.youtube_cookies_b64.strip()
+    if encoded:
+        try:
+            return base64.b64decode(encoded)
+        except Exception as exc:
+            raise ValueError("YOUTUBE_COOKIES_B64 must be valid base64-encoded Netscape cookies.txt content") from exc
+
+    raw = settings.youtube_cookies_raw
+    if raw.strip():
+        return raw.encode("utf-8")
+    return None
+
+
+def _is_youtube_bot_check_error(exc: Exception) -> bool:
+    message = str(exc).lower()
+    return "sign in to confirm" in message and "not a bot" in message
 
 
 def _select_caption_track(
@@ -298,11 +362,14 @@ def _canonicalize_youtube_url(video_id: str) -> str:
 
 __all__ = [
     "_build_youtube_pseudo_doc",
+    "_build_youtube_ydl_opts",
     "_canonicalize_youtube_url",
+    "_decode_configured_youtube_cookies",
     "_download_caption_text",
     "_fetch_youtube_transcript",
     "_format_duration",
     "_format_upload_date",
+    "_is_youtube_bot_check_error",
     "_normalize_language",
     "_parse_caption_text",
     "_parse_json3",

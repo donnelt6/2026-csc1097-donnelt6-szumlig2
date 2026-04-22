@@ -30,6 +30,9 @@ class Settings:
     youtube_default_language: str = os.getenv("YOUTUBE_DEFAULT_LANGUAGE", "en")
     youtube_allow_auto_captions: bool = os.getenv("YOUTUBE_ALLOW_AUTO_CAPTIONS", "true").lower() in {"1", "true", "yes"}
     youtube_max_bytes: int = int(os.getenv("YOUTUBE_MAX_BYTES", "2000000"))
+    youtube_cookies_file: str = os.getenv("YOUTUBE_COOKIES_FILE", "")
+    youtube_cookies_b64: str = os.getenv("YOUTUBE_COOKIES_B64", "")
+    youtube_cookies_raw: str = os.getenv("YOUTUBE_COOKIES_RAW", "")
     suggested_sources_model: str = os.getenv("SUGGESTED_SOURCES_MODEL", "gpt-4o-mini")
     suggested_sources_scan_interval_minutes: int = int(os.getenv("SUGGESTED_SOURCES_SCAN_INTERVAL_MINUTES", "10"))
     suggested_sources_hub_cooldown_minutes: int = int(os.getenv("SUGGESTED_SOURCES_HUB_COOLDOWN_MINUTES", "60"))

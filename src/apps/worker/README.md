@@ -44,6 +44,7 @@ Worker-specific settings include:
 - `YOUTUBE_DEFAULT_LANGUAGE`
 - `YOUTUBE_ALLOW_AUTO_CAPTIONS`
 - `YOUTUBE_MAX_BYTES`
+- `YOUTUBE_COOKIES_FILE`, `YOUTUBE_COOKIES_B64`, or `YOUTUBE_COOKIES_RAW` when hosted YouTube requests require authenticated cookies
 - `DEFAULT_TIMEZONE`
 
 Reminder detection also requires a spaCy English model such as `en_core_web_sm`.
@@ -77,6 +78,15 @@ YouTube ingestion:
 4. The worker stores a transcript snapshot in Supabase Storage
 5. The worker chunks, embeds, and writes retrieval records
 6. Refresh re-fetches metadata and captions, while reprocess uses the stored snapshot
+
+Hosted workers can be challenged by YouTube with `Sign in to confirm you're not a bot`. In that case,
+export YouTube cookies in Netscape `cookies.txt` format and configure one of:
+
+- `YOUTUBE_COOKIES_FILE`: absolute path to a mounted `cookies.txt` file
+- `YOUTUBE_COOKIES_B64`: base64-encoded contents of `cookies.txt`, useful for deployment secrets
+- `YOUTUBE_COOKIES_RAW`: raw `cookies.txt` contents, useful only if the host supports multiline secrets cleanly
+
+Prefer `YOUTUBE_COOKIES_FILE` or `YOUTUBE_COOKIES_B64` for deployment. Do not commit cookie files.
 
 ## Module Ownership
 
