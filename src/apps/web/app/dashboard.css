@@ -1706,4 +1706,32 @@
   .dash-nav-tab {
     font-size: 0.7rem;
   }
+
+  .mini-cal {
+    padding: 8px 4px;
+  }
+
+  .mini-cal-grid {
+    gap: 2px;
+  }
+
+  .mini-cal-day {
+    width: 36px;
+    height: 36px;
+    margin: 2px auto;
+    font-size: 0.8rem;
+  }
+
+  .dash-calendar-main .mini-cal-day,
+  .dash-calendar-main .hdash__cal-cell {
+    width: auto;
+    min-height: 52px;
+    font-size: 0.8rem;
+  }
+
+  .dash-home .dash-reminders-card .mini-cal-day {
+    width: 34px;
+    height: 34px;
+    font-size: 0.75rem;
+  }
 }

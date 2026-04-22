@@ -208,13 +208,15 @@ function AppShellChrome({ children }: AppShellProps) {
         <header className="site-nav">
           <div className={`nav-content${isOnHub ? ' nav-content--hub' : ''}`}>
             <div className="nav-brand">
-              <button
-                className={`mobile-menu-button ${isOnHub && sidebarHidden ? 'is-visible-desktop' : ''}`}
-                onClick={handleMenuClick}
-                aria-label="Open menu"
-              >
-                <Bars3Icon />
-              </button>
+              {isOnHub && (
+                <button
+                  className={`mobile-menu-button ${sidebarHidden ? 'is-visible-desktop' : ''}`}
+                  onClick={handleMenuClick}
+                  aria-label="Open menu"
+                >
+                  <Bars3Icon />
+                </button>
+              )}
               <a className="brand" href="/" data-testid="brand-link">
                 Caddie
               </a>

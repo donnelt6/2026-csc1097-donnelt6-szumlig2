@@ -1123,7 +1123,7 @@ export const ChatPanel = forwardRef<ChatPanelHandle, Props>(function ChatPanel({
                             aria-label="Copy result"
                           >
                             <ClipboardDocumentIcon className="chat__action-icon" />
-                            <span>Copy</span>
+                            <span className="chat__action-label">Copy</span>
                           </button>
                           {canEditHub && (
                             <button
@@ -1143,7 +1143,7 @@ export const ChatPanel = forwardRef<ChatPanelHandle, Props>(function ChatPanel({
                               aria-label="Save as FAQ"
                             >
                               <BookmarkIcon className="chat__action-icon" />
-                              <span>{savedFaqIds.has(message.id) ? 'Saved' : savingFaqId === message.id ? 'Saving...' : 'Save as FAQ'}</span>
+                              <span className="chat__action-label">{savedFaqIds.has(message.id) ? 'Saved' : savingFaqId === message.id ? 'Saving...' : 'Save as FAQ'}</span>
                             </button>
                           )}
                           <button
@@ -1154,7 +1154,7 @@ export const ChatPanel = forwardRef<ChatPanelHandle, Props>(function ChatPanel({
                             disabled={feedbackSubmittingId === message.response.message_id}
                           >
                             <HandThumbUpIcon className="chat__action-icon" />
-                            <span>{currentFeedback === "helpful" ? "Helpful" : "Mark helpful"}</span>
+                            <span className="chat__action-label">{currentFeedback === "helpful" ? "Helpful" : "Mark helpful"}</span>
                           </button>
                           <button
                             type="button"
@@ -1164,7 +1164,7 @@ export const ChatPanel = forwardRef<ChatPanelHandle, Props>(function ChatPanel({
                             disabled={feedbackSubmittingId === message.response.message_id}
                           >
                             <HandThumbDownIcon className="chat__action-icon" />
-                            <span>{currentFeedback === "not_helpful" ? "Not helpful" : "Mark not helpful"}</span>
+                            <span className="chat__action-label">{currentFeedback === "not_helpful" ? "Not helpful" : "Mark not helpful"}</span>
                           </button>
                           {canFlagResponses && (
                             <>
@@ -1209,7 +1209,7 @@ export const ChatPanel = forwardRef<ChatPanelHandle, Props>(function ChatPanel({
                                   }
                                 >
                                   <FlagIcon className="chat__action-icon" />
-                                  <span>
+                                  <span className="chat__action-label">
                                     {message.response.flag_status === "open"
                                       ? "Flagged"
                                       : message.response.flag_status === "in_review"
