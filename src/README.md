@@ -77,7 +77,7 @@ Common requirements:
 Additional worker-only configuration includes:
 
 - Web crawling settings such as `WEB_MAX_BYTES`, `WEB_USER_AGENT`, `WEB_TIMEOUT_SECONDS`, and `WEB_RESPECT_ROBOTS`
-- YouTube caption settings such as `YOUTUBE_DEFAULT_LANGUAGE`, `YOUTUBE_ALLOW_AUTO_CAPTIONS`, and `YOUTUBE_MAX_BYTES`
+- YouTube caption settings such as `YOUTUBE_DEFAULT_LANGUAGE`, `YOUTUBE_ALLOW_AUTO_CAPTIONS`, `YOUTUBE_MAX_BYTES`, and optional YouTube cookie settings for hosted bot checks
 - `DEFAULT_TIMEZONE` for reminder delivery defaults
 
 ## Run Locally
@@ -135,6 +135,7 @@ YouTube ingestion:
 - The API creates a `youtube` source and stores the URL plus caption preferences.
 - The worker fetches metadata and captions with `yt-dlp`, stores a transcript snapshot, then chunks and embeds it.
 - Reprocess uses the stored snapshot. Refresh re-fetches captions and metadata.
+- If the hosted worker gets YouTube's bot-check error, configure `YOUTUBE_COOKIES_FILE` or `YOUTUBE_COOKIES_B64` in the worker deployment with exported YouTube `cookies.txt` content.
 
 Chat:
 

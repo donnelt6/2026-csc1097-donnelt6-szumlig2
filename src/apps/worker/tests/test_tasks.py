@@ -142,6 +142,20 @@ def test_parse_json3_extracts_segments() -> None:
     assert "world" in cleaned
 
 
+# Verifies that deployment-provided YouTube cookies are passed to yt-dlp.
+def test_build_youtube_ydl_opts_includes_cookiefile() -> None:
+    opts = youtube._build_youtube_ydl_opts("cookies.txt")
+    assert opts["skip_download"] is True
+    assert opts["cookiefile"] == "cookies.txt"
+
+
+# Verifies that base64 cookie secrets are decoded before temporary file handoff.
+def test_decode_configured_youtube_cookies_prefers_base64(monkeypatch) -> None:
+    monkeypatch.setattr(youtube.settings, "youtube_cookies_b64", "I05ldHNjYXBlIGNvb2tpZXM=")
+    monkeypatch.setattr(youtube.settings, "youtube_cookies_raw", "raw cookies")
+    assert youtube._decode_configured_youtube_cookies() == b"#Netscape cookies"
+
+
 # Verifies that caption selection prefers manual subtitles before automatic captions.
 def test_select_caption_track_prefers_manual_then_auto() -> None:
     # Manual captions should be preferred; auto captions only when allowed.
