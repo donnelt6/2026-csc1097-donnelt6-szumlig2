@@ -328,6 +328,7 @@ def test_normalize_source_suggestion_candidate_coerces_youtube_and_web(monkeypat
     assert youtube["video_id"] == "abc123def45"
     assert web is not None
     assert web["canonical_url"] == "https://example.com/docs"
+    assert web["canonical_url"] == tasks._web._canonicalize_web_url("https://www.example.com/docs/?utm_source=test")
 
 
 # OpenAI discovery helpers.

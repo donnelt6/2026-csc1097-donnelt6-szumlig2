@@ -9,24 +9,13 @@ from supabase import Client
 from ..dependencies import CurrentUser, get_current_user, get_supabase_user_client, rate_limit_user_ip
 from ..schemas import HubInviteRequest, HubInviteResponse, HubMember, HubMemberUpdate, MembershipRole, PendingInvite
 from ..services.store import store
+from .access import require_accepted, require_owner
 from .errors import raise_postgrest_error
 
 router = APIRouter(prefix="", tags=["memberships"])
 
 
 # Membership permission helpers.
-
-# Ensure the member has accepted the invite before continuing.
-def _require_accepted(member: HubMember) -> None:
-    if not member.accepted_at:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invite not accepted yet.")
-
-
-# Restrict owner-only membership actions.
-def _require_owner(member: HubMember) -> None:
-    if member.role != "owner":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Owner role required.")
-
 
 # Allow owners to remove any non-owner member, and admins to remove only editors/viewers.
 def _require_member_removal_permission(actor: HubMember, target: HubMember) -> None:
@@ -69,7 +58,7 @@ def list_members(
 ) -> list[HubMember]:
     try:
         member = store.get_member_role(client, hub_id, current_user.id)
-        _require_accepted(member)
+        require_accepted(member)
         # Owners can see pending invites; other roles only see accepted members.
         include_pending = member.role == "owner"
         members = store.list_members(client, hub_id, include_pending=include_pending)
@@ -130,8 +119,8 @@ def invite_member(
         if current_user.email and payload.email.lower() == current_user.email.lower():
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="You already have access.")
         member = store.get_member_role(client, hub_id, current_user.id)
-        _require_accepted(member)
-        _require_owner(member)
+        require_accepted(member)
+        require_owner(member)
         invited = store.invite_member(client, hub_id, payload)
         store.log_activity(client, str(hub_id), current_user.id, "invited", "member", invited.user_id, {"email": payload.email, "role": payload.role.value})
         return HubInviteResponse(member=invited)
@@ -196,8 +185,8 @@ def update_member_role(
 ) -> HubMember:
     try:
         member = store.get_member_role(client, hub_id, current_user.id)
-        _require_accepted(member)
-        _require_owner(member)
+        require_accepted(member)
+        require_owner(member)
         result = store.update_member_role(client, hub_id, user_id, payload.role)
         store.log_activity(client, str(hub_id), current_user.id, "updated_role", "member", str(user_id), {"role": payload.role.value})
         return result
@@ -223,7 +212,7 @@ def remove_member(
 ) -> None:
     try:
         member = store.get_member_role(client, hub_id, current_user.id)
-        _require_accepted(member)
+        require_accepted(member)
         target_member = store.get_member_role(client, hub_id, user_id)
         _require_member_removal_permission(member, target_member)
         store.remove_member(client, hub_id, user_id)
@@ -250,10 +239,10 @@ def transfer_ownership(
 ) -> HubMember:
     try:
         member = store.get_member_role(client, hub_id, current_user.id)
-        _require_accepted(member)
-        _require_owner(member)
+        require_accepted(member)
+        require_owner(member)
         target_member = store.get_member_role(client, hub_id, str(user_id))
-        _require_accepted(target_member)
+        require_accepted(target_member)
         # Ownership transfers are intentionally limited to admins to keep the flow predictable.
         if target_member.role != MembershipRole.admin:
             raise HTTPException(

@@ -18,20 +18,12 @@ from ..schemas import (
     GuideStepReorderRequest,
     GuideStepUpdateRequest,
     GuideUpdateRequest,
-    MembershipRole,
 )
 from ..services.store import store
+from .access import require_accepted, require_editor
 from .errors import raise_postgrest_error
 
 router = APIRouter(prefix="/guides", tags=["guides"])
-
-
-# Guide permission helpers.
-
-# Restrict guide editing to content-management roles.
-def _require_editor(role: MembershipRole) -> None:
-    if role not in (MembershipRole.owner, MembershipRole.admin, MembershipRole.editor):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Owner, admin, or editor role required.")
 
 
 # Guide routes.
@@ -69,9 +61,8 @@ def generate_guide(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Select at least one source.")
     try:
         member = store.get_member_role(client, payload.hub_id, current_user.id)
-        if not member.accepted_at:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invite not accepted yet.")
-        _require_editor(member.role)
+        require_accepted(member)
+        require_editor(member)
         entry = store.generate_guide(client, current_user.id, payload)
         store.log_activity(client, str(payload.hub_id), current_user.id, "generated", "guide", entry.id, {"title": entry.title})
         return GuideGenerateResponse(entry=entry)
@@ -117,9 +108,8 @@ def update_guide(
     try:
         entry = store.get_guide(client, str(guide_id))
         member = store.get_member_role(client, entry.hub_id, current_user.id)
-        if not member.accepted_at:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invite not accepted yet.")
-        _require_editor(member.role)
+        require_accepted(member)
+        require_editor(member)
         return store.update_guide(client, str(guide_id), updates)
     except KeyError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
@@ -155,9 +145,8 @@ def update_guide_step(
         step = store.get_guide_step(client, str(step_id))
         entry = store.get_guide(client, step.guide_id)
         member = store.get_member_role(client, entry.hub_id, current_user.id)
-        if not member.accepted_at:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invite not accepted yet.")
-        _require_editor(member.role)
+        require_accepted(member)
+        require_editor(member)
         return store.update_guide_step(client, str(step_id), updates)
     except KeyError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
@@ -181,9 +170,8 @@ def create_guide_step(
     try:
         entry = store.get_guide(client, str(guide_id))
         member = store.get_member_role(client, entry.hub_id, current_user.id)
-        if not member.accepted_at:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invite not accepted yet.")
-        _require_editor(member.role)
+        require_accepted(member)
+        require_editor(member)
         return store.create_guide_step(client, str(guide_id), payload)
     except KeyError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
@@ -207,9 +195,8 @@ def reorder_guide_steps(
     try:
         entry = store.get_guide(client, str(guide_id))
         member = store.get_member_role(client, entry.hub_id, current_user.id)
-        if not member.accepted_at:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invite not accepted yet.")
-        _require_editor(member.role)
+        require_accepted(member)
+        require_editor(member)
         # Convert incoming UUIDs into the ordered string list the store expects.
         ordered_ids = [str(step_id) for step_id in payload.ordered_step_ids]
         return store.reorder_guide_steps(client, str(guide_id), ordered_ids)
@@ -237,8 +224,7 @@ def update_guide_progress(
         step = store.get_guide_step(client, str(step_id))
         entry = store.get_guide(client, step.guide_id)
         member = store.get_member_role(client, entry.hub_id, current_user.id)
-        if not member.accepted_at:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invite not accepted yet.")
+        require_accepted(member)
         store.upsert_guide_step_progress(client, current_user.id, step.guide_id, str(step_id), payload)
         return step
     except KeyError as exc:
@@ -261,9 +247,8 @@ def archive_guide(
     try:
         entry = store.get_guide(client, str(guide_id))
         member = store.get_member_role(client, entry.hub_id, current_user.id)
-        if not member.accepted_at:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invite not accepted yet.")
-        _require_editor(member.role)
+        require_accepted(member)
+        require_editor(member)
         store.archive_guide(client, str(guide_id), current_user.id)
     except KeyError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc

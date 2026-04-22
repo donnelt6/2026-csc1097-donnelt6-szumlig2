@@ -8,20 +8,12 @@ from postgrest.exceptions import APIError
 from supabase import Client
 
 from ..dependencies import CurrentUser, get_current_user, get_supabase_user_client, rate_limit_user_ip
-from ..schemas import FaqCreateRequest, FaqEntry, FaqGenerateRequest, FaqGenerateResponse, FaqUpdateRequest, MembershipRole
+from ..schemas import FaqCreateRequest, FaqEntry, FaqGenerateRequest, FaqGenerateResponse, FaqUpdateRequest
 from ..services.store import store
-from .access import require_accepted, require_hub_member
+from .access import require_accepted, require_editor, require_hub_member
 from .errors import raise_postgrest_error
 
 router = APIRouter(prefix="/faqs", tags=["faqs"])
-
-
-# FAQ permission helpers.
-
-# Restrict FAQ editing to roles that can manage hub content.
-def _require_editor(role: MembershipRole) -> None:
-    if role not in (MembershipRole.owner, MembershipRole.admin, MembershipRole.editor):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Owner, admin, or editor role required.")
 
 
 # FAQ routes.
@@ -60,9 +52,8 @@ def create_faq(
     try:
         # Re-check membership directly from the payload's hub before creating content.
         member = store.get_member_role(client, payload.hub_id, current_user.id)
-        if not member.accepted_at:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invite not accepted yet.")
-        _require_editor(member.role)
+        require_accepted(member)
+        require_editor(member)
         entry = store.create_faq(client, str(payload.hub_id), current_user.id, payload.question, payload.answer)
         store.log_activity(client, str(payload.hub_id), current_user.id, "created", "faq")
         return entry
@@ -88,9 +79,8 @@ def generate_faqs(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Select at least one source.")
     try:
         member = store.get_member_role(client, payload.hub_id, current_user.id)
-        if not member.accepted_at:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invite not accepted yet.")
-        _require_editor(member.role)
+        require_accepted(member)
+        require_editor(member)
         entries = store.generate_faqs(client, current_user.id, payload)
         store.log_activity(client, str(payload.hub_id), current_user.id, "generated", "faq", metadata={"count": len(entries)})
         return FaqGenerateResponse(entries=entries)
@@ -134,9 +124,8 @@ def update_faq(
     try:
         entry = store.get_faq(client, str(faq_id))
         member = store.get_member_role(client, entry.hub_id, current_user.id)
-        if not member.accepted_at:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invite not accepted yet.")
-        _require_editor(member.role)
+        require_accepted(member)
+        require_editor(member)
         result = store.update_faq(client, str(faq_id), updates)
         if payload.archived is not None:
             action = "archived" if payload.archived else "unarchived"
@@ -166,9 +155,8 @@ def archive_faq(
     try:
         entry = store.get_faq(client, str(faq_id))
         member = store.get_member_role(client, entry.hub_id, current_user.id)
-        if not member.accepted_at:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invite not accepted yet.")
-        _require_editor(member.role)
+        require_accepted(member)
+        require_editor(member)
         store.archive_faq(client, str(faq_id), current_user.id)
         store.log_activity(client, entry.hub_id, current_user.id, "deleted", "faq")
     except KeyError as exc:

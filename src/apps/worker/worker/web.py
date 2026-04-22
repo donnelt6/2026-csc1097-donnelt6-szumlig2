@@ -4,10 +4,11 @@ import ipaddress
 import re
 import socket
 from typing import Optional
-from urllib.parse import parse_qs, urljoin, urlparse, urlunparse
+from urllib.parse import urljoin, urlparse
 from urllib.robotparser import RobotFileParser
 
 import httpx
+from shared_schemas.url_utils import canonicalize_web_url
 
 from .app import settings
 
@@ -144,37 +145,7 @@ def _build_pseudo_doc(title: Optional[str], url: str, crawl_at: str, content_typ
     return "\n".join(lines)
 
 
-def _canonicalize_web_url(url: str) -> Optional[str]:
-    cleaned = (url or "").strip()
-    if not cleaned:
-        return None
-    parsed = urlparse(cleaned)
-    if parsed.scheme not in {"http", "https"}:
-        return None
-    host = (parsed.hostname or "").lower()
-    if not host:
-        return None
-    if host.startswith("www."):
-        host = host[4:]
-    port = parsed.port
-    if (parsed.scheme == "http" and port == 80) or (parsed.scheme == "https" and port == 443):
-        port = None
-    netloc = host if port is None else f"{host}:{port}"
-    path = parsed.path or "/"
-    path = re.sub(r"/{2,}", "/", path)
-    if path != "/" and path.endswith("/"):
-        path = path.rstrip("/")
-    query = parse_qs(parsed.query, keep_blank_values=False)
-    filtered_items: list[tuple[str, str]] = []
-    for key, values in sorted(query.items()):
-        normalized_key = key.lower()
-        if normalized_key.startswith("utm_") or normalized_key in {"fbclid", "gclid"}:
-            continue
-        for value in values:
-            if value:
-                filtered_items.append((key, value))
-    normalized_query = "&".join(f"{key}={value}" for key, value in filtered_items)
-    return urlunparse((parsed.scheme.lower(), netloc, path, "", normalized_query, ""))
+_canonicalize_web_url = canonicalize_web_url
 
 
 __all__ = [

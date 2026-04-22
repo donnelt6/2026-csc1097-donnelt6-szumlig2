@@ -133,6 +133,12 @@ def test_canonicalize_web_url_strips_tracking_and_fragment() -> None:
     assert canonical == "https://example.com/docs?topic=1"
 
 
+# Verifies that the store compatibility facade still exposes shared YouTube parsing.
+def test_extract_youtube_video_id_uses_shared_compatibility_alias() -> None:
+    assert store_module._extract_youtube_video_id("https://youtube.com/live/abc123def45") == "abc123def45"
+    assert store_module._normalize_youtube_id("invalid") is None
+
+
 # Verifies that find existing source for web suggestion.
 def test_find_existing_source_for_web_suggestion(monkeypatch) -> None:
     suggestion = SourceSuggestion(

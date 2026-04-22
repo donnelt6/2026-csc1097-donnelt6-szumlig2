@@ -7,23 +7,12 @@ from postgrest.exceptions import APIError
 from supabase import Client
 
 from ..dependencies import CurrentUser, get_current_user, get_supabase_user_client, rate_limit_user_ip
-from ..schemas import ChatAnalyticsSummary, ChatAnalyticsTrends, MembershipRole
+from ..schemas import ChatAnalyticsSummary, ChatAnalyticsTrends
 from ..services.store import store
-from .access import require_accepted, require_hub_member
+from .access import require_accepted, require_hub_member, require_owner_or_admin
 from .errors import raise_postgrest_error
 
 router = APIRouter(prefix="/hubs/{hub_id}/analytics", tags=["analytics"])
-
-
-# Analytics permission helpers.
-
-# Restrict analytics access to elevated hub roles.
-def _require_owner_or_admin(role: MembershipRole) -> None:
-    if role not in {MembershipRole.owner, MembershipRole.admin}:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only hub owners and admins can view analytics.",
-        )
 
 
 # Analytics routes.
@@ -44,7 +33,7 @@ def get_summary(
         # Validate both membership and role before exposing analytics data.
         member = require_hub_member(client, str(hub_id), current_user.id)
         require_accepted(member)
-        _require_owner_or_admin(member.role)
+        require_owner_or_admin(member, detail="Only hub owners and admins can view analytics.")
         summary = store.get_hub_chat_analytics_summary(str(hub_id), days=days)
         store.log_activity(
             client,
@@ -79,7 +68,7 @@ def get_trends(
     try:
         member = require_hub_member(client, str(hub_id), current_user.id)
         require_accepted(member)
-        _require_owner_or_admin(member.role)
+        require_owner_or_admin(member, detail="Only hub owners and admins can view analytics.")
         trends = store.get_hub_chat_analytics_trends(str(hub_id), days=days)
         store.log_activity(
             client,

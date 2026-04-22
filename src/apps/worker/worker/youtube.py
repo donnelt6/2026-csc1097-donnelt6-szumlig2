@@ -5,16 +5,15 @@ import re
 import time
 from datetime import datetime
 from typing import Optional
-from urllib.parse import parse_qs, urlparse
 
 import httpx
+from shared_schemas.url_utils import extract_youtube_video_id, normalize_youtube_id
 
 from .app import logger, settings
 
 _CAPTION_TIMECODE_RE = re.compile(
     r"^\d{1,2}:\d{2}(?::\d{2})?[.,]\d{3}\s-->\s\d{1,2}:\d{2}(?::\d{2})?[.,]\d{3}"
 )
-_SUGGESTION_YOUTUBE_ID_RE = re.compile(r"^[A-Za-z0-9_-]{11}$")
 
 
 def _fetch_youtube_transcript(
@@ -293,28 +292,8 @@ def _build_youtube_pseudo_doc(info: dict, url: str, fetched_at: str, captions_me
     return "\n".join(lines)
 
 
-def _extract_youtube_video_id(url: str) -> Optional[str]:
-    parsed = urlparse(url)
-    host = (parsed.netloc or "").lower()
-    if host.startswith("www."):
-        host = host[4:]
-    if host == "youtu.be":
-        return _normalize_youtube_id(parsed.path.strip("/").split("/", 1)[0])
-    if host.endswith("youtube.com") or host.endswith("youtube-nocookie.com"):
-        query = parse_qs(parsed.query)
-        if "v" in query and query["v"]:
-            return _normalize_youtube_id(query["v"][0])
-        parts = [part for part in parsed.path.split("/") if part]
-        if len(parts) >= 2 and parts[0] in {"shorts", "embed", "live", "v"}:
-            return _normalize_youtube_id(parts[1])
-    return None
-
-
-def _normalize_youtube_id(value: str) -> Optional[str]:
-    cleaned = (value or "").strip()
-    if not _SUGGESTION_YOUTUBE_ID_RE.fullmatch(cleaned):
-        return None
-    return cleaned
+_extract_youtube_video_id = extract_youtube_video_id
+_normalize_youtube_id = normalize_youtube_id
 
 
 def _canonicalize_youtube_url(video_id: str) -> str:

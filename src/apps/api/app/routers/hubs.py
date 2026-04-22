@@ -5,26 +5,12 @@ from postgrest.exceptions import APIError
 from supabase import Client
 
 from ..dependencies import CurrentUser, get_current_user, get_supabase_user_client, rate_limit_user_ip
-from ..schemas import Hub, HubCreate, HubFavouriteToggle, HubMember, MembershipRole, HubUpdate
+from ..schemas import Hub, HubCreate, HubFavouriteToggle, HubUpdate
 from ..services.store import store
-from .access import require_accepted, require_hub_member
+from .access import require_accepted, require_hub_member, require_owner, require_owner_or_admin
 from .errors import raise_postgrest_error
 
 router = APIRouter(prefix="/hubs", tags=["hubs"])
-
-
-# Hub permission helpers.
-
-# Restrict management actions to owners and admins.
-def _require_owner_or_admin(member: HubMember) -> None:
-    if member.role not in (MembershipRole.owner, MembershipRole.admin):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Owner or admin role required.")
-
-
-# Restrict sensitive hub actions to the owner only.
-def _require_owner(member: HubMember) -> None:
-    if member.role != MembershipRole.owner:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Owner role required.")
 
 
 # Hub routes.
@@ -82,7 +68,7 @@ def update_hub(
     try:
         member = require_hub_member(client, hub_id, current_user.id)
         require_accepted(member)
-        _require_owner_or_admin(member)
+        require_owner_or_admin(member)
         return store.update_hub(client, hub_id, payload)
     except KeyError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
@@ -145,7 +131,7 @@ def archive_hub(
     try:
         member = require_hub_member(client, hub_id, current_user.id)
         require_accepted(member)
-        _require_owner(member)
+        require_owner(member)
         return store.archive_hub(client, hub_id)
     except KeyError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
@@ -167,7 +153,7 @@ def unarchive_hub(
     try:
         member = require_hub_member(client, hub_id, current_user.id)
         require_accepted(member)
-        _require_owner(member)
+        require_owner(member)
         return store.unarchive_hub(client, hub_id)
     except KeyError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc

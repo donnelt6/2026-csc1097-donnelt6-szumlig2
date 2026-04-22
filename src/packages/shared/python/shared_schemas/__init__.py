@@ -17,6 +17,7 @@ from .models import (
     Source,
     SourceStatus,
 )
+from .url_utils import canonicalize_web_url, extract_youtube_video_id, normalize_youtube_id
 
 __all__ = [
     "AssignableMembershipRole",
@@ -36,4 +37,7 @@ __all__ = [
     "MessageRevisionType",
     "Source",
     "SourceStatus",
+    "canonicalize_web_url",
+    "extract_youtube_video_id",
+    "normalize_youtube_id",
 ]
