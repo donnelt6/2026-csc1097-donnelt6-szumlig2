@@ -10,7 +10,7 @@ import {
   listReminderNotifications,
   updateReminder,
 } from "../../lib/api";
-import type { HubMember, NotificationEvent, PendingInvite, Reminder } from "../../lib/types";
+import type { HubMember, NotificationEvent, PendingInvite, Reminder } from "@shared/index";
 import { renderWithQueryClient } from "../test-utils";
 
 vi.mock("../../lib/api", () => ({

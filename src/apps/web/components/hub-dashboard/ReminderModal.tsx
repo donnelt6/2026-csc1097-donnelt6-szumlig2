@@ -9,7 +9,7 @@ import { createReminder, updateReminder, deleteReminder } from '../../lib/api';
 import { formatLocal, pad2 } from '../../lib/dateUtils';
 import { DatePicker } from './DatePicker';
 import { TimePicker } from './TimePicker';
-import type { Reminder } from '../../lib/types';
+import type { Reminder } from '@shared/index';
 
 const NOTE_MAX = 500;
 

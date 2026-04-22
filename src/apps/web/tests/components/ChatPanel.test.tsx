@@ -11,7 +11,7 @@ import {
   submitChatFeedback,
   submitCitationFeedback,
 } from "../../lib/api";
-import type { Source } from "../../lib/types";
+import type { Source } from "@shared/index";
 import { renderWithQueryClient } from "../test-utils";
 
 const replaceMock = vi.fn((nextUrl?: string) => {

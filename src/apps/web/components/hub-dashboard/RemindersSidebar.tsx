@@ -7,7 +7,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { PlusIcon } from '@heroicons/react/24/outline';
 import { decideReminderCandidate } from '../../lib/api';
 import { formatLocal, toLocalInputValue, toIsoFromLocalInput } from '../../lib/dateUtils';
-import type { Reminder, ReminderCandidate } from '../../lib/types';
+import type { Reminder, ReminderCandidate } from '@shared/index';
 
 interface RemindersSidebarProps {
   hubId: string;

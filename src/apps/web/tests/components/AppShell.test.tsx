@@ -42,6 +42,7 @@ vi.mock("../../lib/HubTabContext", () => ({
 }));
 
 vi.mock("../../lib/SearchContext", () => ({
+  SearchProvider: ({ children }: { children: React.ReactNode }) => children,
   useSearch: () => ({
     searchQuery: "",
     setSearchQuery: vi.fn(),

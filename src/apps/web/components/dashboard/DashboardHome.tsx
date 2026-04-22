@@ -17,13 +17,13 @@ import {
 import { DocumentIcon, UserIcon } from '@heroicons/react/24/solid';
 import { listActivity, listHubs, listReminders, listChatSessions } from '../../lib/api';
 import { resolveHubAppearance } from '../../lib/hubAppearance';
-import type { ChatSessionSummary } from '../../lib/types';
+import type { ChatSessionSummary } from '@shared/index';
 import { useAuth } from '../auth/AuthProvider';
 import { describeEventParts, formatRelativeTime, getEventTone } from '../../lib/utils';
 import { getEventIcon, buildHubNameMap } from './dashboardUtils';
 import { selectDashboardPrompts } from './dashboardPromptRules';
 import { ProfileAvatar } from '../profile/ProfileAvatar';
-import { RemindersPanel } from './RemindersPanel';
+import { DashboardRemindersPanel } from './DashboardRemindersPanel';
 
 function DashboardHomeHubSkeleton({ index }: { index: number }) {
   return (
@@ -390,7 +390,7 @@ export function DashboardHome() {
 
         <div className="dash-col-side">
           {/* Reminders */}
-          <RemindersPanel variant="sidebar" />
+          <DashboardRemindersPanel variant="sidebar" />
 
           {/* Suggested Prompts */}
           {(promptsLoading || suggestedPrompts.length > 0) && (

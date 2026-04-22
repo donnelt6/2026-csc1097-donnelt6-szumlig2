@@ -28,7 +28,7 @@ import {
 import { useSearch } from "../lib/SearchContext";
 import { AddSourceModal } from "./AddSourceModal";
 import { SuggestedSourcesPanel } from "./SuggestedSourcesPanel";
-import type { Source } from "../lib/types";
+import type { Source } from "@shared/index";
 
 interface Props {
   hubId: string;

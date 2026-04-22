@@ -10,7 +10,7 @@ import { ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon } from "@heroicons/r
 const TOP_SOURCES_PAGE_SIZE = 6;
 
 import { getHubAnalyticsSummary, getHubAnalyticsTrends } from "../lib/api";
-import type { AnalyticsTopSource, ChatAnalyticsTrendPoint, MembershipRole } from "../lib/types";
+import type { AnalyticsTopSource, ChatAnalyticsTrendPoint, MembershipRole } from "@shared/index";
 
 type TopSourcesMode = "opens" | "returns" | "flags";
 

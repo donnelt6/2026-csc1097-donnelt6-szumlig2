@@ -12,7 +12,7 @@ import {
   listFlaggedChats,
   regenerateFlaggedChat,
 } from "../lib/api";
-import type { Citation, FlagCaseStatus, MessageRevision, MembershipRole } from "../lib/types";
+import type { Citation, FlagCaseStatus, MessageRevision, MembershipRole } from "@shared/index";
 
 const STATUS_OPTIONS: Array<{ value: "all" | FlagCaseStatus; label: string }> = [
   { value: "all", label: "All" },

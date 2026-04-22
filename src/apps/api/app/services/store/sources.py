@@ -23,11 +23,11 @@ from .base import ConflictError
 from .source_helpers import (
     _build_web_source_name,
     _build_youtube_source_name,
-    _canonicalize_web_url,
-    _extract_youtube_video_id,
     _sanitize_filename,
     _web_storage_path,
     _youtube_storage_path,
+    canonicalize_web_url,
+    extract_youtube_video_id,
 )
 
 
@@ -90,7 +90,7 @@ class SourceStoreMixin:
     def create_youtube_source(self, client: Client, payload: YouTubeSourceCreate) -> Source:
         source_id = str(uuid.uuid4())
         hub_id = str(payload.hub_id)
-        video_id = _extract_youtube_video_id(payload.url)
+        video_id = extract_youtube_video_id(payload.url)
         if not video_id:
             raise ValueError("Unable to extract YouTube video ID")
         storage_path = _youtube_storage_path(hub_id, source_id)
@@ -273,7 +273,7 @@ class SourceStoreMixin:
         url = metadata.get("url")
         if not url:
             raise ValueError("Source URL missing")
-        video_id = metadata.get("video_id") or _extract_youtube_video_id(url)
+        video_id = metadata.get("video_id") or extract_youtube_video_id(url)
         if not video_id:
             raise ValueError("Source video ID missing")
         language = metadata.get("language")
@@ -370,7 +370,7 @@ class SourceStoreMixin:
                     continue
                 metadata = source.ingestion_metadata if isinstance(source.ingestion_metadata, dict) else {}
                 source_url = metadata.get("final_url") or metadata.get("url")
-                if _canonicalize_web_url(str(source_url or "")) == suggestion.canonical_url:
+                if canonicalize_web_url(str(source_url or "")) == suggestion.canonical_url:
                     return source
             return None
         if suggestion.type == SourceSuggestionType.youtube:
@@ -380,7 +380,7 @@ class SourceStoreMixin:
                 if source.type != SourceType.youtube:
                     continue
                 metadata = source.ingestion_metadata if isinstance(source.ingestion_metadata, dict) else {}
-                source_video_id = metadata.get("video_id") or _extract_youtube_video_id(str(metadata.get("url") or ""))
+                source_video_id = metadata.get("video_id") or extract_youtube_video_id(str(metadata.get("url") or ""))
                 if source_video_id == suggestion.video_id:
                     return source
         return None

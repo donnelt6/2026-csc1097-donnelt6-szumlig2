@@ -18,7 +18,7 @@ import {
   type HubIconKey,
 } from "../../lib/hubAppearance";
 import { useSearch } from "../../lib/SearchContext";
-import type { Hub } from "../../lib/types";
+import type { Hub } from "@shared/index";
 
 const NAME_MAX = 40;
 const DESC_MAX = 200;

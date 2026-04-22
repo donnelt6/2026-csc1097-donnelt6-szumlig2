@@ -11,7 +11,7 @@ import { useAuth } from '../auth/AuthProvider';
 import { describeEventParts, formatRelativeTime, getEventTone, getTimeGroup } from '../../lib/utils';
 import { HubDropdown } from './HubDropdown';
 import { getEventIcon, buildHubNameMap } from './dashboardUtils';
-import type { ActivityEvent } from '../../lib/types';
+import type { ActivityEvent } from '@shared/index';
 
 const TIME_GROUP_ORDER = ['Today', 'Yesterday', 'This Week', 'Earlier'];
 

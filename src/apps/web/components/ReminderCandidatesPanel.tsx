@@ -5,7 +5,7 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { decideReminderCandidate, listReminderCandidates } from "../lib/api";
-import type { ReminderCandidate } from "../lib/types";
+import type { ReminderCandidate } from "@shared/index";
 import { formatLocal, toLocalInputValue, toIsoFromLocalInput } from "../lib/dateUtils";
 
 interface Props {

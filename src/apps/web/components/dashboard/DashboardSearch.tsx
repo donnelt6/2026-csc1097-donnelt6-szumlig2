@@ -15,7 +15,7 @@ import {
 } from '@heroicons/react/24/outline';
 import { listHubs, listChatSessions } from '../../lib/api';
 import { formatRelativeTime } from '../../lib/utils';
-import type { ChatSessionSummary } from '../../lib/types';
+import type { ChatSessionSummary } from '@shared/index';
 
 interface ChatResult extends ChatSessionSummary {
   hubName: string;

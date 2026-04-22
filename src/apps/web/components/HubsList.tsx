@@ -24,7 +24,7 @@ import {
   type HubColorKey,
   type HubIconKey,
 } from "../lib/hubAppearance";
-import type { Hub } from "../lib/types";
+import type { Hub } from "@shared/index";
 import { formatRelativeTime } from "../lib/utils";
 import type { HubsFilterState } from "./HubsToolbar";
 import { useAuth } from "./auth/AuthProvider";

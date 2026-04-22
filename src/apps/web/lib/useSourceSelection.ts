@@ -1,7 +1,7 @@
 // useSourceSelection.ts: Exclusion-based source selection hook with localStorage persistence.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { Source } from "./types";
+import type { Source } from "@shared/index";
 
 const STORAGE_PREFIX = "caddie:hub";
 

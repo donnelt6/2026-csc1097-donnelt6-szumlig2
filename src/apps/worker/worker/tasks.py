@@ -1172,7 +1172,7 @@ def _normalize_source_suggestion_candidate(
         return None
 
     suggested_type = str(candidate.get("type") or "web").strip().lower()
-    video_id = _youtube._extract_youtube_video_id(safe_url)
+    video_id = _youtube.extract_youtube_video_id(safe_url)
     if suggested_type == "youtube" or video_id:
         if not video_id:
             return None
@@ -1191,7 +1191,7 @@ def _normalize_source_suggestion_candidate(
             "search_metadata": search_metadata,
         }
 
-    canonical_url = _web._canonicalize_web_url(safe_url)
+    canonical_url = _web.canonicalize_web_url(safe_url)
     if suggested_type != "web" or not canonical_url:
         return None
     return {
@@ -1231,11 +1231,11 @@ def _load_existing_source_targets(client: Client, hub_id: str) -> set[tuple[str,
         if source_type == "youtube":
             video_id = str(metadata.get("video_id") or "")
             if not video_id:
-                video_id = _youtube._extract_youtube_video_id(str(metadata.get("url") or ""))
+                video_id = _youtube.extract_youtube_video_id(str(metadata.get("url") or ""))
             if video_id:
                 targets.add(("youtube", video_id))
         elif source_type == "web":
-            canonical_url = _web._canonicalize_web_url(str(metadata.get("final_url") or metadata.get("url") or ""))
+            canonical_url = _web.canonicalize_web_url(str(metadata.get("final_url") or metadata.get("url") or ""))
             if canonical_url:
                 targets.add(("web", canonical_url))
     return targets

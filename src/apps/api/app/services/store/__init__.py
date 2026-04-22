@@ -68,13 +68,13 @@ from .reminders import ReminderStoreMixin
 from .source_helpers import (
     _build_web_source_name,
     _build_youtube_source_name,
-    _canonicalize_web_url,
-    _extract_youtube_video_id,
-    _normalize_youtube_id,
     _sanitize_filename,
     _trim_text,
     _web_storage_path,
     _youtube_storage_path,
+    canonicalize_web_url,
+    extract_youtube_video_id,
+    normalize_youtube_id,
 )
 from .sources import SourceStoreMixin
 from .users import UserStoreMixin
@@ -111,7 +111,6 @@ __all__ = [
     "_build_web_citations",
     "_build_web_source_name",
     "_build_youtube_source_name",
-    "_canonicalize_web_url",
     "_chat_search_score",
     "_clamp_window_days",
     "_coerce_embedding_value",
@@ -122,7 +121,6 @@ __all__ = [
     "_extract_response_text",
     "_extract_usage",
     "_extract_web_results",
-    "_extract_youtube_video_id",
     "_fallback_chat_session_title",
     "_format_web_snippet",
     "_get_attr",
@@ -142,7 +140,6 @@ __all__ = [
     "_normalize_embedding_value",
     "_normalize_retrieval_query",
     "_normalize_vector",
-    "_normalize_youtube_id",
     "_parse_questions_from_text",
     "_parse_steps_from_text",
     "_preview_text",
@@ -154,4 +151,7 @@ __all__ = [
     "_trim_text",
     "_web_storage_path",
     "_youtube_storage_path",
+    "canonicalize_web_url",
+    "extract_youtube_video_id",
+    "normalize_youtube_id",
 ]

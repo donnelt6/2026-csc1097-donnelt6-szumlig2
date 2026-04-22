@@ -3,8 +3,11 @@
   "compilerOptions": {
     "baseUrl": ".",
     "paths": {
+      "@shared": [
+        "../../packages/shared/index"
+      ],
       "@shared/*": [
-        "../packages/shared/*"
+        "../../packages/shared/*"
       ],
       "@/components/*": [
         "components/*"

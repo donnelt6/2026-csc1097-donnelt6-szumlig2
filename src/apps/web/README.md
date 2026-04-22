@@ -76,7 +76,7 @@ Important component groups include:
 - `HubsList` and related hub navigation components
 - `UploadPanel` and source management controls
 - `ChatPanel` and source selection controls
-- `FaqPanel` and `GuidePanel`
+- `FaqPanel` and dashboard content pages
 - `MembersPanel` and moderation/admin panels
 - reminders, notifications, and dashboard views
 

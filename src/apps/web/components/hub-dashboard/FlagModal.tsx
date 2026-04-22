@@ -4,7 +4,7 @@
 
 import { useState } from 'react';
 import { XMarkIcon } from '@heroicons/react/24/outline';
-import type { FlagReason } from '../../lib/types';
+import type { FlagReason } from '@shared/index';
 
 interface FlagModalProps {
   label: string;

@@ -3,7 +3,7 @@
 from fastapi import HTTPException, status
 from supabase import Client
 
-from ..schemas import HubMember
+from ..schemas import HubMember, MembershipRole
 from ..services.store import store
 
 
@@ -21,3 +21,24 @@ def require_hub_member(client: Client, hub_id: str, user_id: str) -> HubMember:
 def require_accepted(member: HubMember) -> None:
     if not member.accepted_at:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invite not accepted yet.")
+
+
+# Restrict content-management actions to roles that can edit hub material.
+def require_editor(member: HubMember) -> None:
+    if member.role not in (MembershipRole.owner, MembershipRole.admin, MembershipRole.editor):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Owner, admin, or editor role required.")
+
+
+# Restrict management actions to owners and admins while allowing route-specific copy.
+def require_owner_or_admin(
+    member: HubMember,
+    detail: str = "Owner or admin role required.",
+) -> None:
+    if member.role not in (MembershipRole.owner, MembershipRole.admin):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=detail)
+
+
+# Restrict sensitive hub and membership actions to the owner only.
+def require_owner(member: HubMember) -> None:
+    if member.role != MembershipRole.owner:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Owner role required.")

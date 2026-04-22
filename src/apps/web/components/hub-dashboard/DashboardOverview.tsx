@@ -16,7 +16,7 @@ import { ReminderModal } from './ReminderModal';
 import { listFaqs, listGuides, listReminders, updateGuideStepProgress } from '../../lib/api';
 import { formatLocal } from '../../lib/dateUtils';
 import type { HubDashboardTab } from '../../lib/HubDashboardTabContext';
-import type { Citation, FaqEntry, GuideEntry, Reminder } from '../../lib/types';
+import type { Citation, FaqEntry, GuideEntry, Reminder } from '@shared/index';
 
 type ModalState =
   | { mode: 'closed' }

@@ -21,7 +21,7 @@ import { StarIcon as StarSolid } from "@heroicons/react/24/solid";
 import { archiveFaq, askQuestion, createFaq, flagFaq, generateFaqs, listFaqs, updateFaq } from "../../lib/api";
 import { useSearch } from "../../lib/SearchContext";
 import { FlagModal } from "./FlagModal";
-import type { Citation, FaqEntry, FlagReason, Source } from "../../lib/types";
+import type { Citation, FaqEntry, FlagReason, Source } from "@shared/index";
 
 
 interface Props {

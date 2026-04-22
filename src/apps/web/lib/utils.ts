@@ -1,6 +1,6 @@
 // utils.ts: Activity event formatting, relative time helpers, and general utilities.
 
-import type { ActivityEvent } from './types';
+import type { ActivityEvent } from '@shared/index';
 
 export function describeEventParts(event: ActivityEvent, currentUserId?: string): { action: string; subject: string } {
   const actorLabel = resolveActorLabel(event, currentUserId);

@@ -12,7 +12,7 @@ import {
   BookOpenIcon,
   ChatBubbleLeftIcon,
 } from '@heroicons/react/24/outline';
-import type { ActivityEvent } from '../../lib/types';
+import type { ActivityEvent } from '@shared/index';
 
 export function getEventIcon(event: ActivityEvent): React.ComponentType<React.SVGProps<SVGSVGElement>> {
   if (event.resource_type === 'source') return event.action === 'deleted' ? DocumentMinusIcon : DocumentIcon;

@@ -7,6 +7,7 @@ import pytest
 
 from app.schemas import Source, SourceCreate, SourceStatus, SourceSuggestion, SourceSuggestionStatus, SourceSuggestionType, SourceType
 from app.services import store as store_module
+from app.services.store import source_helpers
 
 
 # Simple response stub used by the surrounding tests.
@@ -129,8 +130,14 @@ def test_create_source_deletes_row_on_upload_url_failure(monkeypatch) -> None:
 
 # Verifies that canonicalize web url strips tracking and fragment.
 def test_canonicalize_web_url_strips_tracking_and_fragment() -> None:
-    canonical = store_module._canonicalize_web_url("https://www.Example.com/docs/?utm_source=test&topic=1#intro")
+    canonical = source_helpers.canonicalize_web_url("https://www.Example.com/docs/?utm_source=test&topic=1#intro")
     assert canonical == "https://example.com/docs?topic=1"
+
+
+# Verifies that shared YouTube parsing stays available through source helpers.
+def test_extract_youtube_video_id_uses_shared_helper() -> None:
+    assert source_helpers.extract_youtube_video_id("https://youtube.com/live/abc123def45") == "abc123def45"
+    assert source_helpers.normalize_youtube_id("invalid") is None
 
 
 # Verifies that find existing source for web suggestion.

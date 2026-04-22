@@ -13,8 +13,9 @@ import {
   listReminderNotifications,
   updateReminder,
 } from "../../lib/api";
+import { formatIrelandDateTime } from "../../lib/dateUtils";
 import { useAuth } from "../auth/AuthProvider";
-import type { NotificationEvent, PendingInvite, Reminder } from "../../lib/types";
+import type { NotificationEvent, PendingInvite, Reminder } from "@shared/index";
 
 function formatTimeAgo(value?: string | null) {
   if (!value) return "recently";
@@ -349,15 +350,3 @@ function ReminderNotificationCard({
   );
 }
 
-function formatIrelandDateTime(date: Date) {
-  const day = pad2(date.getDate());
-  const month = pad2(date.getMonth() + 1);
-  const year = date.getFullYear();
-  const hours = pad2(date.getHours());
-  const minutes = pad2(date.getMinutes());
-  return `${day}/${month}/${year} ${hours}:${minutes}`;
-}
-
-function pad2(value: number) {
-  return value.toString().padStart(2, "0");
-}
