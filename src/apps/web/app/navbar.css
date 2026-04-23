@@ -11,6 +11,7 @@
   border-bottom: 1px solid var(--border);
   z-index: 15;
   transition: left var(--transition-sidebar);
+  overflow-x: clip;
 }
 
 [data-theme="light"] .site-nav {
@@ -29,6 +30,7 @@
 .nav-content {
   height: 100%;
   max-width: 100%;
+  min-width: 0;
   display: flex;
   align-items: center;
   padding: 0 48px;
@@ -67,6 +69,7 @@
   opacity: 0;
   pointer-events: none;
   transition: opacity var(--transition-base);
+  -webkit-tap-highlight-color: transparent;
 }
 
 

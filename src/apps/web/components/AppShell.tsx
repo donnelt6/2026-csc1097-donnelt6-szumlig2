@@ -3,6 +3,7 @@
 // AppShell.tsx: Top-level layout shell providing sidebar, navbar, and content area.
 
 import { useState, useCallback, useLayoutEffect, useMemo, useEffect, useRef } from 'react';
+import Link from 'next/link';
 import { useParams, usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { Bars3Icon, ChatBubbleLeftRightIcon, DocumentTextIcon, MagnifyingGlassIcon } from '@heroicons/react/24/outline';
@@ -168,6 +169,18 @@ function AppShellChrome({ children }: AppShellProps) {
     setMobileMenuOpen(false);
   }, [pathname]);
 
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 768px)');
+    const sync = () => {
+      if (mq.matches) {
+        setMobileMenuOpen(false);
+      }
+    };
+    sync();
+    mq.addEventListener('change', sync);
+    return () => mq.removeEventListener('change', sync);
+  }, []);
+
   const effectiveSidebarState = isOnHub
     ? (sidebarState ?? 'open')
     : 'hidden';
@@ -181,7 +194,7 @@ function AppShellChrome({ children }: AppShellProps) {
   }, []);
 
   const handleMenuClick = useCallback(() => {
-    const isMobile = window.innerWidth <= 768;
+    const isMobile = window.matchMedia('(max-width: 768px)').matches;
     if (isMobile) {
       setMobileMenuOpen(true);
     } else {
@@ -219,9 +232,9 @@ function AppShellChrome({ children }: AppShellProps) {
                   <Bars3Icon />
                 </button>
               )}
-              <a className="brand" href="/" data-testid="brand-link">
+              <Link className="brand" href="/" data-testid="brand-link">
                 Caddie
-              </a>
+              </Link>
             </div>
             {isHome ? (
               <div className="dash-nav-tabs">

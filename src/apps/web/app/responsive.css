@@ -68,6 +68,19 @@
     margin-left: auto;
   }
 
+  .nav-current-hub {
+    max-width: 200px;
+    flex-shrink: 1;
+    min-width: 0;
+  }
+
+  .nav-current-hub-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+  }
+
   .dash-nav-tabs {
     overflow-x: auto;
     scrollbar-width: none;
@@ -372,6 +385,11 @@
 
   .nav-search--hubs {
     display: none;
+  }
+
+  .hubs-mobile-search,
+  .hdash__mobile-search {
+    display: flex;
   }
 
   .profile-trigger {

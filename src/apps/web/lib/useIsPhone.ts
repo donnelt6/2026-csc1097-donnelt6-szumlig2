@@ -5,12 +5,7 @@ import { useEffect, useState } from 'react';
 const PHONE_MEDIA_QUERY = '(max-width: 480px)';
 
 export function useIsPhone(): boolean {
-  const [isPhone, setIsPhone] = useState(() => {
-    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
-      return false;
-    }
-    return window.matchMedia(PHONE_MEDIA_QUERY).matches;
-  });
+  const [isPhone, setIsPhone] = useState(false);
   useEffect(() => {
     if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
       return;
