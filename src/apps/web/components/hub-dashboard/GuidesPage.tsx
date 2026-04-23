@@ -48,6 +48,7 @@ import type { Citation, FlagReason, GuideEntry, GuideStep, Source } from "@share
 import { FlagModal } from "./FlagModal";
 import { formatRelativeTime } from "../../lib/utils";
 import { useSearch } from "../../lib/SearchContext";
+import { MobileSearchBar } from "./MobileSearchBar";
 
 interface Props {
   hubId: string;
@@ -520,6 +521,8 @@ export function GuidesPage({ hubId, sources, canEdit }: Props) {
   return (
     <div className={`hdash__guides${totalPages > 1 ? ' hdash__guides--with-pagination' : ''}`}>
       {statusMessage && <div className="hdash__guides-toast">{statusMessage}</div>}
+
+      <MobileSearchBar placeholder="Search guides..." />
 
       <div className="faq-toolbar">
         <div className="hubs-toolbar-tabs">

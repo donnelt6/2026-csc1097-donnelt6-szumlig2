@@ -795,6 +795,15 @@
   .members__cell--status { display: none; }
   .members__cell--actions { grid-column: 2; grid-row: 1 / 3; }
 
+  .members,
+  .members__main,
+  .members__table-body {
+    overflow: visible;
+    min-height: auto;
+    height: auto;
+    flex: none;
+  }
+
   .members {
     padding: 16px 16px 0;
   }

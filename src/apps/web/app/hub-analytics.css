@@ -71,6 +71,14 @@
 @media (max-width: 480px) {
   .hub-analytics {
     padding: 0;
+    min-width: 0;
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
+  .hub-analytics__panel {
+    min-width: 0;
+    overflow-x: hidden;
   }
 
   .hub-analytics__metrics {
@@ -92,6 +100,34 @@
 
   .hub-analytics__panel {
     padding: 14px;
+  }
+
+  .hub-analytics__bar-chart-plot {
+    padding: 6px;
+  }
+
+  .hub-analytics__bar-chart-bars {
+    gap: 4px;
+  }
+
+  .hub-analytics__bar-chart-bar {
+    min-width: 36px;
+  }
+
+  .hub-analytics__bar-chart-label {
+    font-size: 0.6rem;
+    max-width: 52px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .hub-analytics__bar-chart-value {
+    font-size: 0.65rem;
+  }
+
+  .hub-analytics__bar-chart-caption {
+    font-size: 0.7rem;
   }
 }
 

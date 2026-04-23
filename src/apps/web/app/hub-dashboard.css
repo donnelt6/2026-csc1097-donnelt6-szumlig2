@@ -1,23 +1,23 @@
 .hub-moderation__layout {
   display: grid;
-  gap: 16px;
-  grid-template-columns: minmax(320px, 420px) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 320px) minmax(0, 1fr);
+  gap: 18px;
 }
 
 .hub-moderation__compare {
   display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: 16px;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-@media (max-width: 900px) {
-  .hub-moderation__layout {
-    grid-template-columns: 1fr;
-  }
+.hub-moderation__panel-card:hover {
+  border-color: var(--border);
+  box-shadow: none;
+}
 
-  .hub-moderation__compare {
-    grid-template-columns: 1fr;
-  }
+@media (max-width: 960px) {
+  .hub-moderation__layout { grid-template-columns: 1fr; }
+  .hub-moderation__compare { grid-template-columns: 1fr; }
 }
 
 /* ===== Hub Dashboard — Shared Utilities ===== */
@@ -465,6 +465,8 @@
   color: var(--muted);
   margin-bottom: 10px;
   line-height: 1.4;
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
 
 .hdash__insights-actions {
@@ -1768,10 +1770,25 @@
 @media (max-width: 900px) {
   .hdash__layout {
     grid-template-columns: 1fr;
+    padding: 16px;
+    max-width: 100%;
+    overflow-x: hidden;
   }
 
   .hdash__reminders {
     padding: 16px;
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
+  .hdash__calendar-col,
+  .hdash__sidebar-col {
+    max-width: 100%;
+  }
+
+  .hdash__cal {
+    max-width: 100%;
+    overflow-x: hidden;
   }
 
   .hdash__cal-cell {
@@ -1853,6 +1870,45 @@
   font-size: 0.875rem;
   color: var(--text);
   animation: slideDown 0.2s ease;
+}
+
+.hdash__mobile-search {
+  position: relative;
+  display: flex;
+  margin-bottom: 12px;
+}
+
+.hdash__mobile-search-icon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 16px;
+  height: 16px;
+  color: var(--muted);
+  pointer-events: none;
+}
+
+.hdash__mobile-search-input {
+  flex: 1;
+  min-width: 0;
+  padding: 10px 12px 10px 36px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--text);
+  font-size: 0.85rem;
+  font-family: var(--font-sans);
+  outline: none;
+  transition: border-color var(--transition-fast);
+}
+
+.hdash__mobile-search-input::placeholder {
+  color: var(--muted);
+}
+
+.hdash__mobile-search-input:focus {
+  border-color: var(--accent);
 }
 
 .guide-card,
@@ -3052,6 +3108,20 @@
   .hdash__reminders {
     padding: 12px;
     gap: 14px;
+    min-width: 0;
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
+  .hdash__calendar-col,
+  .hdash__sidebar-col,
+  .hdash__sidebar-section {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .hdash__cal-grid {
+    min-width: 0;
   }
 
   .hdash__cal {

@@ -209,8 +209,8 @@ export function HubModerationPanel({ hubId, hubRole }: HubModerationPanelProps) 
               onClick={() => setSelectedFlagId(item.id)}
               style={{
                 textAlign: "left",
-                borderColor: selectedFlagId === item.id ? "var(--accent)" : "#1e2535",
-                background: selectedFlagId === item.id ? "rgba(255,255,255,0.02)" : undefined,
+                borderColor: selectedFlagId === item.id ? "var(--accent)" : "var(--border)",
+                background: selectedFlagId === item.id ? "var(--card-hover)" : undefined,
               }}
             >
               <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "center" }}>
@@ -249,11 +249,11 @@ export function HubModerationPanel({ hubId, hubRole }: HubModerationPanelProps) 
               </div>
 
               <div className="grid" style={{ gap: "12px" }}>
-                <div className="card" style={{ borderColor: "#1e2535" }}>
+                <div className="card hub-moderation__panel-card">
                   <strong>User question</strong>
                   <p style={{ margin: "10px 0 0", whiteSpace: "pre-wrap" }}>{detailQuery.data.question_message.content}</p>
                 </div>
-                <div className="card" style={{ borderColor: "#1e2535" }}>
+                <div className="card hub-moderation__panel-card">
                   <strong>Current visible answer</strong>
                   <p style={{ margin: "10px 0 0", whiteSpace: "pre-wrap" }}>{detailQuery.data.flagged_message.content}</p>
                 </div>
@@ -338,11 +338,11 @@ export function HubModerationPanel({ hubId, hubRole }: HubModerationPanelProps) 
 
                 <div className="grid" style={{ gap: "8px" }}>
                   <h4 style={{ margin: 0 }}>Compare selected revision</h4>
-                  <div className="card" style={{ borderColor: "#1e2535" }}>
+                  <div className="card hub-moderation__panel-card">
                     <strong>Current answer</strong>
                     <p style={{ margin: "10px 0 0", whiteSpace: "pre-wrap" }}>{detailQuery.data.flagged_message.content}</p>
                   </div>
-                  <div className="card" style={{ borderColor: "#1e2535" }}>
+                  <div className="card hub-moderation__panel-card">
                     <strong>Selected revision</strong>
                     <p style={{ margin: "10px 0 0", whiteSpace: "pre-wrap" }}>
                       {selectedRevision?.content ?? "Select a revision to compare."}

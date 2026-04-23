@@ -947,6 +947,7 @@
 @media (max-width: 640px) {
   .admin {
     padding: 20px 16px 16px;
+    overflow-x: hidden;
   }
 
   .admin__stats {
@@ -955,6 +956,12 @@
 
   .admin__sug-row {
     flex-direction: column;
+    padding: 14px;
+    gap: 10px;
+  }
+
+  .admin__sug-row-content {
+    width: 100%;
   }
 
   .admin__sug-row-actions {
@@ -963,6 +970,28 @@
   }
 
   .admin__flag-actions {
+    flex-wrap: wrap;
+  }
+}
+
+@media (max-width: 480px) {
+  .admin {
+    padding: 16px 12px;
+  }
+
+  .admin__stats {
+    gap: 10px;
+  }
+
+  .admin__stat-card {
+    padding: 14px;
+  }
+
+  .admin__flag-card {
+    padding: 16px;
+  }
+
+  .admin__sug-row-header {
     flex-wrap: wrap;
   }
 }

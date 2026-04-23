@@ -935,6 +935,22 @@
     gap: 8px;
   }
 
+  .chat__controls-right {
+    min-width: 0;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .chat__scope-pills {
+    min-width: 0;
+  }
+
+  .chat__scope-pill {
+    white-space: nowrap;
+    min-width: 0;
+    padding: 6px 10px;
+  }
+
   .chat__loading-bubble {
     max-width: 92%;
     min-width: 0;
@@ -959,6 +975,58 @@
 }
 
 @media (max-width: 480px) {
+  .chat {
+    overflow-x: hidden;
+  }
+
+  .chat__controls {
+    padding: 8px 12px;
+  }
+
+  .chat__hub-desc {
+    display: none;
+  }
+
+  .chat__scope-pill {
+    font-size: 0.75rem;
+    padding: 5px 9px;
+  }
+
+  .chat__lane,
+  .chat__lane--messages,
+  .chat__pair,
+  .chat__message {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .chat__bubble {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  .chat__bubble--ai {
+    min-width: 0;
+  }
+
+  .chat__bubble--ai > * {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .chat__citation-chip {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  .chat__timestamp {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
   .chat__action-label {
     display: none;
   }
@@ -975,5 +1043,31 @@
 
   .chat__actions {
     gap: 4px;
+  }
+
+  .chat__report-reasons {
+    flex-wrap: wrap;
+    margin-left: 0;
+  }
+
+  .chat__report-reason {
+    padding: 4px 8px;
+    font-size: 0.65rem;
+  }
+
+  .chat__messages {
+    overflow-x: hidden;
+  }
+
+  .chat__bubble {
+    max-width: calc(100% - 48px);
+  }
+
+  .chat__timestamp--user {
+    padding-right: 0;
+  }
+
+  .chat__timestamp--ai {
+    padding-left: 0;
   }
 }

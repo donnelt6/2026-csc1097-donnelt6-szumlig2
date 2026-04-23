@@ -6,27 +6,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon } from "@heroicons/react/24/outline";
+import { getHubAnalyticsSummary, getHubAnalyticsTrends } from "../lib/api";
+import { useIsPhone } from "../lib/useIsPhone";
+import type { AnalyticsTopSource, ChatAnalyticsTrendPoint, MembershipRole } from "@shared/index";
 
 const TOP_SOURCES_PAGE_SIZE_DESKTOP = 6;
 const TOP_SOURCES_PAGE_SIZE_PHONE = 5;
-
-function useIsPhone() {
-  const [isPhone, setIsPhone] = useState(false);
-  useEffect(() => {
-    if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
-      return;
-    }
-    const mq = window.matchMedia("(max-width: 480px)");
-    const update = () => setIsPhone(mq.matches);
-    update();
-    mq.addEventListener("change", update);
-    return () => mq.removeEventListener("change", update);
-  }, []);
-  return isPhone;
-}
-
-import { getHubAnalyticsSummary, getHubAnalyticsTrends } from "../lib/api";
-import type { AnalyticsTopSource, ChatAnalyticsTrendPoint, MembershipRole } from "@shared/index";
 
 type TopSourcesMode = "opens" | "returns" | "flags";
 

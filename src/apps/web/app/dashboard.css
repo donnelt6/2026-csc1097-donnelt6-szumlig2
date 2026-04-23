@@ -1699,7 +1699,7 @@
   }
 
   .dash-nav-tabs {
-    gap: 20px;
+    gap: 14px;
     margin-left: 8px;
   }
 
@@ -1722,11 +1722,17 @@
     font-size: 0.8rem;
   }
 
-  .dash-calendar-main .mini-cal-day,
-  .dash-calendar-main .hdash__cal-cell {
+  .dash-calendar-page .mini-cal-day,
+  .dash-calendar-page .hdash__cal-cell {
     width: auto;
-    min-height: 52px;
-    font-size: 0.8rem;
+    height: auto;
+    min-height: 60px;
+    margin: 0;
+    font-size: 0.85rem;
+  }
+
+  .dash-calendar-page .mini-cal-grid {
+    gap: 3px;
   }
 
   .dash-home .dash-reminders-card .mini-cal-day {

@@ -164,6 +164,10 @@ function AppShellChrome({ children }: AppShellProps) {
     });
   }, [isOnHub]);
 
+  useEffect(() => {
+    setMobileMenuOpen(false);
+  }, [pathname]);
+
   const effectiveSidebarState = isOnHub
     ? (sidebarState ?? 'open')
     : 'hidden';
@@ -185,8 +189,6 @@ function AppShellChrome({ children }: AppShellProps) {
       localStorage.setItem('sidebar-state', 'collapsed');
     }
   }, []);
-
-  const sidebarHidden = effectiveSidebarState === 'hidden';
 
   return (
     <CurrentHubProvider value={{ currentHub, isLoading: isHubRoute && hubsLoading }}>
@@ -210,7 +212,7 @@ function AppShellChrome({ children }: AppShellProps) {
             <div className="nav-brand">
               {isOnHub && (
                 <button
-                  className={`mobile-menu-button ${sidebarHidden ? 'is-visible-desktop' : ''}`}
+                  className="mobile-menu-button"
                   onClick={handleMenuClick}
                   aria-label="Open menu"
                 >

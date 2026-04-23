@@ -803,15 +803,31 @@
 @media (max-width: 768px) {
   .sources__table-header { display: none; }
   .sources__row {
-    grid-template-columns: 24px 1fr auto;
+    grid-template-columns: 24px minmax(0, 1fr) auto;
     grid-template-rows: auto auto;
     gap: 4px 8px;
     padding: 14px 16px;
+    width: 100%;
+    margin: 0;
   }
-  .sources__cell--name { grid-column: 2; }
-  .sources__cell--type { grid-column: 2; grid-row: 2; }
+  .sources__cell--name { grid-column: 2; min-width: 0; }
+  .sources__cell--type {
+    grid-column: 2;
+    grid-row: 2;
+    transform: none;
+    min-width: 0;
+  }
   .sources__cell--status { display: none; }
   .sources__cell--actions { grid-column: 3; grid-row: 1 / 3; }
+
+  .sources,
+  .sources__main,
+  .sources__table-body {
+    overflow: visible;
+    min-height: auto;
+    height: auto;
+    flex: none;
+  }
 
   .sources {
     padding: 16px 16px 0;
@@ -876,6 +892,20 @@
   .suggested-sources__toggle {
     width: 100%;
     justify-content: center;
+  }
+
+  .sources__resource-name {
+    white-space: normal;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow: hidden;
+    word-break: break-word;
+  }
+
+  .sources__type-badge {
+    padding: 3px 8px;
+    font-size: 0.65rem;
   }
 }
 
