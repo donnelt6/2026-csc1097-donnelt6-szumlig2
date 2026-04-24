@@ -2,7 +2,7 @@ import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { GuidesPage } from "../../components/hub-dashboard/GuidesPage";
-import { listGuides } from "../../lib/api";
+import { listGuides, updateGuide } from "../../lib/api";
 import { renderWithQueryClient } from "../test-utils";
 
 vi.mock("../../lib/api", () => ({
@@ -80,7 +80,7 @@ describe("GuidesPage", () => {
 
     renderWithQueryClient(<GuidesPage hubId="hub-1" sources={[]} canEdit={false} />);
 
-    await waitFor(() => expect(screen.getByText("HR Guide 1")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole("heading", { name: "HR Guide 1" })).toBeInTheDocument());
     expect(screen.getByRole("button", { name: "HR (3)" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Security (4)" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "IT (1)" })).not.toBeInTheDocument();
@@ -88,22 +88,77 @@ describe("GuidesPage", () => {
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "HR (3)" }));
 
-    expect(screen.getByText("HR Guide 1")).toBeInTheDocument();
-    expect(screen.getByText("HR Guide 2")).toBeInTheDocument();
-    expect(screen.getByText("HR Guide 3")).toBeInTheDocument();
-    expect(screen.queryByText("IT Guide")).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "HR Guide 1" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "HR Guide 2" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "HR Guide 3" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "IT Guide" })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Security (4)" }));
 
-    expect(screen.getByText("HR Guide 1")).toBeInTheDocument();
-    expect(screen.getByText("HR Guide 2")).toBeInTheDocument();
-    expect(screen.getByText("HR Guide 3")).toBeInTheDocument();
-    expect(screen.getByText("IT Guide")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "HR Guide 1" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "HR Guide 2" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "HR Guide 3" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "IT Guide" })).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Pinned (1)" }));
 
-    expect(screen.getByText("HR Guide 2")).toBeInTheDocument();
-    expect(screen.queryByText("HR Guide 1")).not.toBeInTheDocument();
-    expect(screen.queryByText("HR Guide 3")).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "HR Guide 2" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "HR Guide 1" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "HR Guide 3" })).not.toBeInTheDocument();
+  });
+
+  it("edits the guide description from the modal and defaults it to the title", async () => {
+    vi.mocked(listGuides).mockResolvedValue([
+      {
+        id: "guide-1",
+        hub_id: "hub-1",
+        title: "Account Setup",
+        topic: "Accounts",
+        topic_label: "IT",
+        topic_labels: ["IT", "Security", "Accounts"],
+        summary: null,
+        source_ids: ["src-1"],
+        is_favourited: false,
+        created_at: "2026-01-01T00:00:00Z",
+        steps: [],
+      },
+    ]);
+    vi.mocked(updateGuide).mockResolvedValue({
+      id: "guide-1",
+      hub_id: "hub-1",
+      title: "Account Setup",
+      topic: "Accounts",
+      topic_label: "IT",
+      topic_labels: ["IT", "Security", "Accounts"],
+      summary: "How to get your accounts ready for day one",
+      source_ids: ["src-1"],
+      is_favourited: false,
+      created_at: "2026-01-01T00:00:00Z",
+      steps: [],
+    });
+
+    renderWithQueryClient(<GuidesPage hubId="hub-1" sources={[]} canEdit />);
+
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Account Setup" })).toBeInTheDocument());
+    expect(screen.getByRole("heading", { name: "Account Setup" })).toBeInTheDocument();
+    expect(screen.getAllByText("Account Setup")).toHaveLength(2);
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("heading", { name: "Account Setup" }));
+    await user.click(screen.getByTitle("Click to edit title"));
+
+    const descriptionInput = screen.getByLabelText("Guide description");
+    expect(descriptionInput).toHaveValue("Account Setup");
+
+    await user.clear(descriptionInput);
+    await user.type(descriptionInput, "How to get your accounts ready for day one");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() =>
+      expect(updateGuide).toHaveBeenCalledWith("guide-1", {
+        title: "Account Setup",
+        summary: "How to get your accounts ready for day one",
+      })
+    );
   });
 });

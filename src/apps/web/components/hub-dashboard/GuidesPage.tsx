@@ -222,6 +222,7 @@ export function GuidesPage({ hubId, sources, canEdit }: Props) {
   const [selectedGuide, setSelectedGuide] = useState<GuideEntry | null>(null);
   const [editingTitleId, setEditingTitleId] = useState<string | null>(null);
   const [titleDraft, setTitleDraft] = useState("");
+  const [summaryDraft, setSummaryDraft] = useState("");
   const [editingStepId, setEditingStepId] = useState<string | null>(null);
   const [stepDrafts, setStepDrafts] = useState<Record<string, StepDraftValues>>({});
   const [newStepDrafts, setNewStepDrafts] = useState<Record<string, StepDraftValues>>({});
@@ -367,10 +368,21 @@ export function GuidesPage({ hubId, sources, canEdit }: Props) {
     favouriteMutation.mutate({ guideId: guide.id, is_favourited: !guide.is_favourited });
   };
 
+  const getGuideDescription = (guide: GuideEntry) => {
+    const summary = (guide.summary ?? "").trim();
+    return summary || guide.title;
+  };
+
   const updateGuideMutation = useMutation({
     mutationFn: ({ guideId, payload }: { guideId: string; payload: Parameters<typeof updateGuide>[1] }) =>
       updateGuide(guideId, payload),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["guides", hubId] }),
+    onSuccess: (updatedGuide) => {
+      setSelectedGuide((prev) => {
+        if (!prev || prev.id !== updatedGuide.id) return prev;
+        return { ...prev, ...updatedGuide, steps: prev.steps };
+      });
+      queryClient.invalidateQueries({ queryKey: ["guides", hubId] });
+    },
     onError: (err) => setStatusMessage((err as Error).message),
   });
 
@@ -521,6 +533,8 @@ export function GuidesPage({ hubId, sources, canEdit }: Props) {
     setSelectedGuide(guide);
     setEditingStepId(null);
     setEditingTitleId(null);
+    setTitleDraft(guide.title);
+    setSummaryDraft(getGuideDescription(guide));
   };
 
   return (
@@ -643,6 +657,7 @@ export function GuidesPage({ hubId, sources, canEdit }: Props) {
                               openGuide(guide);
                               setEditingTitleId(guide.id);
                               setTitleDraft(guide.title);
+                              setSummaryDraft(getGuideDescription(guide));
                               setOpenMenuId(null);
                             }}
                           >
@@ -675,7 +690,7 @@ export function GuidesPage({ hubId, sources, canEdit }: Props) {
                 </div>
               </div>
               <h3 className="hub-card-title">{guide.title}</h3>
-              {guide.topic && <p className="hub-card-description">{guide.topic}</p>}
+              <p className="hub-card-description">{getGuideDescription(guide)}</p>
               <div className="guide-card__footer">
                 <div className="guide-card__meta">
                   <span className="guide-card__steps-badge">{total} {total === 1 ? 'STEP' : 'STEPS'}</span>
@@ -884,6 +899,7 @@ export function GuidesPage({ hubId, sources, canEdit }: Props) {
                     if (!canEdit) return;
                     setEditingTitleId(guide.id);
                     setTitleDraft(guide.title);
+                    setSummaryDraft(getGuideDescription(guide));
                   }}
                   title={canEdit ? "Click to edit title" : undefined}
                   style={canEdit ? { cursor: 'pointer' } : undefined}
@@ -900,18 +916,37 @@ export function GuidesPage({ hubId, sources, canEdit }: Props) {
                     autoFocus
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
-                        updateGuideMutation.mutate({ guideId: guide.id, payload: { title: titleDraft.trim() } });
+                        updateGuideMutation.mutate({
+                          guideId: guide.id,
+                          payload: {
+                            title: titleDraft.trim(),
+                            summary: summaryDraft.trim() || titleDraft.trim(),
+                          },
+                        });
                         setEditingTitleId(null);
                       }
                       if (e.key === 'Escape') setEditingTitleId(null);
                     }}
+                  />
+                  <textarea
+                    className="hdash__form-input hdash__form-textarea"
+                    value={summaryDraft}
+                    onChange={(e) => setSummaryDraft(e.target.value)}
+                    placeholder="Guide description"
+                    aria-label="Guide description"
                   />
                   <div className="gmodal__title-edit-actions">
                     <button
                       className="gmodal__step-edit-btn gmodal__step-edit-btn--save"
                       type="button"
                       onClick={() => {
-                        updateGuideMutation.mutate({ guideId: guide.id, payload: { title: titleDraft.trim() } });
+                        updateGuideMutation.mutate({
+                          guideId: guide.id,
+                          payload: {
+                            title: titleDraft.trim(),
+                            summary: summaryDraft.trim() || titleDraft.trim(),
+                          },
+                        });
                         setEditingTitleId(null);
                       }}
                     >
