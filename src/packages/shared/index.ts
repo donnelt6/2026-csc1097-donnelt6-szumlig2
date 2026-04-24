@@ -272,6 +272,7 @@ export interface FaqEntry {
   question: string;
   answer: string;
   topic_label?: string | null;
+  topic_labels?: string[];
   citations: Citation[];
   source_ids: string[];
   confidence: number;
@@ -304,6 +305,7 @@ export interface GuideEntry {
   title: string;
   topic?: string | null;
   topic_label?: string | null;
+  topic_labels?: string[];
   summary?: string | null;
   source_ids: string[];
   is_favourited?: boolean;

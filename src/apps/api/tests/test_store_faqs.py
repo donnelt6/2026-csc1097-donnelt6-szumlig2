@@ -77,6 +77,7 @@ class FakeTable:
             stored.setdefault("question", stored.get("question", "Question"))
             stored.setdefault("answer", stored.get("answer", "Answer"))
             stored.setdefault("topic_label", stored.get("topic_label"))
+            stored.setdefault("topic_labels", stored.get("topic_labels", []))
             stored.setdefault("citations", stored.get("citations", []))
             stored.setdefault("source_ids", stored.get("source_ids", []))
             stored.setdefault("confidence", stored.get("confidence", 1.0))
@@ -240,7 +241,7 @@ def test_generate_faqs_skips_entries_when_no_matches_clear_similarity_threshold(
     assert entries == []
 
 
-def test_generate_faqs_persists_topic_label(monkeypatch) -> None:
+def test_generate_faqs_persists_topic_labels(monkeypatch) -> None:
     fake_client = FakeClient()
     monkeypatch.setattr(
         store,
@@ -257,7 +258,7 @@ def test_generate_faqs_persists_topic_label(monkeypatch) -> None:
         ],
     )
     monkeypatch.setattr(store, "_generate_faq_answer", lambda question, context: "Answer [1]")
-    monkeypatch.setattr(store, "_safe_topic_label_for_faq", lambda question, answer: "HR")
+    monkeypatch.setattr(store, "_safe_topic_labels_for_faq", lambda question, answer: ["HR", "Security", "Onboarding"])
 
     payload = FaqGenerateRequest(
         hub_id="11111111-1111-1111-1111-111111111111",
@@ -267,9 +268,10 @@ def test_generate_faqs_persists_topic_label(monkeypatch) -> None:
 
     assert len(entries) == 1
     assert entries[0].topic_label == "HR"
+    assert entries[0].topic_labels == ["HR", "Security", "Onboarding"]
 
 
-def test_update_faq_recomputes_topic_label(monkeypatch) -> None:
+def test_update_faq_recomputes_topic_labels(monkeypatch) -> None:
     fake_client = FakeClient()
     monkeypatch.setattr(
         store,
@@ -280,6 +282,7 @@ def test_update_faq_recomputes_topic_label(monkeypatch) -> None:
             question="Old question",
             answer="Old answer",
             topic_label="IT",
+            topic_labels=["IT"],
             citations=[],
             source_ids=[],
             confidence=1.0,
@@ -287,16 +290,16 @@ def test_update_faq_recomputes_topic_label(monkeypatch) -> None:
             created_at="2026-01-01T00:00:00Z",
         ),
     )
-    monkeypatch.setattr(store, "_safe_topic_label_for_faq", lambda question, answer: "HR")
+    monkeypatch.setattr(store, "_safe_topic_labels_for_faq", lambda question, answer: ["HR", "Security"])
 
     store.update_faq(fake_client, "faq-1", {"question": "New question"})
 
     assert fake_client.updates == [
-        ("faq_entries", {"question": "New question", "topic_label": "HR"}, [("id", "faq-1")])
+        ("faq_entries", {"question": "New question", "topic_label": "HR", "topic_labels": ["HR", "Security"]}, [("id", "faq-1")])
     ]
 
 
-def test_safe_topic_label_for_faq_falls_back_to_none_on_classifier_failure(monkeypatch) -> None:
-    monkeypatch.setattr(store, "_classify_topic_label", lambda content: (_ for _ in ()).throw(RuntimeError("boom")))
+def test_safe_topic_labels_for_faq_falls_back_to_empty_on_classifier_failure(monkeypatch) -> None:
+    monkeypatch.setattr(store, "_classify_topic_labels", lambda content: (_ for _ in ()).throw(RuntimeError("boom")))
 
-    assert store._safe_topic_label_for_faq("Question", "Answer") is None
+    assert store._safe_topic_labels_for_faq("Question", "Answer") == []
