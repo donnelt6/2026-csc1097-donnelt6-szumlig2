@@ -46,6 +46,7 @@ import {
 } from "../../lib/api";
 import type { Citation, FlagReason, GuideEntry, GuideStep, Source } from "@shared/index";
 import { FlagModal } from "./FlagModal";
+import { TopicFilterPills } from "./TopicFilterPills";
 import { formatRelativeTime } from "../../lib/utils";
 import { useSearch } from "../../lib/SearchContext";
 import { MobileSearchBar } from "./MobileSearchBar";
@@ -257,7 +258,7 @@ export function GuidesPage({ hubId, sources, canEdit }: Props) {
   const guides = useMemo(() => {
     let filtered = allGuides;
     if (filterTab === 'favourites') filtered = filtered.filter((g) => g.is_favourited);
-    filtered = filtered.filter((g) => matchesTopicFilter(g.topic_label ?? null, selectedTopic));
+    filtered = filtered.filter((g) => matchesTopicFilter(g, selectedTopic));
     if (searchQuery.trim()) {
       const q = searchQuery.trim().toLowerCase();
       filtered = filtered.filter(
@@ -548,25 +549,12 @@ export function GuidesPage({ hubId, sources, canEdit }: Props) {
               </button>
             </div>
             {topicOptions.length > 0 && (
-              <div className="sources__filter-pills" aria-label="Guide topic filters">
-                <button
-                  type="button"
-                  className={`sources__filter-pill${selectedTopic === null ? ' sources__filter-pill--active' : ''}`}
-                  onClick={() => setSelectedTopic(null)}
-                >
-                  All Topics
-                </button>
-                {topicOptions.map((topic) => (
-                  <button
-                    key={topic.label}
-                    type="button"
-                    className={`sources__filter-pill${selectedTopic === topic.label ? ' sources__filter-pill--active' : ''}`}
-                    onClick={() => setSelectedTopic((current) => current === topic.label ? null : topic.label)}
-                  >
-                    {topic.label} ({topic.count})
-                  </button>
-                ))}
-              </div>
+              <TopicFilterPills
+                options={topicOptions}
+                selectedTopic={selectedTopic}
+                onSelectTopic={setSelectedTopic}
+                ariaLabel="Guide topic filters"
+              />
             )}
           </div>
         </div>

@@ -2695,17 +2695,43 @@
 
 .faq-toolbar__left {
   display: flex;
-  align-items: center;
+  align-items: stretch;
   gap: 12px;
   flex: 1 1 420px;
   min-width: 0;
+  width: 100%;
 }
 
 .faq-toolbar__filters {
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+}
+
+.topic-filter-pills {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
   gap: 8px;
-  flex-wrap: wrap;
+  min-width: 0;
+  width: fit-content;
+  max-width: 100%;
+}
+
+.topic-filter-pills__row {
+  align-self: flex-start;
+}
+
+.topic-filter-pills__measure {
+  position: absolute;
+  visibility: hidden;
+  pointer-events: none;
+  white-space: nowrap;
+  inset: auto;
+  overflow: hidden;
+  height: 0;
 }
 
 .faq-action-buttons {

@@ -22,6 +22,7 @@ import { archiveFaq, askQuestion, createFaq, flagFaq, generateFaqs, listFaqs, up
 import { useSearch } from "../../lib/SearchContext";
 import { FlagModal } from "./FlagModal";
 import { MobileSearchBar } from "./MobileSearchBar";
+import { TopicFilterPills } from "./TopicFilterPills";
 import { buildTopicFilterOptions, matchesTopicFilter } from "./topicFilters";
 import type { Citation, FaqEntry, FlagReason, Source } from "@shared/index";
 
@@ -106,7 +107,7 @@ export function FaqsPage({ hubId, sources, canEdit }: Props) {
   const entries = useMemo(() => {
     let filtered = allEntries;
     if (filterTab === 'favourites') filtered = filtered.filter((f) => f.is_pinned);
-    filtered = filtered.filter((f) => matchesTopicFilter(f.topic_label ?? null, selectedTopic));
+    filtered = filtered.filter((f) => matchesTopicFilter(f, selectedTopic));
     if (searchQuery.trim()) {
       const q = searchQuery.trim().toLowerCase();
       filtered = filtered.filter(
@@ -315,25 +316,12 @@ export function FaqsPage({ hubId, sources, canEdit }: Props) {
               </button>
             </div>
             {topicOptions.length > 0 && (
-              <div className="sources__filter-pills" aria-label="FAQ topic filters">
-                <button
-                  type="button"
-                  className={`sources__filter-pill${selectedTopic === null ? ' sources__filter-pill--active' : ''}`}
-                  onClick={() => setSelectedTopic(null)}
-                >
-                  All Topics
-                </button>
-                {topicOptions.map((topic) => (
-                  <button
-                    key={topic.label}
-                    type="button"
-                    className={`sources__filter-pill${selectedTopic === topic.label ? ' sources__filter-pill--active' : ''}`}
-                    onClick={() => setSelectedTopic((current) => current === topic.label ? null : topic.label)}
-                  >
-                    {topic.label} ({topic.count})
-                  </button>
-                ))}
-              </div>
+              <TopicFilterPills
+                options={topicOptions}
+                selectedTopic={selectedTopic}
+                onSelectTopic={setSelectedTopic}
+                ariaLabel="FAQ topic filters"
+              />
             )}
           </div>
         </div>
