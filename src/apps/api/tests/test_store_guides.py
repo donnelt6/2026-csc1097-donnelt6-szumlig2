@@ -358,3 +358,15 @@ def test_safe_topic_labels_for_guide_prefers_cleaned_title_or_topic(monkeypatch)
     )
 
     assert labels == ["Vector Clock", "Distributed Systems", "Concurrency"]
+
+
+def test_safe_topic_labels_for_guide_merges_explicit_topic_with_recomputed_labels(monkeypatch) -> None:
+    monkeypatch.setattr(store, "_safe_classify_topic_labels", lambda content: ["Security", "Access"])
+
+    labels = store._safe_topic_labels_for_guide(
+        title="account access",
+        topic="onbroading",
+        step_payloads=[{"title": "Reset password", "instruction": "Use the password portal"}],
+    )
+
+    assert labels == ["Onbroading", "Account Access", "Security"]

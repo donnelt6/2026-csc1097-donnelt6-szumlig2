@@ -516,9 +516,6 @@ class ContentStoreMixin:
         step_payloads: Optional[List[Dict[str, str]]] = None,
     ) -> List[str]:
         title_or_topic_labels = self._derive_guide_labels_from_title_or_topic(topic=topic, title=title)
-        explicit_topic_label = self._clean_guide_subject_phrase(topic)
-        if explicit_topic_label:
-            return [explicit_topic_label]
         if title_or_topic_labels:
             ai_sections: List[str] = []
             if title:
