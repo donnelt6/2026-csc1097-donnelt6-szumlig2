@@ -1207,6 +1207,15 @@ export const ChatPanel = forwardRef<ChatPanelHandle, Props>(function ChatPanel({
                                     message.response.flag_status === "open" ||
                                     message.response.flag_status === "in_review"
                                   }
+                                  aria-label={
+                                    message.response.flag_status === "open"
+                                      ? "Response flagged"
+                                      : message.response.flag_status === "in_review"
+                                        ? "Flagged response in review"
+                                        : flaggingMessageId === message.response.message_id
+                                          ? "Reporting response"
+                                          : "Report response"
+                                  }
                                 >
                                   <FlagIcon className="chat__action-icon" />
                                   <span className="chat__action-label">

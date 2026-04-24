@@ -172,9 +172,7 @@ function AppShellChrome({ children }: AppShellProps) {
   useEffect(() => {
     const mq = window.matchMedia('(max-width: 768px)');
     const sync = () => {
-      if (mq.matches) {
-        setMobileMenuOpen(false);
-      }
+      setMobileMenuOpen(false);
     };
     sync();
     mq.addEventListener('change', sync);
