@@ -271,6 +271,7 @@ def test_generate_guide_persists_topic_labels_from_supplied_topic(monkeypatch) -
         lambda context, topic, count: [{"title": "Step 1", "instruction": "First"}],
     )
     monkeypatch.setattr(store, "_embed_query", lambda text: [0.1])
+    monkeypatch.setattr(store, "_safe_classify_topic_labels", lambda content: ["HR Process", "Onboarding Steps"])
     monkeypatch.setattr(
         store,
         "_match_chunks",
@@ -288,7 +289,7 @@ def test_generate_guide_persists_topic_labels_from_supplied_topic(monkeypatch) -
 
     assert entry is not None
     assert entry.topic_label == "HR"
-    assert entry.topic_labels == ["HR"]
+    assert entry.topic_labels == ["HR", "HR Process", "Onboarding Steps"]
 
 
 def test_update_guide_recomputes_topic_labels(monkeypatch) -> None:
