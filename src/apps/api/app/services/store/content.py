@@ -56,7 +56,7 @@ class ContentStoreMixin:
             "hub_id": hub_id,
             "question": question,
             "answer": answer,
-            "topic_label": self._safe_topic_label_for_faq(question, answer),
+            **self._build_topic_payload(self._safe_topic_labels_for_faq(question, answer)),
             "citations": [],
             "source_ids": [],
             "confidence": 1.0,
@@ -132,7 +132,7 @@ class ContentStoreMixin:
                     "hub_id": hub_id,
                     "question": question,
                     "answer": answer,
-                    "topic_label": self._safe_topic_label_for_faq(question, answer),
+                    **self._build_topic_payload(self._safe_topic_labels_for_faq(question, answer)),
                     "citations": [citation.model_dump() for citation in citations],
                     "source_ids": source_ids,
                     "confidence": confidence,
@@ -156,7 +156,7 @@ class ContentStoreMixin:
             existing = self.get_faq(client, faq_id)
             question = payload.get("question", existing.question)
             answer = payload.get("answer", existing.answer)
-            payload = {**payload, "topic_label": self._safe_topic_label_for_faq(question, answer)}
+            payload = {**payload, **self._build_topic_payload(self._safe_topic_labels_for_faq(question, answer))}
         response = client.table("faq_entries").update(payload).eq("id", str(faq_id)).execute()
         if not response.data:
             raise KeyError("FAQ entry not found")
@@ -255,9 +255,7 @@ class ContentStoreMixin:
         batch_id = str(uuid.uuid4())
         topic = (payload.topic or "").strip() or None
         title = topic or "Onboarding Guide"
-        topic_label = self._normalize_topic_label(topic) if topic else None
-        if not topic_label:
-            topic_label = self._safe_topic_label_for_guide(title=title, topic=topic, step_payloads=steps)
+        topic_labels = self._safe_topic_labels_for_guide(title=title, topic=topic, step_payloads=steps)
         steps_payload: List[dict] = []
         kept_index = 1
 
@@ -298,7 +296,7 @@ class ContentStoreMixin:
                     "hub_id": hub_id,
                     "title": title,
                     "topic": topic,
-                    "topic_label": topic_label,
+                    **self._build_topic_payload(topic_labels),
                     "summary": None,
                     "source_ids": source_ids,
                     "created_by": user_id,
@@ -324,11 +322,13 @@ class ContentStoreMixin:
             steps = self._fetch_guide_steps(client, guide_id)
             payload = {
                 **payload,
-                "topic_label": self._safe_topic_label_for_guide(
-                    title=payload.get("title", existing.title),
-                    topic=payload.get("topic", existing.topic),
-                    summary=payload.get("summary", existing.summary),
-                    step_rows=steps,
+                **self._build_topic_payload(
+                    self._safe_topic_labels_for_guide(
+                        title=payload.get("title", existing.title),
+                        topic=payload.get("topic", existing.topic),
+                        summary=payload.get("summary", existing.summary),
+                        step_rows=steps,
+                    )
                 ),
             }
         response = client.table("guide_entries").update(payload).eq("id", str(guide_id)).execute()
@@ -485,20 +485,28 @@ class ContentStoreMixin:
         if not guide.data:
             return
         row = guide.data[0]
-        topic_label = self._safe_topic_label_for_guide(
+        topic_labels = self._safe_topic_labels_for_guide(
             title=row.get("title"),
             topic=row.get("topic"),
             summary=row.get("summary"),
             step_rows=self._fetch_guide_steps(client, guide_id),
         )
-        client.table("guide_entries").update({"topic_label": topic_label}).eq("id", str(guide_id)).execute()
+        client.table("guide_entries").update(self._build_topic_payload(topic_labels)).eq("id", str(guide_id)).execute()
 
-    # Build a short, stable topic label for FAQ text. Failures fall back to None.
-    def _safe_topic_label_for_faq(self, question: Optional[str], answer: Optional[str]) -> Optional[str]:
-        return self._safe_classify_topic_label("\n".join(part for part in [question, answer] if part))
+    # Persist the primary label alongside the full ranked list for compatibility with older reads.
+    @staticmethod
+    def _build_topic_payload(topic_labels: List[str]) -> dict:
+        return {
+            "topic_label": topic_labels[0] if topic_labels else None,
+            "topic_labels": topic_labels,
+        }
 
-    # Build a short, stable topic label for a guide using the most useful available guide content.
-    def _safe_topic_label_for_guide(
+    # Build a short, ranked label list for FAQ text. Failures fall back to an empty list.
+    def _safe_topic_labels_for_faq(self, question: Optional[str], answer: Optional[str]) -> List[str]:
+        return self._safe_classify_topic_labels("\n".join(part for part in [question, answer] if part))
+
+    # Build a short, ranked label list for a guide using the most useful available guide content.
+    def _safe_topic_labels_for_guide(
         self,
         *,
         title: Optional[str],
@@ -506,10 +514,37 @@ class ContentStoreMixin:
         summary: Optional[str] = None,
         step_rows: Optional[List[dict]] = None,
         step_payloads: Optional[List[Dict[str, str]]] = None,
-    ) -> Optional[str]:
-        normalized_topic = self._normalize_topic_label(topic)
-        if normalized_topic:
-            return normalized_topic
+    ) -> List[str]:
+        title_or_topic_labels = self._derive_guide_labels_from_title_or_topic(topic=topic, title=title)
+        if title_or_topic_labels:
+            ai_sections: List[str] = []
+            if title:
+                ai_sections.append(f"Title: {title}")
+            if summary:
+                ai_sections.append(f"Summary: {summary}")
+            for index, step in enumerate(step_rows or step_payloads or [], start=1):
+                step_title = (step.get("title") or "").strip()
+                instruction = (step.get("instruction") or "").strip()
+                if not step_title and not instruction:
+                    continue
+                parts = [f"Step {index}:"]
+                if step_title:
+                    parts.append(step_title)
+                if instruction:
+                    parts.append(instruction)
+                ai_sections.append(" ".join(parts))
+            ai_labels = self._safe_classify_topic_labels("\n".join(ai_sections))
+            merged: List[str] = []
+            seen: set[str] = set()
+            for label in [*title_or_topic_labels, *ai_labels]:
+                key = label.lower()
+                if key in seen:
+                    continue
+                merged.append(label)
+                seen.add(key)
+                if len(merged) >= 3:
+                    break
+            return merged
         sections: List[str] = []
         if title:
             sections.append(f"Title: {title}")
@@ -526,18 +561,70 @@ class ContentStoreMixin:
             if instruction:
                 parts.append(instruction)
             sections.append(" ".join(parts))
-        return self._safe_classify_topic_label("\n".join(sections))
+        return self._safe_classify_topic_labels("\n".join(sections))
 
-    # Ask the model for one short topic label, but never let classifier failures block content writes.
-    def _safe_classify_topic_label(self, content: str) -> Optional[str]:
+    # Prefer a clean subject phrase from guide topic/title before falling back to broader AI classification.
+    def _derive_guide_labels_from_title_or_topic(self, *, topic: Optional[str], title: Optional[str]) -> List[str]:
+        candidates = [topic, title]
+        labels: List[str] = []
+        seen: set[str] = set()
+        for candidate in candidates:
+            label = self._clean_guide_subject_phrase(candidate)
+            if not label:
+                continue
+            key = label.lower()
+            if key in seen:
+                continue
+            labels.append(label)
+            seen.add(key)
+        return labels[:3]
+
+    # Strip common guide boilerplate so titles like "guide to setting up a vector clock" become "Vector Clock".
+    def _clean_guide_subject_phrase(self, raw: Optional[str]) -> Optional[str]:
+        if raw is None:
+            return None
+        phrase = raw.strip()
+        if not phrase:
+            return None
+        phrase = phrase.lower()
+        phrase = re.sub(r"[^\w\s&/-]", " ", phrase)
+        phrase = re.sub(
+            r"^(guide\s+to|guide\s+for|guide|how\s+to|setting\s+up|setup|set\s+up|introduction\s+to|intro\s+to|mastering)\s+",
+            "",
+            phrase,
+        )
+        phrase = re.sub(
+            r"^(guide\s+to|guide\s+for|guide|how\s+to|setting\s+up|setup|set\s+up|introduction\s+to|intro\s+to|mastering)\s+",
+            "",
+            phrase,
+        )
+        phrase = re.sub(r"\b(for|new|the|a|an)\b", " ", phrase)
+        phrase = re.sub(r"\s+", " ", phrase).strip(" -/")
+        if not phrase:
+            return None
+        generic_phrases = {
+            "guide",
+            "setup",
+            "setting",
+            "setting up",
+            "programming",
+            "guide to setting",
+            "guide to setup",
+        }
+        if phrase in generic_phrases:
+            return None
+        return self._normalize_topic_label(phrase)
+
+    # Ask the model for short topic labels, but never let classifier failures block content writes.
+    def _safe_classify_topic_labels(self, content: str) -> List[str]:
         trimmed = _trim_text(content or "", 4000).strip()
         if not trimmed:
-            return None
+            return []
         try:
-            return self._classify_topic_label(trimmed)
+            return self._classify_topic_labels(trimmed)
         except Exception as exc:
             logger.warning("Topic label classification failed: %s", exc)
-            return None
+            return []
 
     # Normalize raw model output into a short Title Case label that can be shown in the UI.
     def _normalize_topic_label(self, raw: Optional[str]) -> Optional[str]:
@@ -566,16 +653,35 @@ class ContentStoreMixin:
             return None
         return normalized[:40].strip()
 
-    # Use the chat model to classify content into a short label such as HR or IT Setup.
-    def _classify_topic_label(self, content: str) -> Optional[str]:
+    # Parse raw classifier output into a ranked label list with duplicates removed.
+    def _normalize_topic_labels(self, raw: Optional[str]) -> List[str]:
+        if raw is None:
+            return []
+        labels: List[str] = []
+        seen: set[str] = set()
+        for part in re.split(r"[\n,;|]+", raw):
+            normalized = self._normalize_topic_label(part)
+            if not normalized:
+                continue
+            key = normalized.lower()
+            if key in seen:
+                continue
+            labels.append(normalized)
+            seen.add(key)
+            if len(labels) >= 3:
+                break
+        return labels
+
+    # Use the chat model to classify content into a short ranked label list such as HR, Security, IT Setup.
+    def _classify_topic_labels(self, content: str) -> List[str]:
         system_prompt = (
-            "You label onboarding content. Return exactly one short topic label in plain text. "
-            "Use 1 to 3 words, Title Case, no quotes, no bullets, no punctuation-heavy phrasing, and no explanations."
+            "You label onboarding content. Return the 3 most likely topic labels as a comma-separated list. "
+            "Each label must be 1 to 3 words, Title Case, no quotes, no bullets, and no explanations."
         )
         user_prompt = (
-            "Classify this content into one concise topic label suitable for a filter pill.\n\n"
+            "Classify this content into the 3 most likely topic labels suitable for filter pills.\n\n"
             f"Content:\n{content}\n\n"
-            "Return only the label."
+            "Return only the comma-separated labels."
         )
         completion = self.llm_client.chat.completions.create(
             model=self.chat_model,
@@ -583,4 +689,4 @@ class ContentStoreMixin:
             temperature=0,
         )
         raw = completion.choices[0].message.content or ""
-        return self._normalize_topic_label(raw)
+        return self._normalize_topic_labels(raw)

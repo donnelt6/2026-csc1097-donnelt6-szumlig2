@@ -76,6 +76,7 @@ class FakeTable:
                 stored.setdefault("title", stored.get("title", "Guide"))
                 stored.setdefault("topic", stored.get("topic"))
                 stored.setdefault("topic_label", stored.get("topic_label"))
+                stored.setdefault("topic_labels", stored.get("topic_labels", []))
                 stored.setdefault("summary", stored.get("summary"))
                 stored.setdefault("source_ids", [])
                 stored.setdefault("is_favourited", False)
@@ -257,7 +258,7 @@ def test_generate_guide_sparse_fallback_keeps_best_raw_matches(monkeypatch) -> N
     assert [citation.source_id for citation in entry.steps[0].citations] == ["src-low", "src-lower"]
 
 
-def test_generate_guide_persists_topic_label_from_supplied_topic(monkeypatch) -> None:
+def test_generate_guide_persists_topic_labels_from_supplied_topic(monkeypatch) -> None:
     fake_client = FakeClient()
     monkeypatch.setattr(
         store,
@@ -287,9 +288,10 @@ def test_generate_guide_persists_topic_label_from_supplied_topic(monkeypatch) ->
 
     assert entry is not None
     assert entry.topic_label == "HR"
+    assert entry.topic_labels == ["HR"]
 
 
-def test_update_guide_recomputes_topic_label(monkeypatch) -> None:
+def test_update_guide_recomputes_topic_labels(monkeypatch) -> None:
     fake_client = FakeClient()
     monkeypatch.setattr(
         store,
@@ -307,14 +309,14 @@ def test_update_guide_recomputes_topic_label(monkeypatch) -> None:
         )(),
     )
     monkeypatch.setattr(store, "_fetch_guide_steps", lambda client, guide_id: [{"title": "Step 1", "instruction": "Do this"}])
-    monkeypatch.setattr(store, "_safe_topic_label_for_guide", lambda **kwargs: "HR")
+    monkeypatch.setattr(store, "_safe_topic_labels_for_guide", lambda **kwargs: ["HR", "Security"])
 
     table = FakeTable("guide_entries")
     monkeypatch.setattr(fake_client, "table", lambda name: table if name == "guide_entries" else FakeTable(name))
 
     store.update_guide(fake_client, "guide-1", {"title": "Updated title"})
 
-    assert table._payload == {"title": "Updated title", "topic_label": "HR"}
+    assert table._payload == {"title": "Updated title", "topic_label": "HR", "topic_labels": ["HR", "Security"]}
 
 
 def test_create_guide_step_refreshes_parent_topic_label(monkeypatch) -> None:
@@ -339,3 +341,20 @@ def test_update_guide_step_refreshes_parent_topic_label(monkeypatch) -> None:
     store.update_guide_step(fake_client, "step-1", {"instruction": "Updated"})
 
     assert refreshed == ["guide-1"]
+
+
+def test_clean_guide_subject_phrase_strips_setup_boilerplate() -> None:
+    assert store._clean_guide_subject_phrase("setting up a vector clock") == "Vector Clock"
+    assert store._clean_guide_subject_phrase("guide to setting up vector clock") == "Vector Clock"
+
+
+def test_safe_topic_labels_for_guide_prefers_cleaned_title_or_topic(monkeypatch) -> None:
+    monkeypatch.setattr(store, "_safe_classify_topic_labels", lambda content: ["Distributed Systems", "Concurrency"])
+
+    labels = store._safe_topic_labels_for_guide(
+        title="guide to setting up vector clock",
+        topic=None,
+        step_payloads=[{"title": "Step 1", "instruction": "Configure the clock"}],
+    )
+
+    assert labels == ["Vector Clock", "Distributed Systems", "Concurrency"]
