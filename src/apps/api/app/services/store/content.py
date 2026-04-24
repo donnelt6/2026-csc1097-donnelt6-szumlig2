@@ -505,11 +505,6 @@ class ContentStoreMixin:
     def _safe_topic_labels_for_faq(self, question: Optional[str], answer: Optional[str]) -> List[str]:
         return self._safe_classify_topic_labels("\n".join(part for part in [question, answer] if part))
 
-    # Compatibility shim for callers that still expect the original single-label helper.
-    def _safe_topic_label_for_faq(self, question: Optional[str], answer: Optional[str]) -> Optional[str]:
-        labels = self._safe_topic_labels_for_faq(question, answer)
-        return labels[0] if labels else None
-
     # Build a short, ranked label list for a guide using the most useful available guide content.
     def _safe_topic_labels_for_guide(
         self,
@@ -698,8 +693,3 @@ class ContentStoreMixin:
         )
         raw = completion.choices[0].message.content or ""
         return self._normalize_topic_labels(raw)
-
-    # Compatibility shim for older tests and call sites that still expect one label.
-    def _classify_topic_label(self, content: str) -> Optional[str]:
-        labels = self._classify_topic_labels(content)
-        return labels[0] if labels else None
