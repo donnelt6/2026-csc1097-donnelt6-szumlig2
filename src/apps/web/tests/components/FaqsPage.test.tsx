@@ -28,6 +28,7 @@ describe("FaqsPage", () => {
         question: "HR Question 1",
         answer: "Answer [1]",
         topic_label: "HR",
+        topic_labels: ["HR", "Security"],
         citations: [],
         source_ids: ["src-1"],
         confidence: 0.8,
@@ -40,6 +41,7 @@ describe("FaqsPage", () => {
         question: "HR Question 2",
         answer: "Answer [1]",
         topic_label: "HR",
+        topic_labels: ["HR", "Security"],
         citations: [],
         source_ids: ["src-1"],
         confidence: 0.8,
@@ -52,6 +54,7 @@ describe("FaqsPage", () => {
         question: "HR Question 3",
         answer: "Answer [1]",
         topic_label: "HR",
+        topic_labels: ["HR", "Security"],
         citations: [],
         source_ids: ["src-1"],
         confidence: 0.8,
@@ -64,6 +67,7 @@ describe("FaqsPage", () => {
         question: "Payroll Question",
         answer: "Answer [1]",
         topic_label: "Payroll",
+        topic_labels: ["Payroll", "Security"],
         citations: [],
         source_ids: ["src-1"],
         confidence: 0.8,
@@ -76,6 +80,7 @@ describe("FaqsPage", () => {
 
     await waitFor(() => expect(screen.getByText("HR Question 1")).toBeInTheDocument());
     expect(screen.getByRole("button", { name: "HR (3)" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Security (4)" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Payroll (1)" })).not.toBeInTheDocument();
 
     const user = userEvent.setup();
@@ -85,6 +90,13 @@ describe("FaqsPage", () => {
     expect(screen.getByText("HR Question 2")).toBeInTheDocument();
     expect(screen.getByText("HR Question 3")).toBeInTheDocument();
     expect(screen.queryByText("Payroll Question")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Security (4)" }));
+
+    expect(screen.getByText("HR Question 1")).toBeInTheDocument();
+    expect(screen.getByText("HR Question 2")).toBeInTheDocument();
+    expect(screen.getByText("HR Question 3")).toBeInTheDocument();
+    expect(screen.getByText("Payroll Question")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Pinned (1)" }));
 
@@ -101,6 +113,7 @@ describe("FaqsPage", () => {
         question: `Question ${index + 1}`,
         answer: "Answer [1]",
         topic_label: index < 6 ? "HR" : null,
+        topic_labels: index < 6 ? ["HR", "Security"] : ["Security"],
         citations: [],
         source_ids: ["src-1"],
         confidence: 0.8,

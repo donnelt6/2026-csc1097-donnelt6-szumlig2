@@ -30,6 +30,7 @@ describe("GuidesPage", () => {
         title: "HR Guide 1",
         topic: "New Hire",
         topic_label: "HR",
+        topic_labels: ["HR", "Security"],
         summary: null,
         source_ids: ["src-1"],
         is_favourited: false,
@@ -42,6 +43,7 @@ describe("GuidesPage", () => {
         title: "HR Guide 2",
         topic: "Benefits",
         topic_label: "HR",
+        topic_labels: ["HR", "Security"],
         summary: null,
         source_ids: ["src-1"],
         is_favourited: true,
@@ -54,6 +56,7 @@ describe("GuidesPage", () => {
         title: "HR Guide 3",
         topic: "Leave Policy",
         topic_label: "HR",
+        topic_labels: ["HR", "Security"],
         summary: null,
         source_ids: ["src-1"],
         is_favourited: false,
@@ -66,6 +69,7 @@ describe("GuidesPage", () => {
         title: "IT Guide",
         topic: "Accounts",
         topic_label: "IT",
+        topic_labels: ["IT", "Security"],
         summary: null,
         source_ids: ["src-1"],
         is_favourited: false,
@@ -78,6 +82,7 @@ describe("GuidesPage", () => {
 
     await waitFor(() => expect(screen.getByText("HR Guide 1")).toBeInTheDocument());
     expect(screen.getByRole("button", { name: "HR (3)" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Security (4)" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "IT (1)" })).not.toBeInTheDocument();
 
     const user = userEvent.setup();
@@ -87,6 +92,13 @@ describe("GuidesPage", () => {
     expect(screen.getByText("HR Guide 2")).toBeInTheDocument();
     expect(screen.getByText("HR Guide 3")).toBeInTheDocument();
     expect(screen.queryByText("IT Guide")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Security (4)" }));
+
+    expect(screen.getByText("HR Guide 1")).toBeInTheDocument();
+    expect(screen.getByText("HR Guide 2")).toBeInTheDocument();
+    expect(screen.getByText("HR Guide 3")).toBeInTheDocument();
+    expect(screen.getByText("IT Guide")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Pinned (1)" }));
 
