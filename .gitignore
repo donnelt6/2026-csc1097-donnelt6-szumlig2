@@ -11,7 +11,9 @@ deno.lock
 src/apps/api/eval-results/
 
 # Local copies of aplied Supabase migrations 
-src/apps/api/migrations/
+src/apps/api/migrations/*
+!src/apps/api/migrations/026_content_topic_labels.sql
+!src/apps/api/migrations/027_content_topic_label_lists.sql
 
 # True E2E runtime state and ad-hoc logs
 src/apps/web/e2e/true/.runtime/

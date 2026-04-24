@@ -46,9 +46,11 @@ import {
 } from "../../lib/api";
 import type { Citation, FlagReason, GuideEntry, GuideStep, Source } from "@shared/index";
 import { FlagModal } from "./FlagModal";
+import { TopicFilterPills } from "./TopicFilterPills";
 import { formatRelativeTime } from "../../lib/utils";
 import { useSearch } from "../../lib/SearchContext";
 import { MobileSearchBar } from "./MobileSearchBar";
+import { buildTopicFilterOptions, matchesTopicFilter } from "./topicFilters";
 
 interface Props {
   hubId: string;
@@ -194,7 +196,8 @@ export function GuidesPage({ hubId, sources, canEdit }: Props) {
   const [page, setPage] = useState(1);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [flagTargetId, setFlagTargetId] = useState<string | null>(null);
-  const [filterTab, setFilterTab] = useState<'recent' | 'favourites'>('recent');
+  const [filterTab, setFilterTab] = useState<'all' | 'favourites'>('all');
+  const [selectedTopic, setSelectedTopic] = useState<string | null>(null);
 
   const [topic, setTopic] = useState("");
   const [stepCountInput, setStepCountInput] = useState("5");
@@ -219,6 +222,7 @@ export function GuidesPage({ hubId, sources, canEdit }: Props) {
   const [selectedGuide, setSelectedGuide] = useState<GuideEntry | null>(null);
   const [editingTitleId, setEditingTitleId] = useState<string | null>(null);
   const [titleDraft, setTitleDraft] = useState("");
+  const [summaryDraft, setSummaryDraft] = useState("");
   const [editingStepId, setEditingStepId] = useState<string | null>(null);
   const [stepDrafts, setStepDrafts] = useState<Record<string, StepDraftValues>>({});
   const [newStepDrafts, setNewStepDrafts] = useState<Record<string, StepDraftValues>>({});
@@ -251,9 +255,11 @@ export function GuidesPage({ hubId, sources, canEdit }: Props) {
   const { searchQuery } = useSearch();
 
   const allGuides = useMemo(() => data ?? [], [data]);
+  const topicOptions = useMemo(() => buildTopicFilterOptions(allGuides), [allGuides]);
   const guides = useMemo(() => {
     let filtered = allGuides;
     if (filterTab === 'favourites') filtered = filtered.filter((g) => g.is_favourited);
+    filtered = filtered.filter((g) => matchesTopicFilter(g, selectedTopic));
     if (searchQuery.trim()) {
       const q = searchQuery.trim().toLowerCase();
       filtered = filtered.filter(
@@ -268,11 +274,11 @@ export function GuidesPage({ hubId, sources, canEdit }: Props) {
       );
     }
     return filtered;
-  }, [allGuides, filterTab, searchQuery]);
+  }, [allGuides, filterTab, searchQuery, selectedTopic]);
 
   useEffect(() => {
     setPage(1);
-  }, [filterTab, searchQuery]);
+  }, [filterTab, selectedTopic, searchQuery]);
 
   const favouriteCount = allGuides.filter((g) => g.is_favourited).length;
 
@@ -362,10 +368,21 @@ export function GuidesPage({ hubId, sources, canEdit }: Props) {
     favouriteMutation.mutate({ guideId: guide.id, is_favourited: !guide.is_favourited });
   };
 
+  const getGuideDescription = (guide: GuideEntry) => {
+    const summary = (guide.summary ?? "").trim();
+    return summary || guide.title;
+  };
+
   const updateGuideMutation = useMutation({
     mutationFn: ({ guideId, payload }: { guideId: string; payload: Parameters<typeof updateGuide>[1] }) =>
       updateGuide(guideId, payload),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["guides", hubId] }),
+    onSuccess: (updatedGuide) => {
+      setSelectedGuide((prev) => {
+        if (!prev || prev.id !== updatedGuide.id) return prev;
+        return { ...prev, ...updatedGuide, steps: prev.steps };
+      });
+      queryClient.invalidateQueries({ queryKey: ["guides", hubId] });
+    },
     onError: (err) => setStatusMessage((err as Error).message),
   });
 
@@ -516,6 +533,8 @@ export function GuidesPage({ hubId, sources, canEdit }: Props) {
     setSelectedGuide(guide);
     setEditingStepId(null);
     setEditingTitleId(null);
+    setTitleDraft(guide.title);
+    setSummaryDraft(getGuideDescription(guide));
   };
 
   return (
@@ -525,19 +544,33 @@ export function GuidesPage({ hubId, sources, canEdit }: Props) {
       <MobileSearchBar placeholder="Search guides..." />
 
       <div className="faq-toolbar">
-        <div className="hubs-toolbar-tabs">
-          <button
-            className={`hubs-tab${filterTab === 'recent' ? ' hubs-tab--active' : ''}`}
-            onClick={() => setFilterTab('recent')}
-          >
-            Recent
-          </button>
-          <button
-            className={`hubs-tab${filterTab === 'favourites' ? ' hubs-tab--active' : ''}`}
-            onClick={() => setFilterTab('favourites')}
-          >
-            Favourites{favouriteCount > 0 ? ` (${favouriteCount})` : ''}
-          </button>
+        <div className="faq-toolbar__left">
+          <div className="faq-toolbar__filters">
+            <div className="sources__filter-pills" aria-label="Guide list filters">
+              <button
+                type="button"
+                className={`sources__filter-pill${filterTab === 'all' ? ' sources__filter-pill--active' : ''}`}
+                onClick={() => setFilterTab('all')}
+              >
+                All
+              </button>
+              <button
+                type="button"
+                className={`sources__filter-pill${filterTab === 'favourites' ? ' sources__filter-pill--active' : ''}`}
+                onClick={() => setFilterTab(filterTab === 'favourites' ? 'all' : 'favourites')}
+              >
+                Pinned{favouriteCount > 0 ? ` (${favouriteCount})` : ''}
+              </button>
+            </div>
+            {topicOptions.length > 0 && (
+              <TopicFilterPills
+                options={topicOptions}
+                selectedTopic={selectedTopic}
+                onSelectTopic={setSelectedTopic}
+                ariaLabel="Guide topic filters"
+              />
+            )}
+          </div>
         </div>
       </div>
 
@@ -624,6 +657,7 @@ export function GuidesPage({ hubId, sources, canEdit }: Props) {
                               openGuide(guide);
                               setEditingTitleId(guide.id);
                               setTitleDraft(guide.title);
+                              setSummaryDraft(getGuideDescription(guide));
                               setOpenMenuId(null);
                             }}
                           >
@@ -656,7 +690,7 @@ export function GuidesPage({ hubId, sources, canEdit }: Props) {
                 </div>
               </div>
               <h3 className="hub-card-title">{guide.title}</h3>
-              {guide.topic && <p className="hub-card-description">{guide.topic}</p>}
+              <p className="hub-card-description">{getGuideDescription(guide)}</p>
               <div className="guide-card__footer">
                 <div className="guide-card__meta">
                   <span className="guide-card__steps-badge">{total} {total === 1 ? 'STEP' : 'STEPS'}</span>
@@ -679,7 +713,7 @@ export function GuidesPage({ hubId, sources, canEdit }: Props) {
           <div className="hub-card guide-card">
             <p className="muted hdash__empty-hint">
               {filterTab === 'favourites'
-                ? 'No favourite guides yet.'
+                ? 'No pinned guides yet.'
                 : canEdit
                   ? 'No guides yet. Create one from your sources.'
                   : 'No guides yet.'}
@@ -865,6 +899,7 @@ export function GuidesPage({ hubId, sources, canEdit }: Props) {
                     if (!canEdit) return;
                     setEditingTitleId(guide.id);
                     setTitleDraft(guide.title);
+                    setSummaryDraft(getGuideDescription(guide));
                   }}
                   title={canEdit ? "Click to edit title" : undefined}
                   style={canEdit ? { cursor: 'pointer' } : undefined}
@@ -881,18 +916,37 @@ export function GuidesPage({ hubId, sources, canEdit }: Props) {
                     autoFocus
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
-                        updateGuideMutation.mutate({ guideId: guide.id, payload: { title: titleDraft.trim() } });
+                        updateGuideMutation.mutate({
+                          guideId: guide.id,
+                          payload: {
+                            title: titleDraft.trim(),
+                            summary: summaryDraft.trim() || titleDraft.trim(),
+                          },
+                        });
                         setEditingTitleId(null);
                       }
                       if (e.key === 'Escape') setEditingTitleId(null);
                     }}
+                  />
+                  <textarea
+                    className="hdash__form-input hdash__form-textarea"
+                    value={summaryDraft}
+                    onChange={(e) => setSummaryDraft(e.target.value)}
+                    placeholder="Guide description"
+                    aria-label="Guide description"
                   />
                   <div className="gmodal__title-edit-actions">
                     <button
                       className="gmodal__step-edit-btn gmodal__step-edit-btn--save"
                       type="button"
                       onClick={() => {
-                        updateGuideMutation.mutate({ guideId: guide.id, payload: { title: titleDraft.trim() } });
+                        updateGuideMutation.mutate({
+                          guideId: guide.id,
+                          payload: {
+                            title: titleDraft.trim(),
+                            summary: summaryDraft.trim() || titleDraft.trim(),
+                          },
+                        });
                         setEditingTitleId(null);
                       }}
                     >

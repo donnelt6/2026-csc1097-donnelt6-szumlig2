@@ -638,6 +638,8 @@ class FaqEntry(BaseModel):
     hub_id: str
     question: str
     answer: str
+    topic_label: Optional[str] = None
+    topic_labels: List[str] = Field(default_factory=list)
     citations: List[Citation] = Field(default_factory=list)
     source_ids: List[str] = Field(default_factory=list)
     confidence: float
@@ -707,6 +709,8 @@ class GuideEntry(BaseModel):
     hub_id: str
     title: str
     topic: Optional[str] = None
+    topic_label: Optional[str] = None
+    topic_labels: List[str] = Field(default_factory=list)
     summary: Optional[str] = None
     source_ids: List[str] = Field(default_factory=list)
     is_favourited: bool = False
