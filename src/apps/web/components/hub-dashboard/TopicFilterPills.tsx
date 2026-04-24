@@ -45,6 +45,9 @@ export function TopicFilterPills({ options, selectedTopic, onSelectTopic, ariaLa
     if (!measureTarget) return;
     const updateWidth = () => setAvailableWidth(measureTarget.clientWidth);
     updateWidth();
+    if (typeof ResizeObserver === "undefined") {
+      return;
+    }
     const observer = new ResizeObserver(updateWidth);
     observer.observe(measureTarget);
     return () => observer.disconnect();

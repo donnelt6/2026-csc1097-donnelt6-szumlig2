@@ -3,7 +3,6 @@ import { render } from "@testing-library/react";
 import type { ReactElement, ReactNode } from "react";
 import { HubDashboardTabProvider } from "../lib/HubDashboardTabContext";
 import { HubTabProvider } from "../lib/HubTabContext";
-import { SearchProvider } from "../lib/SearchContext";
 
 export function renderWithQueryClient(ui: ReactElement) {
   const queryClient = new QueryClient({
@@ -16,11 +15,9 @@ export function renderWithQueryClient(ui: ReactElement) {
   function Wrapper({ children }: { children: ReactNode }) {
     return (
       <QueryClientProvider client={queryClient}>
-        <SearchProvider>
-          <HubTabProvider>
-            <HubDashboardTabProvider>{children}</HubDashboardTabProvider>
-          </HubTabProvider>
-        </SearchProvider>
+        <HubTabProvider>
+          <HubDashboardTabProvider>{children}</HubDashboardTabProvider>
+        </HubTabProvider>
       </QueryClientProvider>
     );
   }
