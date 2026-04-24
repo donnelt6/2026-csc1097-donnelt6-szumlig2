@@ -3,6 +3,7 @@
 // AppShell.tsx: Top-level layout shell providing sidebar, navbar, and content area.
 
 import { useState, useCallback, useLayoutEffect, useMemo, useEffect, useRef } from 'react';
+import Link from 'next/link';
 import { useParams, usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { Bars3Icon, ChatBubbleLeftRightIcon, DocumentTextIcon, MagnifyingGlassIcon } from '@heroicons/react/24/outline';
@@ -164,6 +165,20 @@ function AppShellChrome({ children }: AppShellProps) {
     });
   }, [isOnHub]);
 
+  useEffect(() => {
+    setMobileMenuOpen(false);
+  }, [pathname]);
+
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 768px)');
+    const sync = () => {
+      setMobileMenuOpen(false);
+    };
+    sync();
+    mq.addEventListener('change', sync);
+    return () => mq.removeEventListener('change', sync);
+  }, []);
+
   const effectiveSidebarState = isOnHub
     ? (sidebarState ?? 'open')
     : 'hidden';
@@ -177,7 +192,7 @@ function AppShellChrome({ children }: AppShellProps) {
   }, []);
 
   const handleMenuClick = useCallback(() => {
-    const isMobile = window.innerWidth <= 768;
+    const isMobile = window.matchMedia('(max-width: 768px)').matches;
     if (isMobile) {
       setMobileMenuOpen(true);
     } else {
@@ -185,8 +200,6 @@ function AppShellChrome({ children }: AppShellProps) {
       localStorage.setItem('sidebar-state', 'collapsed');
     }
   }, []);
-
-  const sidebarHidden = effectiveSidebarState === 'hidden';
 
   return (
     <CurrentHubProvider value={{ currentHub, isLoading: isHubRoute && hubsLoading }}>
@@ -208,16 +221,18 @@ function AppShellChrome({ children }: AppShellProps) {
         <header className="site-nav">
           <div className={`nav-content${isOnHub ? ' nav-content--hub' : ''}`}>
             <div className="nav-brand">
-              <button
-                className={`mobile-menu-button ${isOnHub && sidebarHidden ? 'is-visible-desktop' : ''}`}
-                onClick={handleMenuClick}
-                aria-label="Open menu"
-              >
-                <Bars3Icon />
-              </button>
-              <a className="brand" href="/" data-testid="brand-link">
+              {isOnHub && (
+                <button
+                  className="mobile-menu-button"
+                  onClick={handleMenuClick}
+                  aria-label="Open menu"
+                >
+                  <Bars3Icon />
+                </button>
+              )}
+              <Link className="brand" href="/" data-testid="brand-link">
                 Caddie
-              </a>
+              </Link>
             </div>
             {isHome ? (
               <div className="dash-nav-tabs">

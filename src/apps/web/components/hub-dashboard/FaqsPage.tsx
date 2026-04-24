@@ -21,6 +21,7 @@ import { StarIcon as StarSolid } from "@heroicons/react/24/solid";
 import { archiveFaq, askQuestion, createFaq, flagFaq, generateFaqs, listFaqs, updateFaq } from "../../lib/api";
 import { useSearch } from "../../lib/SearchContext";
 import { FlagModal } from "./FlagModal";
+import { MobileSearchBar } from "./MobileSearchBar";
 import type { Citation, FaqEntry, FlagReason, Source } from "@shared/index";
 
 
@@ -287,6 +288,8 @@ export function FaqsPage({ hubId, sources, canEdit }: Props) {
   return (
     <div className={`hdash__faqs${totalPages > 1 ? ' hdash__faqs--with-pagination' : ''}`}>
       {statusMessage && <div className="hdash__guides-toast">{statusMessage}</div>}
+
+      <MobileSearchBar placeholder="Search FAQs..." />
 
       <div className="faq-toolbar">
         <div className="hubs-toolbar-tabs">

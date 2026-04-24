@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useState, useRef, useEffect } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useIsFetching, useQueryClient, useMutation } from "@tanstack/react-query";
-import { ArrowLeftIcon } from "@heroicons/react/24/outline";
+import { ArrowLeftIcon, MagnifyingGlassIcon } from "@heroicons/react/24/outline";
 import { HubAppearanceModal } from "../../components/HubAppearanceModal";
 import { HubsList } from "../../components/HubsList";
 import { HubsToolbar, type HubsFilterState } from "../../components/HubsToolbar";
@@ -39,7 +39,7 @@ export default function HomePage() {
   const [overlayRendered, setOverlayRendered] = useState(false);
   const [overlayVisible, setOverlayVisible] = useState(false);
 
-  const { searchQuery } = useSearch();
+  const { searchQuery, setSearchQuery } = useSearch();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [createModalOpen, setCreateModalOpen] = useState(false);
@@ -217,6 +217,17 @@ export default function HomePage() {
                 <p className="hubs-page-subtitle">
                   Manage your documentation environments and onboarding resources.
                 </p>
+              </div>
+              <div className="hubs-mobile-search">
+                <MagnifyingGlassIcon className="hubs-mobile-search-icon" />
+                <input
+                  type="text"
+                  placeholder="Search documentation hubs..."
+                  aria-label="Search documentation hubs"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="hubs-mobile-search-input"
+                />
               </div>
               <HubsToolbar
                 filters={filters}

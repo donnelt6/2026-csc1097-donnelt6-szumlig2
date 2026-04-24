@@ -78,6 +78,46 @@
   line-height: 1.7;
 }
 
+.hubs-mobile-search {
+  display: none;
+  position: relative;
+  margin-bottom: 12px;
+}
+
+.hubs-mobile-search-icon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 16px;
+  height: 16px;
+  color: var(--muted);
+  pointer-events: none;
+}
+
+.hubs-mobile-search-input {
+  flex: 1;
+  width: 100%;
+  min-width: 0;
+  padding: 10px 12px 10px 36px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--text);
+  font-size: 0.85rem;
+  font-family: var(--font-sans);
+  outline: none;
+  transition: border-color var(--transition-fast);
+}
+
+.hubs-mobile-search-input::placeholder {
+  color: var(--muted);
+}
+
+.hubs-mobile-search-input:focus {
+  border-color: var(--accent);
+}
+
 /* Hubs Toolbar */
 
 .hubs-toolbar {

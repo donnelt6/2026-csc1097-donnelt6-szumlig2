@@ -1699,11 +1699,45 @@
   }
 
   .dash-nav-tabs {
-    gap: 20px;
+    gap: 14px;
     margin-left: 8px;
   }
 
   .dash-nav-tab {
     font-size: 0.7rem;
+  }
+
+  .mini-cal {
+    padding: 8px 4px;
+  }
+
+  .mini-cal-grid {
+    gap: 2px;
+  }
+
+  .mini-cal-day {
+    width: 36px;
+    height: 36px;
+    margin: 2px auto;
+    font-size: 0.8rem;
+  }
+
+  .dash-calendar-page .mini-cal-day,
+  .dash-calendar-page .hdash__cal-cell {
+    width: auto;
+    height: auto;
+    min-height: 60px;
+    margin: 0;
+    font-size: 0.85rem;
+  }
+
+  .dash-calendar-page .mini-cal-grid {
+    gap: 3px;
+  }
+
+  .dash-home .dash-reminders-card .mini-cal-day {
+    width: 34px;
+    height: 34px;
+    font-size: 0.75rem;
   }
 }

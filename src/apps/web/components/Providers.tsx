@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useState } from "react";
 import { AuthProvider } from "./auth/AuthProvider";
 import { AuthGate } from "./auth/AuthGate";
+import { ThemeProvider } from "../lib/useTheme";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(() => new QueryClient({
@@ -16,12 +17,14 @@ export function Providers({ children }: { children: React.ReactNode }) {
     },
   }));
   return (
-    <AuthProvider>
-      <QueryClientProvider client={queryClient}>
-        <AuthGate>
-          {children}
-        </AuthGate>
-      </QueryClientProvider>
-    </AuthProvider>
+    <ThemeProvider>
+      <AuthProvider>
+        <QueryClientProvider client={queryClient}>
+          <AuthGate>
+            {children}
+          </AuthGate>
+        </QueryClientProvider>
+      </AuthProvider>
+    </ThemeProvider>
   );
 }

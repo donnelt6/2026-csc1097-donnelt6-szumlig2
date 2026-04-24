@@ -1,3 +1,25 @@
+.hub-moderation__layout {
+  display: grid;
+  grid-template-columns: minmax(0, 320px) minmax(0, 1fr);
+  gap: 18px;
+}
+
+.hub-moderation__compare {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.hub-moderation__panel-card:hover {
+  border-color: var(--border);
+  box-shadow: none;
+}
+
+@media (max-width: 960px) {
+  .hub-moderation__layout { grid-template-columns: 1fr; }
+  .hub-moderation__compare { grid-template-columns: 1fr; }
+}
+
 /* ===== Hub Dashboard — Shared Utilities ===== */
 
 .hdash__icon--sm { width: 14px; height: 14px; }
@@ -443,6 +465,8 @@
   color: var(--muted);
   margin-bottom: 10px;
   line-height: 1.4;
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
 
 .hdash__insights-actions {
@@ -1546,6 +1570,7 @@
 }
 
 .hdash__guide-step-check {
+  position: relative;
   flex-shrink: 0;
   display: flex;
   align-items: center;
@@ -1555,6 +1580,10 @@
 
 .hdash__guide-step-check input {
   position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
   opacity: 0;
   pointer-events: none;
 }
@@ -1686,6 +1715,53 @@
 @media (max-width: 900px) {
   .hdash__overview {
     grid-template-columns: 1fr;
+    padding: 20px;
+    gap: 20px;
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
+  .hdash__overview-main,
+  .hdash__overview-aside {
+    max-width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  .hdash__overview {
+    padding: 16px;
+    gap: 16px;
+  }
+
+  .hdash__content-tabs {
+    padding: 0 12px;
+  }
+
+  .hdash__content-tab {
+    padding: 10px 12px;
+  }
+
+  .hdash__guide-preview {
+    padding: 16px;
+  }
+
+  .hdash__guide-step {
+    padding: 12px;
+  }
+
+  .hdash__aside-card {
+    padding: 14px;
+  }
+
+  .hdash__guide-header {
+    flex-wrap: wrap;
+  }
+
+  .hdash__guide-header-right {
+    width: 100%;
+    align-items: stretch;
+    flex-direction: row;
+    justify-content: space-between;
   }
 }
 
@@ -1717,10 +1793,25 @@
 @media (max-width: 900px) {
   .hdash__layout {
     grid-template-columns: 1fr;
+    padding: 16px;
+    max-width: 100%;
+    overflow-x: hidden;
   }
 
   .hdash__reminders {
     padding: 16px;
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
+  .hdash__calendar-col,
+  .hdash__sidebar-col {
+    max-width: 100%;
+  }
+
+  .hdash__cal {
+    max-width: 100%;
+    overflow-x: hidden;
   }
 
   .hdash__cal-cell {
@@ -1802,6 +1893,45 @@
   font-size: 0.875rem;
   color: var(--text);
   animation: slideDown 0.2s ease;
+}
+
+.hdash__mobile-search {
+  display: none;
+  position: relative;
+  margin-bottom: 12px;
+}
+
+.hdash__mobile-search-icon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 16px;
+  height: 16px;
+  color: var(--muted);
+  pointer-events: none;
+}
+
+.hdash__mobile-search-input {
+  flex: 1;
+  min-width: 0;
+  padding: 10px 12px 10px 36px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--text);
+  font-size: 0.85rem;
+  font-family: var(--font-sans);
+  outline: none;
+  transition: border-color var(--transition-fast);
+}
+
+.hdash__mobile-search-input::placeholder {
+  color: var(--muted);
+}
+
+.hdash__mobile-search-input:focus {
+  border-color: var(--accent);
 }
 
 .guide-card,
@@ -2977,5 +3107,47 @@
   .gmodal {
     padding: 20px;
     width: 100%;
+  }
+}
+
+@media (max-width: 768px) {
+  .hdash__faqs .hubs-pagination,
+  .hdash__guides .hubs-pagination {
+    position: static;
+    left: auto;
+    right: auto;
+    padding: 12px 0 0;
+    margin-top: 8px;
+    background: transparent;
+  }
+
+  .hdash__faqs,
+  .hdash__guides {
+    padding-bottom: 16px;
+  }
+}
+
+@media (max-width: 480px) {
+  .hdash__reminders {
+    padding: 12px;
+    gap: 14px;
+    min-width: 0;
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
+  .hdash__calendar-col,
+  .hdash__sidebar-col,
+  .hdash__sidebar-section {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .hdash__cal-grid {
+    min-width: 0;
+  }
+
+  .hdash__cal {
+    padding: 12px;
   }
 }

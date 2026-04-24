@@ -1,6 +1,6 @@
 // layout.tsx: Root Next.js layout with font loading, metadata, and provider wrappers.
 
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "./theme.css";
 import "./layout.css";
 import "./shared-ui.css";
@@ -23,6 +23,11 @@ import { ShellErrorBoundary } from "../components/ShellErrorBoundary";
 export const metadata: Metadata = {
   title: "Caddie",
   description: "Onboarding knowledge companion",
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
