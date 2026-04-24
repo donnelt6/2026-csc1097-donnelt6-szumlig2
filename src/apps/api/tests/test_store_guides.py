@@ -271,7 +271,7 @@ def test_generate_guide_persists_topic_labels_from_supplied_topic(monkeypatch) -
         lambda context, topic, count: [{"title": "Step 1", "instruction": "First"}],
     )
     monkeypatch.setattr(store, "_embed_query", lambda text: [0.1])
-    monkeypatch.setattr(store, "_safe_classify_topic_labels", lambda content: ["HR Process", "Onboarding Steps"])
+    monkeypatch.setattr(store, "_try_classify_topic_labels", lambda content: ["HR Process", "Onboarding Steps"])
     monkeypatch.setattr(
         store,
         "_match_chunks",
@@ -310,7 +310,7 @@ def test_update_guide_recomputes_topic_labels(monkeypatch) -> None:
         )(),
     )
     monkeypatch.setattr(store, "_fetch_guide_steps", lambda client, guide_id: [{"title": "Step 1", "instruction": "Do this"}])
-    monkeypatch.setattr(store, "_safe_topic_labels_for_guide", lambda **kwargs: ["HR", "Security"])
+    monkeypatch.setattr(store, "_try_topic_labels_for_guide", lambda **kwargs: ["HR", "Security"])
 
     table = FakeTable("guide_entries")
     monkeypatch.setattr(fake_client, "table", lambda name: table if name == "guide_entries" else FakeTable(name))
@@ -318,6 +318,36 @@ def test_update_guide_recomputes_topic_labels(monkeypatch) -> None:
     store.update_guide(fake_client, "guide-1", {"title": "Updated title"})
 
     assert table._payload == {"title": "Updated title", "topic_label": "HR", "topic_labels": ["HR", "Security"]}
+
+
+def test_update_guide_preserves_existing_topic_labels_on_classifier_failure(monkeypatch) -> None:
+    fake_client = FakeClient()
+    monkeypatch.setattr(
+        store,
+        "get_guide",
+        lambda client, guide_id: type(
+            "GuideStub",
+            (),
+            {
+                "id": guide_id,
+                "hub_id": "hub-1",
+                "title": "Original title",
+                "topic": "Onboarding",
+                "topic_label": "IT",
+                "topic_labels": ["IT", "Security"],
+                "summary": None,
+            },
+        )(),
+    )
+    monkeypatch.setattr(store, "_fetch_guide_steps", lambda client, guide_id: [{"title": "Step 1", "instruction": "Do this"}])
+    monkeypatch.setattr(store, "_try_topic_labels_for_guide", lambda **kwargs: None)
+
+    table = FakeTable("guide_entries")
+    monkeypatch.setattr(fake_client, "table", lambda name: table if name == "guide_entries" else FakeTable(name))
+
+    store.update_guide(fake_client, "guide-1", {"title": "Updated title"})
+
+    assert table._payload == {"title": "Updated title", "topic_label": "IT", "topic_labels": ["IT", "Security"]}
 
 
 def test_create_guide_step_refreshes_parent_topic_label(monkeypatch) -> None:
@@ -350,7 +380,7 @@ def test_clean_guide_subject_phrase_strips_setup_boilerplate() -> None:
 
 
 def test_safe_topic_labels_for_guide_prefers_cleaned_title_or_topic(monkeypatch) -> None:
-    monkeypatch.setattr(store, "_safe_classify_topic_labels", lambda content: ["Distributed Systems", "Concurrency"])
+    monkeypatch.setattr(store, "_try_classify_topic_labels", lambda content: ["Distributed Systems", "Concurrency"])
 
     labels = store._safe_topic_labels_for_guide(
         title="guide to setting up vector clock",
@@ -362,7 +392,7 @@ def test_safe_topic_labels_for_guide_prefers_cleaned_title_or_topic(monkeypatch)
 
 
 def test_safe_topic_labels_for_guide_merges_explicit_topic_with_recomputed_labels(monkeypatch) -> None:
-    monkeypatch.setattr(store, "_safe_classify_topic_labels", lambda content: ["Security", "Access"])
+    monkeypatch.setattr(store, "_try_classify_topic_labels", lambda content: ["Security", "Access"])
 
     labels = store._safe_topic_labels_for_guide(
         title="account access",

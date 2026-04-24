@@ -290,12 +290,40 @@ def test_update_faq_recomputes_topic_labels(monkeypatch) -> None:
             created_at="2026-01-01T00:00:00Z",
         ),
     )
-    monkeypatch.setattr(store, "_safe_topic_labels_for_faq", lambda question, answer: ["HR", "Security"])
+    monkeypatch.setattr(store, "_try_topic_labels_for_faq", lambda question, answer: ["HR", "Security"])
 
     store.update_faq(fake_client, "faq-1", {"question": "New question"})
 
     assert fake_client.updates == [
         ("faq_entries", {"question": "New question", "topic_label": "HR", "topic_labels": ["HR", "Security"]}, [("id", "faq-1")])
+    ]
+
+
+def test_update_faq_preserves_existing_topic_labels_on_classifier_failure(monkeypatch) -> None:
+    fake_client = FakeClient()
+    monkeypatch.setattr(
+        store,
+        "get_faq",
+        lambda client, faq_id: FaqEntry(
+            id=faq_id,
+            hub_id="hub-1",
+            question="Old question",
+            answer="Old answer",
+            topic_label="IT",
+            topic_labels=["IT", "Security"],
+            citations=[],
+            source_ids=[],
+            confidence=1.0,
+            is_pinned=False,
+            created_at="2026-01-01T00:00:00Z",
+        ),
+    )
+    monkeypatch.setattr(store, "_try_topic_labels_for_faq", lambda question, answer: None)
+
+    store.update_faq(fake_client, "faq-1", {"question": "New question"})
+
+    assert fake_client.updates == [
+        ("faq_entries", {"question": "New question", "topic_label": "IT", "topic_labels": ["IT", "Security"]}, [("id", "faq-1")])
     ]
 
 

@@ -156,7 +156,10 @@ class ContentStoreMixin:
             existing = self.get_faq(client, faq_id)
             question = payload.get("question", existing.question)
             answer = payload.get("answer", existing.answer)
-            payload = {**payload, **self._build_topic_payload(self._safe_topic_labels_for_faq(question, answer))}
+            topic_labels = self._try_topic_labels_for_faq(question, answer)
+            if topic_labels is None:
+                topic_labels = existing.topic_labels
+            payload = {**payload, **self._build_topic_payload(topic_labels)}
         response = client.table("faq_entries").update(payload).eq("id", str(faq_id)).execute()
         if not response.data:
             raise KeyError("FAQ entry not found")
@@ -320,16 +323,17 @@ class ContentStoreMixin:
         if {"title", "topic", "summary"} & set(payload):
             existing = self.get_guide(client, guide_id)
             steps = self._fetch_guide_steps(client, guide_id)
+            topic_labels = self._try_topic_labels_for_guide(
+                title=payload.get("title", existing.title),
+                topic=payload.get("topic", existing.topic),
+                summary=payload.get("summary", existing.summary),
+                step_rows=steps,
+            )
+            if topic_labels is None:
+                topic_labels = existing.topic_labels
             payload = {
                 **payload,
-                **self._build_topic_payload(
-                    self._safe_topic_labels_for_guide(
-                        title=payload.get("title", existing.title),
-                        topic=payload.get("topic", existing.topic),
-                        summary=payload.get("summary", existing.summary),
-                        step_rows=steps,
-                    )
-                ),
+                **self._build_topic_payload(topic_labels),
             }
         response = client.table("guide_entries").update(payload).eq("id", str(guide_id)).execute()
         if not response.data:
@@ -481,16 +485,18 @@ class ContentStoreMixin:
 
     # Recompute and persist a guide topic label after edits that change the guide's content.
     def _refresh_guide_topic_label(self, client: Client, guide_id: str) -> None:
-        guide = client.table("guide_entries").select("title, topic, summary").eq("id", str(guide_id)).limit(1).execute()
+        guide = client.table("guide_entries").select("title, topic, summary, topic_labels").eq("id", str(guide_id)).limit(1).execute()
         if not guide.data:
             return
         row = guide.data[0]
-        topic_labels = self._safe_topic_labels_for_guide(
+        topic_labels = self._try_topic_labels_for_guide(
             title=row.get("title"),
             topic=row.get("topic"),
             summary=row.get("summary"),
             step_rows=self._fetch_guide_steps(client, guide_id),
         )
+        if topic_labels is None:
+            topic_labels = row.get("topic_labels") or []
         client.table("guide_entries").update(self._build_topic_payload(topic_labels)).eq("id", str(guide_id)).execute()
 
     # Persist the primary label alongside the full ranked list for compatibility with older reads.
@@ -503,7 +509,11 @@ class ContentStoreMixin:
 
     # Build a short, ranked label list for FAQ text. Failures fall back to an empty list.
     def _safe_topic_labels_for_faq(self, question: Optional[str], answer: Optional[str]) -> List[str]:
-        return self._safe_classify_topic_labels("\n".join(part for part in [question, answer] if part))
+        return self._try_topic_labels_for_faq(question, answer) or []
+
+    # Recompute FAQ topic labels, returning None only when classification fails.
+    def _try_topic_labels_for_faq(self, question: Optional[str], answer: Optional[str]) -> Optional[List[str]]:
+        return self._try_classify_topic_labels("\n".join(part for part in [question, answer] if part))
 
     # Build a short, ranked label list for a guide using the most useful available guide content.
     def _safe_topic_labels_for_guide(
@@ -515,6 +525,24 @@ class ContentStoreMixin:
         step_rows: Optional[List[dict]] = None,
         step_payloads: Optional[List[Dict[str, str]]] = None,
     ) -> List[str]:
+        return self._try_topic_labels_for_guide(
+            title=title,
+            topic=topic,
+            summary=summary,
+            step_rows=step_rows,
+            step_payloads=step_payloads,
+        ) or []
+
+    # Recompute guide topic labels, returning None only when AI classification fails.
+    def _try_topic_labels_for_guide(
+        self,
+        *,
+        title: Optional[str],
+        topic: Optional[str],
+        summary: Optional[str] = None,
+        step_rows: Optional[List[dict]] = None,
+        step_payloads: Optional[List[Dict[str, str]]] = None,
+    ) -> Optional[List[str]]:
         title_or_topic_labels = self._derive_guide_labels_from_title_or_topic(topic=topic, title=title)
         if title_or_topic_labels:
             ai_sections: List[str] = []
@@ -533,7 +561,9 @@ class ContentStoreMixin:
                 if instruction:
                     parts.append(instruction)
                 ai_sections.append(" ".join(parts))
-            ai_labels = self._safe_classify_topic_labels("\n".join(ai_sections))
+            ai_labels = self._try_classify_topic_labels("\n".join(ai_sections))
+            if ai_labels is None:
+                return None
             merged: List[str] = []
             seen: set[str] = set()
             for label in [*title_or_topic_labels, *ai_labels]:
@@ -561,7 +591,7 @@ class ContentStoreMixin:
             if instruction:
                 parts.append(instruction)
             sections.append(" ".join(parts))
-        return self._safe_classify_topic_labels("\n".join(sections))
+        return self._try_classify_topic_labels("\n".join(sections))
 
     # Prefer a clean subject phrase from guide topic/title before falling back to broader AI classification.
     def _derive_guide_labels_from_title_or_topic(self, *, topic: Optional[str], title: Optional[str]) -> List[str]:
@@ -617,6 +647,10 @@ class ContentStoreMixin:
 
     # Ask the model for short topic labels, but never let classifier failures block content writes.
     def _safe_classify_topic_labels(self, content: str) -> List[str]:
+        return self._try_classify_topic_labels(content) or []
+
+    # Try to classify topic labels, returning None only when the classifier errors.
+    def _try_classify_topic_labels(self, content: str) -> Optional[List[str]]:
         trimmed = _trim_text(content or "", 4000).strip()
         if not trimmed:
             return []
