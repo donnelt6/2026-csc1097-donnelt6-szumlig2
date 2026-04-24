@@ -49,6 +49,7 @@ import { FlagModal } from "./FlagModal";
 import { formatRelativeTime } from "../../lib/utils";
 import { useSearch } from "../../lib/SearchContext";
 import { MobileSearchBar } from "./MobileSearchBar";
+import { buildTopicFilterOptions, matchesTopicFilter } from "./topicFilters";
 
 interface Props {
   hubId: string;
@@ -194,7 +195,8 @@ export function GuidesPage({ hubId, sources, canEdit }: Props) {
   const [page, setPage] = useState(1);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [flagTargetId, setFlagTargetId] = useState<string | null>(null);
-  const [filterTab, setFilterTab] = useState<'recent' | 'favourites'>('recent');
+  const [filterTab, setFilterTab] = useState<'all' | 'favourites'>('all');
+  const [selectedTopic, setSelectedTopic] = useState<string | null>(null);
 
   const [topic, setTopic] = useState("");
   const [stepCountInput, setStepCountInput] = useState("5");
@@ -251,9 +253,11 @@ export function GuidesPage({ hubId, sources, canEdit }: Props) {
   const { searchQuery } = useSearch();
 
   const allGuides = useMemo(() => data ?? [], [data]);
+  const topicOptions = useMemo(() => buildTopicFilterOptions(allGuides), [allGuides]);
   const guides = useMemo(() => {
     let filtered = allGuides;
     if (filterTab === 'favourites') filtered = filtered.filter((g) => g.is_favourited);
+    filtered = filtered.filter((g) => matchesTopicFilter(g.topic_label ?? null, selectedTopic));
     if (searchQuery.trim()) {
       const q = searchQuery.trim().toLowerCase();
       filtered = filtered.filter(
@@ -268,11 +272,11 @@ export function GuidesPage({ hubId, sources, canEdit }: Props) {
       );
     }
     return filtered;
-  }, [allGuides, filterTab, searchQuery]);
+  }, [allGuides, filterTab, searchQuery, selectedTopic]);
 
   useEffect(() => {
     setPage(1);
-  }, [filterTab, searchQuery]);
+  }, [filterTab, selectedTopic, searchQuery]);
 
   const favouriteCount = allGuides.filter((g) => g.is_favourited).length;
 
@@ -525,19 +529,46 @@ export function GuidesPage({ hubId, sources, canEdit }: Props) {
       <MobileSearchBar placeholder="Search guides..." />
 
       <div className="faq-toolbar">
-        <div className="hubs-toolbar-tabs">
-          <button
-            className={`hubs-tab${filterTab === 'recent' ? ' hubs-tab--active' : ''}`}
-            onClick={() => setFilterTab('recent')}
-          >
-            Recent
-          </button>
-          <button
-            className={`hubs-tab${filterTab === 'favourites' ? ' hubs-tab--active' : ''}`}
-            onClick={() => setFilterTab('favourites')}
-          >
-            Favourites{favouriteCount > 0 ? ` (${favouriteCount})` : ''}
-          </button>
+        <div className="faq-toolbar__left">
+          <div className="faq-toolbar__filters">
+            <div className="sources__filter-pills" aria-label="Guide list filters">
+              <button
+                type="button"
+                className={`sources__filter-pill${filterTab === 'all' ? ' sources__filter-pill--active' : ''}`}
+                onClick={() => setFilterTab('all')}
+              >
+                All
+              </button>
+              <button
+                type="button"
+                className={`sources__filter-pill${filterTab === 'favourites' ? ' sources__filter-pill--active' : ''}`}
+                onClick={() => setFilterTab(filterTab === 'favourites' ? 'all' : 'favourites')}
+              >
+                Pinned{favouriteCount > 0 ? ` (${favouriteCount})` : ''}
+              </button>
+            </div>
+            {topicOptions.length > 0 && (
+              <div className="sources__filter-pills" aria-label="Guide topic filters">
+                <button
+                  type="button"
+                  className={`sources__filter-pill${selectedTopic === null ? ' sources__filter-pill--active' : ''}`}
+                  onClick={() => setSelectedTopic(null)}
+                >
+                  All Topics
+                </button>
+                {topicOptions.map((topic) => (
+                  <button
+                    key={topic.label}
+                    type="button"
+                    className={`sources__filter-pill${selectedTopic === topic.label ? ' sources__filter-pill--active' : ''}`}
+                    onClick={() => setSelectedTopic((current) => current === topic.label ? null : topic.label)}
+                  >
+                    {topic.label} ({topic.count})
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -679,7 +710,7 @@ export function GuidesPage({ hubId, sources, canEdit }: Props) {
           <div className="hub-card guide-card">
             <p className="muted hdash__empty-hint">
               {filterTab === 'favourites'
-                ? 'No favourite guides yet.'
+                ? 'No pinned guides yet.'
                 : canEdit
                   ? 'No guides yet. Create one from your sources.'
                   : 'No guides yet.'}

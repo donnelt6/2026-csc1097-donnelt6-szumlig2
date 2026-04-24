@@ -68,6 +68,28 @@ class FakeTable:
                     stored.setdefault("created_at", "2026-01-01T00:00:00Z")
                 data.append(stored)
             return FakeResponse(data)
+        if self._action == "update":
+            stored = dict(self._payload or {})
+            if self.name == "guide_entries":
+                stored.setdefault("id", "guide-1")
+                stored.setdefault("hub_id", "hub-1")
+                stored.setdefault("title", stored.get("title", "Guide"))
+                stored.setdefault("topic", stored.get("topic"))
+                stored.setdefault("topic_label", stored.get("topic_label"))
+                stored.setdefault("summary", stored.get("summary"))
+                stored.setdefault("source_ids", [])
+                stored.setdefault("is_favourited", False)
+                stored.setdefault("created_at", "2026-01-01T00:00:00Z")
+            if self.name == "guide_steps":
+                stored.setdefault("id", "step-1")
+                stored.setdefault("guide_id", "guide-1")
+                stored.setdefault("step_index", 1)
+                stored.setdefault("title", stored.get("title"))
+                stored.setdefault("instruction", stored.get("instruction", "Instruction"))
+                stored.setdefault("citations", stored.get("citations", []))
+                stored.setdefault("confidence", stored.get("confidence", 1.0))
+                stored.setdefault("created_at", "2026-01-01T00:00:00Z")
+            return FakeResponse([stored])
         return FakeResponse([])
 
 
@@ -233,3 +255,87 @@ def test_generate_guide_sparse_fallback_keeps_best_raw_matches(monkeypatch) -> N
 
     assert entry is not None
     assert [citation.source_id for citation in entry.steps[0].citations] == ["src-low", "src-lower"]
+
+
+def test_generate_guide_persists_topic_label_from_supplied_topic(monkeypatch) -> None:
+    fake_client = FakeClient()
+    monkeypatch.setattr(
+        store,
+        "_fetch_source_context",
+        lambda client, hub_id, source_id, limit: [{"source_id": source_id, "chunk_index": 0, "text": "Context"}],
+    )
+    monkeypatch.setattr(
+        store,
+        "_generate_guide_steps",
+        lambda context, topic, count: [{"title": "Step 1", "instruction": "First"}],
+    )
+    monkeypatch.setattr(store, "_embed_query", lambda text: [0.1])
+    monkeypatch.setattr(
+        store,
+        "_match_chunks",
+        lambda client, hub_id, embedding, top_k, source_ids=None: [
+            {"source_id": "src-1", "text": "Snippet", "chunk_index": 0, "similarity": 0.9}
+        ],
+    )
+
+    payload = GuideGenerateRequest(
+        hub_id="11111111-1111-1111-1111-111111111111",
+        source_ids=["22222222-2222-2222-2222-222222222222"],
+        topic="HR",
+    )
+    entry = store.generate_guide(fake_client, "user-1", payload)
+
+    assert entry is not None
+    assert entry.topic_label == "HR"
+
+
+def test_update_guide_recomputes_topic_label(monkeypatch) -> None:
+    fake_client = FakeClient()
+    monkeypatch.setattr(
+        store,
+        "get_guide",
+        lambda client, guide_id: type(
+            "GuideStub",
+            (),
+            {
+                "id": guide_id,
+                "hub_id": "hub-1",
+                "title": "Original title",
+                "topic": None,
+                "summary": None,
+            },
+        )(),
+    )
+    monkeypatch.setattr(store, "_fetch_guide_steps", lambda client, guide_id: [{"title": "Step 1", "instruction": "Do this"}])
+    monkeypatch.setattr(store, "_safe_topic_label_for_guide", lambda **kwargs: "HR")
+
+    table = FakeTable("guide_entries")
+    monkeypatch.setattr(fake_client, "table", lambda name: table if name == "guide_entries" else FakeTable(name))
+
+    store.update_guide(fake_client, "guide-1", {"title": "Updated title"})
+
+    assert table._payload == {"title": "Updated title", "topic_label": "HR"}
+
+
+def test_create_guide_step_refreshes_parent_topic_label(monkeypatch) -> None:
+    fake_client = FakeClient()
+    refreshed: list[str] = []
+    monkeypatch.setattr(store, "_refresh_guide_topic_label", lambda client, guide_id: refreshed.append(guide_id))
+
+    store.create_guide_step(
+        fake_client,
+        "guide-1",
+        type("GuideStepPayload", (), {"title": "Step title", "instruction": "Step body"})(),
+    )
+
+    assert refreshed == ["guide-1"]
+
+
+def test_update_guide_step_refreshes_parent_topic_label(monkeypatch) -> None:
+    fake_client = FakeClient()
+    refreshed: list[str] = []
+    monkeypatch.setattr(store, "_refresh_guide_topic_label", lambda client, guide_id: refreshed.append(guide_id))
+
+    store.update_guide_step(fake_client, "step-1", {"instruction": "Updated"})
+
+    assert refreshed == ["guide-1"]

@@ -56,6 +56,7 @@ class ContentStoreMixin:
             "hub_id": hub_id,
             "question": question,
             "answer": answer,
+            "topic_label": self._safe_topic_label_for_faq(question, answer),
             "citations": [],
             "source_ids": [],
             "confidence": 1.0,
@@ -131,6 +132,7 @@ class ContentStoreMixin:
                     "hub_id": hub_id,
                     "question": question,
                     "answer": answer,
+                    "topic_label": self._safe_topic_label_for_faq(question, answer),
                     "citations": [citation.model_dump() for citation in citations],
                     "source_ids": source_ids,
                     "confidence": confidence,
@@ -150,6 +152,11 @@ class ContentStoreMixin:
     def update_faq(self, client: Client, faq_id: str, payload: dict) -> FaqEntry:
         if "answer" in payload:
             payload = {**payload, "citations": [], "confidence": 1.0}
+        if "question" in payload or "answer" in payload:
+            existing = self.get_faq(client, faq_id)
+            question = payload.get("question", existing.question)
+            answer = payload.get("answer", existing.answer)
+            payload = {**payload, "topic_label": self._safe_topic_label_for_faq(question, answer)}
         response = client.table("faq_entries").update(payload).eq("id", str(faq_id)).execute()
         if not response.data:
             raise KeyError("FAQ entry not found")
@@ -248,6 +255,9 @@ class ContentStoreMixin:
         batch_id = str(uuid.uuid4())
         topic = (payload.topic or "").strip() or None
         title = topic or "Onboarding Guide"
+        topic_label = self._normalize_topic_label(topic) if topic else None
+        if not topic_label:
+            topic_label = self._safe_topic_label_for_guide(title=title, topic=topic, step_payloads=steps)
         steps_payload: List[dict] = []
         kept_index = 1
 
@@ -288,6 +298,7 @@ class ContentStoreMixin:
                     "hub_id": hub_id,
                     "title": title,
                     "topic": topic,
+                    "topic_label": topic_label,
                     "summary": None,
                     "source_ids": source_ids,
                     "created_by": user_id,
@@ -308,6 +319,18 @@ class ContentStoreMixin:
         return GuideEntry(**guide_row.data[0], steps=steps_out)
 
     def update_guide(self, client: Client, guide_id: str, payload: dict) -> GuideEntry:
+        if {"title", "topic", "summary"} & set(payload):
+            existing = self.get_guide(client, guide_id)
+            steps = self._fetch_guide_steps(client, guide_id)
+            payload = {
+                **payload,
+                "topic_label": self._safe_topic_label_for_guide(
+                    title=payload.get("title", existing.title),
+                    topic=payload.get("topic", existing.topic),
+                    summary=payload.get("summary", existing.summary),
+                    step_rows=steps,
+                ),
+            }
         response = client.table("guide_entries").update(payload).eq("id", str(guide_id)).execute()
         if not response.data:
             raise KeyError("Guide entry not found")
@@ -341,6 +364,7 @@ class ContentStoreMixin:
         )
         if not row.data:
             raise KeyError("Guide step not found")
+        self._refresh_guide_topic_label(client, str(guide_id))
         return GuideStep(**row.data[0])
 
     def update_guide_step(self, client: Client, step_id: str, payload: dict) -> GuideStep:
@@ -349,7 +373,9 @@ class ContentStoreMixin:
         response = client.table("guide_steps").update(payload).eq("id", str(step_id)).execute()
         if not response.data:
             raise KeyError("Guide step not found")
-        return GuideStep(**response.data[0])
+        step = GuideStep(**response.data[0])
+        self._refresh_guide_topic_label(client, step.guide_id)
+        return step
 
     def reorder_guide_steps(self, client: Client, guide_id: str, ordered_step_ids: List[str]) -> List[GuideStep]:
         steps_response = client.table("guide_steps").select("id").eq("guide_id", str(guide_id)).execute()
@@ -441,3 +467,120 @@ class ContentStoreMixin:
         )
         raw = completion.choices[0].message.content or ""
         return _parse_steps_from_text(raw, step_count)
+
+    # Load guide steps in display order so downstream updates can re-derive topic labels.
+    def _fetch_guide_steps(self, client: Client, guide_id: str) -> List[dict]:
+        response = (
+            client.table("guide_steps")
+            .select("title, instruction")
+            .eq("guide_id", str(guide_id))
+            .order("step_index")
+            .execute()
+        )
+        return response.data or []
+
+    # Recompute and persist a guide topic label after edits that change the guide's content.
+    def _refresh_guide_topic_label(self, client: Client, guide_id: str) -> None:
+        guide = client.table("guide_entries").select("title, topic, summary").eq("id", str(guide_id)).limit(1).execute()
+        if not guide.data:
+            return
+        row = guide.data[0]
+        topic_label = self._safe_topic_label_for_guide(
+            title=row.get("title"),
+            topic=row.get("topic"),
+            summary=row.get("summary"),
+            step_rows=self._fetch_guide_steps(client, guide_id),
+        )
+        client.table("guide_entries").update({"topic_label": topic_label}).eq("id", str(guide_id)).execute()
+
+    # Build a short, stable topic label for FAQ text. Failures fall back to None.
+    def _safe_topic_label_for_faq(self, question: Optional[str], answer: Optional[str]) -> Optional[str]:
+        return self._safe_classify_topic_label("\n".join(part for part in [question, answer] if part))
+
+    # Build a short, stable topic label for a guide using the most useful available guide content.
+    def _safe_topic_label_for_guide(
+        self,
+        *,
+        title: Optional[str],
+        topic: Optional[str],
+        summary: Optional[str] = None,
+        step_rows: Optional[List[dict]] = None,
+        step_payloads: Optional[List[Dict[str, str]]] = None,
+    ) -> Optional[str]:
+        normalized_topic = self._normalize_topic_label(topic)
+        if normalized_topic:
+            return normalized_topic
+        sections: List[str] = []
+        if title:
+            sections.append(f"Title: {title}")
+        if summary:
+            sections.append(f"Summary: {summary}")
+        for index, step in enumerate(step_rows or step_payloads or [], start=1):
+            step_title = (step.get("title") or "").strip()
+            instruction = (step.get("instruction") or "").strip()
+            if not step_title and not instruction:
+                continue
+            parts = [f"Step {index}:"]
+            if step_title:
+                parts.append(step_title)
+            if instruction:
+                parts.append(instruction)
+            sections.append(" ".join(parts))
+        return self._safe_classify_topic_label("\n".join(sections))
+
+    # Ask the model for one short topic label, but never let classifier failures block content writes.
+    def _safe_classify_topic_label(self, content: str) -> Optional[str]:
+        trimmed = _trim_text(content or "", 4000).strip()
+        if not trimmed:
+            return None
+        try:
+            return self._classify_topic_label(trimmed)
+        except Exception as exc:
+            logger.warning("Topic label classification failed: %s", exc)
+            return None
+
+    # Normalize raw model output into a short Title Case label that can be shown in the UI.
+    def _normalize_topic_label(self, raw: Optional[str]) -> Optional[str]:
+        if raw is None:
+            return None
+        label = raw.strip()
+        if not label:
+            return None
+        label = label.splitlines()[0]
+        label = re.sub(r"^topic\s*:\s*", "", label, flags=re.IGNORECASE)
+        label = label.strip("`'\"*[](){}:;,. ")
+        label = re.sub(r"[/_|]+", " ", label)
+        label = re.sub(r"\s+", " ", label).strip()
+        if not label:
+            return None
+        words = label.split(" ")[:3]
+        normalized_words: List[str] = []
+        acronyms = {"hr": "HR", "it": "IT", "qa": "QA", "pto": "PTO", "sso": "SSO", "vpn": "VPN", "2fa": "2FA"}
+        for word in words:
+            cleaned = re.sub(r"[^A-Za-z0-9&-]", "", word)
+            if not cleaned:
+                continue
+            normalized_words.append(acronyms.get(cleaned.lower(), cleaned.capitalize()))
+        normalized = " ".join(normalized_words).strip()
+        if not normalized:
+            return None
+        return normalized[:40].strip()
+
+    # Use the chat model to classify content into a short label such as HR or IT Setup.
+    def _classify_topic_label(self, content: str) -> Optional[str]:
+        system_prompt = (
+            "You label onboarding content. Return exactly one short topic label in plain text. "
+            "Use 1 to 3 words, Title Case, no quotes, no bullets, no punctuation-heavy phrasing, and no explanations."
+        )
+        user_prompt = (
+            "Classify this content into one concise topic label suitable for a filter pill.\n\n"
+            f"Content:\n{content}\n\n"
+            "Return only the label."
+        )
+        completion = self.llm_client.chat.completions.create(
+            model=self.chat_model,
+            messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}],
+            temperature=0,
+        )
+        raw = completion.choices[0].message.content or ""
+        return self._normalize_topic_label(raw)
