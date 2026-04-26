@@ -423,8 +423,8 @@ describe("UploadPanel", () => {
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "Add Source" }));
     await user.click(screen.getByRole("button", { name: /Video\/Audio/ }));
-    expect(screen.getByText("Faster when captions are available; if import fails, you can upload media manually.")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /Upload audio\/video manually/i }));
+    expect(screen.getByText(/Faster when captions are available; if import fails, you can upload media manually\./i)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /Upload Video\/Audio manually/i }));
 
     const input = document.querySelector(".add-source-modal__file-input") as HTMLInputElement;
     expect(input.accept).toBe(".mp3,.mp4,.m4a");
@@ -502,7 +502,7 @@ describe("UploadPanel", () => {
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "Add Source" }));
     await user.click(screen.getByRole("button", { name: /Video\/Audio/ }));
-    await user.click(screen.getByRole("button", { name: /Upload audio\/video manually/i }));
+    await user.click(screen.getByRole("button", { name: /Upload Video\/Audio manually/i }));
 
     const input = document.querySelector(".add-source-modal__file-input") as HTMLInputElement;
     const file = new File(["media"], "lecture.mp4", { type: "video/mp4" });
@@ -538,7 +538,7 @@ describe("UploadPanel", () => {
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "Add Source" }));
     await user.click(screen.getByRole("button", { name: /Video\/Audio/ }));
-    await user.click(screen.getByRole("button", { name: /Upload audio\/video manually/i }));
+    await user.click(screen.getByRole("button", { name: /Upload Video\/Audio manually/i }));
 
     const input = document.querySelector(".add-source-modal__file-input") as HTMLInputElement;
     const file = new File(["media"], "too-large.mp4", { type: "video/mp4" });

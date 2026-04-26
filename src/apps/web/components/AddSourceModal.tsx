@@ -171,6 +171,7 @@ export function AddSourceModal({ hubId, open, onClose, onRefresh, youtubeFallbac
   const fileInputRef = useRef<HTMLInputElement>(null);
   const isProcessingRef = useRef(false);
   const queueRef = useRef(queue);
+  const queuedYoutubeUrlsRef = useRef<Set<string>>(new Set());
   queueRef.current = queue;
   const backdropRef = useRef<HTMLDivElement>(null);
 
@@ -179,6 +180,15 @@ export function AddSourceModal({ hubId, open, onClose, onRefresh, youtubeFallbac
       setActiveTab("upload");
     }
   }, [open, isYouTubeFallbackMode]);
+
+  useEffect(() => {
+    queuedYoutubeUrlsRef.current = new Set(
+      queue
+        .filter((item): item is YouTubeQueueItem => item.kind === "youtube")
+        .filter((item) => item.status !== "error" && item.status !== "complete")
+        .map((item) => item.url),
+    );
+  }, [queue]);
 
   // Auto-dismiss status messages
   useEffect(() => {
@@ -439,10 +449,14 @@ export function AddSourceModal({ hubId, open, onClose, onRefresh, youtubeFallbac
       setStatusMessage({ text: "Enter a YouTube URL to ingest.", type: "error" });
       return;
     }
-    if (queueRef.current.some((i) => "url" in i && i.url === trimmed && i.status !== "error" && i.status !== "complete")) {
+    if (
+      queuedYoutubeUrlsRef.current.has(trimmed)
+      || queueRef.current.some((i) => "url" in i && i.url === trimmed && i.status !== "error" && i.status !== "complete")
+    ) {
       setStatusMessage({ text: "That URL is already in the queue.", type: "error" });
       return;
     }
+    queuedYoutubeUrlsRef.current.add(trimmed);
     setQueue((prev) => {
       if (prev.some((i) => "url" in i && i.url === trimmed && i.status !== "error" && i.status !== "complete")) {
         return prev;
