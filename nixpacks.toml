@@ -1,0 +1,8 @@
+[phases.setup]
+nixPkgs = ["python311", "ffmpeg"]
+
+[phases.install]
+cmds = [
+  "cd src/apps/worker && python -m pip install -r requirements.txt",
+  "cd src/apps/worker && python -m spacy download en_core_web_sm"
+]
