@@ -437,11 +437,29 @@ def test_update_source_mirrors_youtube_fallback_status(monkeypatch) -> None:
     monkeypatch.setattr(tasks._storage, "_get_source_metadata", fake_get_metadata)
     monkeypatch.setattr(tasks._storage, "_update_source", fake_storage_update)
 
-    tasks._update_source(object(), "src-child-1", status="processing")
+    tasks._update_source(object(), "src-child-1", status="processing", source_might_be_youtube_fallback=True)
 
     assert updates[0][0] == "src-child-1"
     assert updates[1][0] == "src-parent-1"
     assert updates[1][1]["ingestion_metadata"]["youtube_fallback_source_status"] == "processing"
+
+
+# Verifies that non-fallback status updates do not fetch metadata just to discover they have no parent to mirror.
+def test_update_source_skips_metadata_fetch_for_non_fallback_sources(monkeypatch) -> None:
+    updates: list[tuple[str, dict]] = []
+
+    def fail_get_metadata(_client, _source_id):
+        raise AssertionError("metadata lookup should be skipped")
+
+    def fake_storage_update(_client, source_id, status, **kwargs):
+        updates.append((source_id, {"status": status, **kwargs}))
+
+    monkeypatch.setattr(tasks._storage, "_get_source_metadata", fail_get_metadata)
+    monkeypatch.setattr(tasks._storage, "_update_source", fake_storage_update)
+
+    tasks._update_source(object(), "src-web-1", status="processing")
+
+    assert updates == [("src-web-1", {"status": "processing", "failure_reason": None, "ingestion_metadata": None, "clear_failure_reason": False})]
 
 
 # Suggested source selection helpers.

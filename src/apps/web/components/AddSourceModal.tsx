@@ -168,7 +168,6 @@ export function AddSourceModal({ hubId, open, onClose, onRefresh, youtubeFallbac
   const [youtubeAutoCaptions, setYoutubeAutoCaptions] = useState(true);
   const [youtubeLanguage, setYoutubeLanguage] = useState("en");
   const [statusMessage, setStatusMessage] = useState<{ text: string; type: "success" | "error" } | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const isProcessingRef = useRef(false);
   const isAddingYouTubeUrlRef = useRef(false);
   const queueRef = useRef(queue);
@@ -670,7 +669,6 @@ export function AddSourceModal({ hubId, open, onClose, onRefresh, youtubeFallbac
                 </div>
               )}
               <input
-                ref={fileInputRef}
                 type="file"
                 multiple={activeUploadConfig.allowMultiple}
                 accept={activeUploadConfig.acceptedExtensions.join(",")}
@@ -796,7 +794,6 @@ export function AddSourceModal({ hubId, open, onClose, onRefresh, youtubeFallbac
                     <p className="add-source-modal__dropzone-text">{getFileModeConfig("manual_media").dropzoneTitle}</p>
                     <p className="add-source-modal__dropzone-hint">{getFileModeConfig("manual_media").acceptsLabel}</p>
                     <input
-                      ref={fileInputRef}
                       type="file"
                       multiple={getFileModeConfig("manual_media").allowMultiple}
                       accept={getFileModeConfig("manual_media").acceptedExtensions.join(",")}

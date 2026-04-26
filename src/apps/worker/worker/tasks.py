@@ -102,8 +102,18 @@ def _build_youtube_failure_metadata(existing_metadata: Optional[dict], failure_r
     return metadata
 
 
-def _mirror_youtube_fallback_parent_status(client: Client, source_id: str, source_metadata: Optional[dict], status: str) -> None:
+def _mirror_youtube_fallback_parent_status(
+    client: Client,
+    source_id: str,
+    status: str,
+    source_metadata: Optional[dict] = None,
+    source_might_be_youtube_fallback: bool = False,
+) -> None:
     metadata = dict(source_metadata or {})
+    if not metadata:
+        if not source_might_be_youtube_fallback:
+            return
+        metadata = _storage._get_source_metadata(client, source_id)
     if metadata.get("source_origin") != "youtube_fallback":
         return
     parent_source_id = str(metadata.get("youtube_fallback_parent_source_id") or "").strip()
@@ -133,7 +143,15 @@ def ingest_source(self, source_id: str, hub_id: str, storage_path: str) -> dict:
     """
     logger.info("worker.ingest.start source_id=%s", source_id)
     client = _common._get_supabase_client()
-    _update_source(client, source_id, status="processing", clear_failure_reason=True)
+    source_metadata = _storage._get_source_metadata(client, source_id)
+    _update_source(
+        client,
+        source_id,
+        status="processing",
+        clear_failure_reason=True,
+        source_metadata=source_metadata,
+        source_might_be_youtube_fallback=source_metadata.get("source_origin") == "youtube_fallback",
+    )
 
     try:
         raw = _storage._download_from_storage(storage_path)
@@ -141,9 +159,7 @@ def ingest_source(self, source_id: str, hub_id: str, storage_path: str) -> dict:
         logger.warning("worker.ingest.download_retry storage_path=%s error=%s", storage_path, exc)
         raise self.retry(exc=exc)
 
-    source_metadata: dict = {}
     try:
-        source_metadata = _storage._get_source_metadata(client, source_id)
         if source_metadata.get("file_kind") == "media":
             text, media_metadata = _media._transcribe_media_bytes(raw, storage_path)
             extra_metadata = {
@@ -468,9 +484,9 @@ def _update_source(
     failure_reason: Optional[str] = None,
     ingestion_metadata: Optional[dict] = None,
     clear_failure_reason: bool = False,
+    source_metadata: Optional[dict] = None,
+    source_might_be_youtube_fallback: bool = False,
 ) -> None:
-    current_metadata = _storage._get_source_metadata(client, source_id)
-    effective_metadata = ingestion_metadata if ingestion_metadata is not None else current_metadata
     _storage._update_source(
         client,
         source_id,
@@ -479,7 +495,13 @@ def _update_source(
         ingestion_metadata=ingestion_metadata,
         clear_failure_reason=clear_failure_reason,
     )
-    _mirror_youtube_fallback_parent_status(client, source_id, effective_metadata, status)
+    _mirror_youtube_fallback_parent_status(
+        client,
+        source_id,
+        status,
+        source_metadata=ingestion_metadata if ingestion_metadata is not None else source_metadata,
+        source_might_be_youtube_fallback=source_might_be_youtube_fallback,
+    )
 
 
 def _build_media_runtime_metadata() -> dict:

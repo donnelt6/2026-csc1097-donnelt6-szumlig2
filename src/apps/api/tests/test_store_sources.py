@@ -8,6 +8,7 @@ import pytest
 from app.schemas import Source, SourceCreate, SourceStatus, SourceSuggestion, SourceSuggestionStatus, SourceSuggestionType, SourceType, YouTubeFallbackSourceCreate, YouTubeSourceCreate
 from app.services import store as store_module
 from app.services.store import source_helpers
+from app.services.store import sources as sources_module
 
 
 # Simple response stub used by the surrounding tests.
@@ -28,6 +29,7 @@ class FakeTable:
         self._payload: dict | None = None
         self._op: str | None = None
         self._filters: dict[str, str] = {}
+        self._contains_filters: dict[str, dict] = {}
         self._selected_fields: str | None = None
         self._limit: int | None = None
 
@@ -65,6 +67,11 @@ class FakeTable:
         self._limit = value
         return self
 
+    # Captures a JSON containment filter for the current query stub.
+    def contains(self, column: str, value: dict) -> "FakeTable":
+        self._contains_filters[column] = value
+        return self
+
     # Returns the prepared fake response for the current operation.
     def execute(self) -> FakeResponse:
         if self._op == "insert":
@@ -84,6 +91,19 @@ class FakeTable:
             if row is None:
                 return FakeResponse([])
             return FakeResponse([{"id": row["id"]}])
+        if self._op == "select" and self.name == "sources":
+            rows = [dict(row) for row in self.client.sources]
+            for column, value in self._filters.items():
+                rows = [row for row in rows if str(row.get(column)) == value]
+            for column, expected in self._contains_filters.items():
+                rows = [
+                    row for row in rows
+                    if isinstance(row.get(column), dict)
+                    and all(row[column].get(key) == expected_value for key, expected_value in expected.items())
+                ]
+            if self._limit is not None:
+                rows = rows[:self._limit]
+            return FakeResponse(rows)
         if self._op == "delete":
             self.client.deleted.append((self.name, dict(self._filters)))
             return FakeResponse([{"id": self._filters.get("id")}])
@@ -97,6 +117,7 @@ class FakeClient:
         self.inserted: list[tuple[str, dict]] = []
         self.deleted: list[tuple[str, dict[str, str]]] = []
         self.updates: list[tuple[str, dict[str, str], dict]] = []
+        self.sources: list[dict] = []
         self.source_suggestions: dict[str, dict] = {}
 
     # Returns a stub table object for the requested table name.
@@ -218,15 +239,40 @@ def test_find_existing_source_for_youtube_suggestion(monkeypatch) -> None:
 
 
 # Verifies that duplicate YouTube videos are rejected within the same hub.
-def test_create_youtube_source_rejects_duplicate_video(monkeypatch) -> None:
+def test_create_youtube_source_rejects_duplicate_video() -> None:
+    fake_client = FakeClient()
+    fake_client.sources = [
+        {
+            "id": "src-yt-1",
+            "hub_id": "11111111-1111-1111-1111-111111111111",
+            "type": SourceType.youtube.value,
+            "original_name": "youtube.com/abc123def45",
+            "status": SourceStatus.complete.value,
+            "ingestion_metadata": {"url": "https://youtu.be/abc123def45", "video_id": "abc123def45"},
+            "created_at": datetime.now(timezone.utc),
+        }
+    ]
+    payload = YouTubeSourceCreate(
+        hub_id=uuid.UUID("11111111-1111-1111-1111-111111111111"),
+        url="https://www.youtube.com/watch?v=abc123def45",
+        language="en",
+        allow_auto_captions=True,
+    )
+
+    with pytest.raises(ValueError, match="already in this hub"):
+        store_module.store.create_youtube_source(fake_client, payload)
+
+
+# Verifies that duplicate detection still catches legacy YouTube rows that only stored the URL.
+def test_create_youtube_source_rejects_duplicate_video_from_legacy_url_only_row(monkeypatch) -> None:
     fake_client = FakeClient()
     existing = Source(
-        id="src-yt-1",
+        id="src-yt-legacy",
         hub_id="11111111-1111-1111-1111-111111111111",
         type=SourceType.youtube,
         original_name="youtube.com/abc123def45",
         status=SourceStatus.complete,
-        ingestion_metadata={"url": "https://youtu.be/abc123def45", "video_id": "abc123def45"},
+        ingestion_metadata={"url": "https://youtu.be/abc123def45"},
         created_at=datetime.now(timezone.utc),
     )
     payload = YouTubeSourceCreate(
@@ -312,6 +358,53 @@ def test_create_youtube_fallback_source_replaces_stale_pending_upload(monkeypatc
     assert source.type == SourceType.file
     assert upload_url == "http://upload.retry"
     assert ("sources", {"id": "src-fallback-stale"}) in fake_client.deleted
+
+
+# Verifies that stale fallback cleanup logs the original delete failure before surfacing a friendly error.
+def test_create_youtube_fallback_source_logs_delete_failure(monkeypatch) -> None:
+    parent = Source(
+        id="src-yt-2",
+        hub_id="hub-1",
+        type=SourceType.youtube,
+        original_name="youtube.com/xyz987uvw65",
+        status=SourceStatus.failed,
+        ingestion_metadata={
+            "url": "https://www.youtube.com/watch?v=xyz987uvw65",
+            "video_id": "xyz987uvw65",
+            "youtube_fallback_allowed": True,
+            "youtube_fallback_source_id": "src-fallback-stale",
+            "youtube_fallback_source_status": "pending_upload",
+        },
+        created_at=datetime.now(timezone.utc),
+    )
+    payload = YouTubeFallbackSourceCreate(
+        hub_id=uuid.UUID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"),
+        youtube_source_id=uuid.UUID("22222222-2222-2222-2222-222222222222"),
+        original_name="retry.mp4",
+    )
+    parent.id = "22222222-2222-2222-2222-222222222222"
+    parent.hub_id = str(payload.hub_id)
+
+    class FailingDeleteTable(FakeTable):
+        def execute(self) -> FakeResponse:
+            if self._op == "delete" and self.name == "sources":
+                raise RuntimeError("delete denied")
+            return super().execute()
+
+    class FailingDeleteClient(FakeClient):
+        def table(self, name: str) -> FakeTable:
+            return FailingDeleteTable(self, name)
+
+    fake_client = FailingDeleteClient()
+    logged: list[str] = []
+
+    monkeypatch.setattr(store_module.store, "get_source", lambda _client, source_id: parent if source_id == parent.id else (_ for _ in ()).throw(KeyError("missing")))
+    monkeypatch.setattr(sources_module.logger, "exception", lambda message, *args, **kwargs: logged.append(message))
+
+    with pytest.raises(ValueError, match="already being prepared"):
+        store_module.store.create_youtube_fallback_source(fake_client, payload)
+
+    assert logged == ["Failed to delete stale pending YouTube fallback source before creating a replacement"]
 
 
 # Verifies that parent YouTube refresh is blocked while a manual recovery owns the retry flow.

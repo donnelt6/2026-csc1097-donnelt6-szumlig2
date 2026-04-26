@@ -496,7 +496,7 @@ describe("UploadPanel", () => {
     expect(onRefresh).toHaveBeenCalled();
   });
 
-  it("rejects manual media uploads above 50 MB before enqueueing", async () => {
+  it("compresses manual media uploads above 50 MB before enqueueing", async () => {
     renderWithQueryClient(<UploadPanel hubId="hub-1" sources={[]} onRefresh={() => undefined} />);
 
     const user = userEvent.setup();

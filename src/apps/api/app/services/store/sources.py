@@ -20,7 +20,7 @@ from ...schemas import (
     YouTubeFallbackSourceCreate,
     YouTubeSourceCreate,
 )
-from .base import ConflictError
+from .base import ConflictError, logger
 from .source_helpers import (
     _build_web_source_name,
     _build_youtube_source_name,
@@ -34,6 +34,32 @@ from .source_helpers import (
 
 class SourceStoreMixin:
     _ACTIVE_YOUTUBE_FALLBACK_STATUSES = {"pending_upload", "queued", "processing", "complete"}
+
+    # Fast-path duplicate detection through PostgREST, with a compatibility scan
+    # for older rows that predate explicit `video_id` metadata.
+    def _youtube_video_exists(self, client: Client, hub_id: str, video_id: str) -> bool:
+        response = (
+            client.table("sources")
+            .select("id")
+            .eq("hub_id", str(hub_id))
+            .eq("type", SourceType.youtube.value)
+            .contains("ingestion_metadata", {"video_id": video_id})
+            .limit(1)
+            .execute()
+        )
+        if response.data:
+            return True
+
+        for existing in self.list_sources(client, hub_id):
+            if existing.type != SourceType.youtube:
+                continue
+            existing_metadata = dict(existing.ingestion_metadata or {})
+            if existing_metadata.get("video_id"):
+                continue
+            existing_video_id = extract_youtube_video_id(str(existing_metadata.get("url") or ""))
+            if existing_video_id == video_id:
+                return True
+        return False
 
     # Updates parent YouTube metadata when a linked fallback source is created or changes state.
     def _update_youtube_fallback_parent(
@@ -146,6 +172,10 @@ class SourceStoreMixin:
                 try:
                     client.table("sources").delete().eq("id", existing_fallback_id).execute()
                 except Exception:
+                    logger.exception(
+                        "Failed to delete stale pending YouTube fallback source before creating a replacement",
+                        extra={"fallback_source_id": existing_fallback_id, "parent_source_id": parent.id},
+                    )
                     raise ValueError("A manual upload fallback is already being prepared for this YouTube source")
             try:
                 existing_fallback = self.get_source(client, existing_fallback_id)
@@ -202,13 +232,8 @@ class SourceStoreMixin:
         video_id = extract_youtube_video_id(payload.url)
         if not video_id:
             raise ValueError("Unable to extract YouTube video ID")
-        for existing in self.list_sources(client, hub_id):
-            if existing.type != SourceType.youtube:
-                continue
-            existing_metadata = dict(existing.ingestion_metadata or {})
-            existing_video_id = existing_metadata.get("video_id") or extract_youtube_video_id(str(existing_metadata.get("url") or ""))
-            if existing_video_id == video_id:
-                raise ValueError("This YouTube video is already in this hub")
+        if self._youtube_video_exists(client, hub_id, video_id):
+            raise ValueError("This YouTube video is already in this hub")
         storage_path = _youtube_storage_path(hub_id, source_id)
         display_name = _build_youtube_source_name(payload.url, video_id)
         metadata = {
