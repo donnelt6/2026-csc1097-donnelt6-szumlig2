@@ -255,7 +255,7 @@ def _download_caption_text(url: str) -> bytes:
                     continue
                 if status == 429:
                     raise ValueError("YouTube rate limit hit; try again later") from exc
-                raise
+                raise ValueError("Failed to download captions") from exc
             except httpx.RequestError as exc:
                 last_exc = exc
                 if attempt < max_attempts:
@@ -263,7 +263,7 @@ def _download_caption_text(url: str) -> bytes:
                     logger.warning("Caption fetch failed, retrying in %.1fs: %s", delay, exc)
                     time.sleep(delay)
                     continue
-                raise
+                raise ValueError("Failed to download captions") from exc
     if last_exc:
         raise last_exc
     raise RuntimeError("Failed to download captions")

@@ -17,6 +17,7 @@ from ...schemas import (
     SourceSuggestionType,
     SourceType,
     WebSourceCreate,
+    YouTubeFallbackSourceCreate,
     YouTubeSourceCreate,
 )
 from .base import ConflictError
@@ -32,12 +33,48 @@ from .source_helpers import (
 
 
 class SourceStoreMixin:
+    _ACTIVE_YOUTUBE_FALLBACK_STATUSES = {"pending_upload", "queued", "processing", "complete"}
+
+    # Updates parent YouTube metadata when a linked fallback source is created or changes state.
+    def _update_youtube_fallback_parent(
+        self,
+        client: Client,
+        parent_source_id: str,
+        fallback_source_id: Optional[str],
+        fallback_status: Optional[str],
+    ) -> None:
+        parent = self.get_source(client, parent_source_id)
+        if parent.type != SourceType.youtube:
+            raise ValueError("Fallback parent must be a YouTube source")
+        metadata = dict(parent.ingestion_metadata or {})
+        metadata["youtube_fallback_source_id"] = fallback_source_id
+        metadata["youtube_fallback_source_status"] = fallback_status
+        client.table("sources").update({"ingestion_metadata": metadata}).eq("id", str(parent_source_id)).execute()
+
+    # Mirrors a fallback child source state back onto its failed YouTube parent row.
+    def _sync_youtube_fallback_parent_from_child(self, client: Client, source: Source, status: str) -> None:
+        metadata = dict(source.ingestion_metadata or {})
+        if metadata.get("source_origin") != "youtube_fallback":
+            return
+        parent_source_id = str(metadata.get("youtube_fallback_parent_source_id") or "").strip()
+        if not parent_source_id:
+            return
+        self._update_youtube_fallback_parent(client, parent_source_id, source.id, status)
+
     # Create a file-backed source row and return it with a signed upload URL.
     def create_source(self, client: Client, payload: SourceCreate) -> Tuple[Source, str]:
         source_id = str(uuid.uuid4())
         hub_id = str(payload.hub_id)
         safe_name = _sanitize_filename(payload.original_name)
         storage_path = f"{hub_id}/{source_id}/{safe_name}"
+        if payload.file_kind not in {None, "document", "media"}:
+            raise ValueError("File kind must be either 'document' or 'media'.")
+        metadata = None
+        if payload.file_kind == "media":
+            metadata = {
+                "file_kind": "media",
+                "source_origin": "manual_media",
+            }
         response = (
             client.table("sources")
             .insert(
@@ -48,6 +85,7 @@ class SourceStoreMixin:
                     "storage_path": storage_path,
                     "status": SourceStatus.queued.value,
                     "type": SourceType.file.value,
+                    "ingestion_metadata": metadata,
                 }
             )
             .execute()
@@ -86,6 +124,77 @@ class SourceStoreMixin:
         )
         return Source(**response.data[0])
 
+    # Create a linked media-upload fallback for a failed YouTube source.
+    def create_youtube_fallback_source(self, client: Client, payload: YouTubeFallbackSourceCreate) -> Tuple[Source, str]:
+        parent = self.get_source(client, str(payload.youtube_source_id))
+        hub_id = str(payload.hub_id)
+        if parent.hub_id != hub_id:
+            raise ValueError("YouTube source does not belong to the requested hub")
+        if parent.type != SourceType.youtube:
+            raise ValueError("Fallback parent must be a YouTube source")
+        if parent.status != SourceStatus.failed:
+            raise ValueError("YouTube source must be failed before using manual upload fallback")
+
+        parent_metadata = dict(parent.ingestion_metadata or {})
+        if not bool(parent_metadata.get("youtube_fallback_allowed")):
+            raise ValueError("This YouTube source is not eligible for manual upload fallback")
+
+        existing_fallback_id = str(parent_metadata.get("youtube_fallback_source_id") or "").strip()
+        existing_fallback_status = str(parent_metadata.get("youtube_fallback_source_status") or "").strip()
+        if existing_fallback_id:
+            if existing_fallback_status == "pending_upload":
+                try:
+                    client.table("sources").delete().eq("id", existing_fallback_id).execute()
+                except Exception:
+                    raise ValueError("A manual upload fallback is already being prepared for this YouTube source")
+            try:
+                existing_fallback = self.get_source(client, existing_fallback_id)
+            except KeyError:
+                existing_fallback = None
+            if existing_fallback is not None and existing_fallback.status in {
+                SourceStatus.queued,
+                SourceStatus.processing,
+                SourceStatus.complete,
+            }:
+                raise ValueError("A manual upload fallback already exists for this YouTube source")
+
+        source_id = str(uuid.uuid4())
+        safe_name = _sanitize_filename(payload.original_name)
+        storage_path = f"{hub_id}/{source_id}/{safe_name}"
+        metadata = {
+            "file_kind": "media",
+            "source_origin": "youtube_fallback",
+            "youtube_fallback_parent_source_id": parent.id,
+            "youtube_fallback_parent_video_id": parent_metadata.get("video_id"),
+            "youtube_fallback_parent_url": parent_metadata.get("url"),
+        }
+        response = (
+            client.table("sources")
+            .insert(
+                {
+                    "id": source_id,
+                    "hub_id": hub_id,
+                    "original_name": payload.original_name,
+                    "storage_path": storage_path,
+                    "status": SourceStatus.queued.value,
+                    "type": SourceType.file.value,
+                    "ingestion_metadata": metadata,
+                }
+            )
+            .execute()
+        )
+        row = response.data[0]
+        try:
+            upload_url = self.create_upload_url(storage_path)
+            self._update_youtube_fallback_parent(client, parent.id, source_id, "pending_upload")
+        except Exception:
+            try:
+                client.table("sources").delete().eq("id", source_id).execute()
+            except Exception:
+                pass
+            raise
+        return Source(**row), upload_url
+
     # Create a queued YouTube source after validating and extracting its video id.
     def create_youtube_source(self, client: Client, payload: YouTubeSourceCreate) -> Source:
         source_id = str(uuid.uuid4())
@@ -93,6 +202,13 @@ class SourceStoreMixin:
         video_id = extract_youtube_video_id(payload.url)
         if not video_id:
             raise ValueError("Unable to extract YouTube video ID")
+        for existing in self.list_sources(client, hub_id):
+            if existing.type != SourceType.youtube:
+                continue
+            existing_metadata = dict(existing.ingestion_metadata or {})
+            existing_video_id = existing_metadata.get("video_id") or extract_youtube_video_id(str(existing_metadata.get("url") or ""))
+            if existing_video_id == video_id:
+                raise ValueError("This YouTube video is already in this hub")
         storage_path = _youtube_storage_path(hub_id, source_id)
         display_name = _build_youtube_source_name(payload.url, video_id)
         metadata = {
@@ -210,6 +326,7 @@ class SourceStoreMixin:
     # Delete a source row and best-effort remove its stored file, if any.
     def delete_source(self, client: Client, source_id: str) -> None:
         source = self.get_source(client, source_id)
+        metadata = dict(source.ingestion_metadata or {})
         response = client.table("sources").delete().eq("id", str(source_id)).execute()
         if not response.data:
             raise KeyError("Source not found")
@@ -218,13 +335,25 @@ class SourceStoreMixin:
                 self.service_client.storage.from_(self.storage_bucket).remove([source.storage_path])
             except Exception:
                 pass
+        if metadata.get("source_origin") == "youtube_fallback":
+            parent_source_id = str(metadata.get("youtube_fallback_parent_source_id") or "").strip()
+            if parent_source_id:
+                try:
+                    parent = self.get_source(client, parent_source_id)
+                    parent_metadata = dict(parent.ingestion_metadata or {})
+                    if str(parent_metadata.get("youtube_fallback_source_id") or "").strip() == source.id:
+                        self._update_youtube_fallback_parent(client, parent_source_id, None, None)
+                except Exception:
+                    pass
 
     # Set the ingestion status and optional failure reason for a source.
     def set_source_status(self, client: Client, source_id: str, status: SourceStatus, failure_reason: Optional[str] = None) -> Source:
         response = client.table("sources").update({"status": status.value, "failure_reason": failure_reason}).eq("id", str(source_id)).execute()
         if not response.data:
             raise KeyError("Source not found")
-        return Source(**response.data[0])
+        source = Source(**response.data[0])
+        self._sync_youtube_fallback_parent_from_child(client, source, status.value)
+        return source
 
     # Dispatch refresh handling based on the source type and return refresh metadata for the caller.
     def refresh_source(self, client: Client, source_id: str) -> tuple[Source, dict]:
@@ -270,6 +399,9 @@ class SourceStoreMixin:
         if source.type != SourceType.youtube:
             raise ValueError("Source is not a YouTube URL")
         metadata = source.ingestion_metadata if isinstance(source.ingestion_metadata, dict) else {}
+        fallback_status = str(metadata.get("youtube_fallback_source_status") or "").strip()
+        if fallback_status in self._ACTIVE_YOUTUBE_FALLBACK_STATUSES:
+            raise ValueError("This YouTube source already has an active manual upload recovery")
         url = metadata.get("url")
         if not url:
             raise ValueError("Source URL missing")

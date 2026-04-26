@@ -2,7 +2,9 @@
 
 import hashlib
 import json
+import os
 import re
+import socket
 import ssl
 import uuid
 from collections import defaultdict
@@ -20,6 +22,7 @@ from supabase import Client
 
 from . import common as _common
 from . import content as _content
+from . import media as _media
 from . import response_utils as _response_utils
 from . import storage as _storage
 from . import web as _web
@@ -30,6 +33,93 @@ from .app import celery_app, logger, settings
 # Celery ingestion tasks.
 # These task entrypoints stay in `worker.tasks` so Celery commands and task
 # names keep working while helper logic lives in focused worker modules.
+
+_YOUTUBE_FAILURE_METADATA_KEYS = {
+    "youtube_failure_code",
+    "youtube_fallback_allowed",
+    "youtube_fallback_user_message",
+}
+
+
+def _classify_youtube_failure(message: str) -> tuple[str, bool, str]:
+    lowered = message.strip().lower()
+    if "blocked the hosted worker with a bot check" in lowered:
+        return (
+            "youtube_bot_check",
+            True,
+            "Caddie could not import captions from this YouTube URL. Upload the audio or video file manually instead.",
+        )
+    if "no captions available for this youtube video" in lowered:
+        return (
+            "youtube_no_captions",
+            True,
+            "This YouTube video has no usable captions. Upload the audio or video file manually instead.",
+        )
+    if "caption track was empty" in lowered:
+        return (
+            "youtube_empty_captions",
+            True,
+            "This YouTube video's captions were empty. Upload the audio or video file manually instead.",
+        )
+    if "no transcript text extracted from youtube captions" in lowered:
+        return (
+            "youtube_empty_transcript",
+            True,
+            "Caddie could not extract transcript text from the YouTube captions. Upload the audio or video file manually instead.",
+        )
+    if "failed to download captions" in lowered or "rate limit hit" in lowered:
+        return (
+            "youtube_caption_fetch_failed",
+            True,
+            "Caddie could not fetch the YouTube captions from this URL. Upload the audio or video file manually instead.",
+        )
+    if "timed out while fetching captions or generating chunks" in lowered:
+        return (
+            "youtube_timeout",
+            True,
+            "YouTube import timed out. Upload the audio or video file manually instead.",
+        )
+    if "yt-dlp is required" in lowered:
+        return ("youtube_dependency_error", False, "YouTube import is unavailable because the worker is missing a dependency.")
+    if "youtube_cookies_b64 must be valid" in lowered:
+        return ("youtube_config_error", False, "YouTube import is unavailable because the worker configuration is invalid.")
+    return ("youtube_internal_error", False, "YouTube import failed unexpectedly.")
+
+
+def _clear_youtube_failure_metadata(metadata: Optional[dict]) -> dict:
+    cleaned = dict(metadata or {})
+    for key in _YOUTUBE_FAILURE_METADATA_KEYS:
+        cleaned.pop(key, None)
+    return cleaned
+
+
+def _build_youtube_failure_metadata(existing_metadata: Optional[dict], failure_reason: str) -> dict:
+    code, allowed, user_message = _classify_youtube_failure(failure_reason)
+    metadata = dict(existing_metadata or {})
+    metadata["youtube_failure_code"] = code
+    metadata["youtube_fallback_allowed"] = allowed
+    metadata["youtube_fallback_user_message"] = user_message
+    return metadata
+
+
+def _mirror_youtube_fallback_parent_status(client: Client, source_id: str, source_metadata: Optional[dict], status: str) -> None:
+    metadata = dict(source_metadata or {})
+    if metadata.get("source_origin") != "youtube_fallback":
+        return
+    parent_source_id = str(metadata.get("youtube_fallback_parent_source_id") or "").strip()
+    if not parent_source_id:
+        return
+    parent_metadata = _storage._get_source_metadata(client, parent_source_id)
+    if not parent_metadata:
+        return
+    parent_metadata["youtube_fallback_source_id"] = source_id
+    parent_metadata["youtube_fallback_source_status"] = status
+    _storage._update_source(
+        client,
+        parent_source_id,
+        status="failed",
+        ingestion_metadata=parent_metadata,
+    )
 # Ingests an uploaded file source by downloading, extracting, chunking, and storing its content.
 @celery_app.task(bind=True, name="ingest_source", max_retries=3, default_retry_delay=15)
 def ingest_source(self, source_id: str, hub_id: str, storage_path: str) -> dict:
@@ -51,18 +141,38 @@ def ingest_source(self, source_id: str, hub_id: str, storage_path: str) -> dict:
         logger.warning("worker.ingest.download_retry storage_path=%s error=%s", storage_path, exc)
         raise self.retry(exc=exc)
 
+    source_metadata: dict = {}
     try:
-        text = _content._extract_text(raw, storage_path)
+        source_metadata = _storage._get_source_metadata(client, source_id)
+        if source_metadata.get("file_kind") == "media":
+            text, media_metadata = _media._transcribe_media_bytes(raw, storage_path)
+            extra_metadata = {
+                **source_metadata,
+                **media_metadata,
+                **_build_media_runtime_metadata(),
+            }
+        else:
+            text = _content._extract_text(raw, storage_path)
+            extra_metadata = source_metadata or None
         text = _common._normalize_text(text)
         if not text:
             raise ValueError("No text extracted from source")
 
-        chunk_count = _ingest_text_for_source(client, source_id, hub_id, text, extra_metadata=None)
+        chunk_count = _ingest_text_for_source(client, source_id, hub_id, text, extra_metadata=extra_metadata)
         logger.info("worker.ingest.complete source_id=%s", source_id)
         return {"source_id": source_id, "hub_id": hub_id, "chunks": chunk_count}
     except Exception as exc:
         logger.exception("worker.ingest.failed source_id=%s", source_id)
-        _update_source(client, source_id, status="failed", failure_reason=str(exc)[:500])
+        failure_metadata = dict(source_metadata or {})
+        if failure_metadata.get("file_kind") == "media":
+            failure_metadata.update(_build_media_failure_metadata(storage_path))
+        _update_source(
+            client,
+            source_id,
+            status="failed",
+            failure_reason=str(exc)[:500],
+            ingestion_metadata=failure_metadata or None,
+        )
         raise
 
 
@@ -144,7 +254,14 @@ def ingest_youtube_source(
     """
     logger.info("worker.youtube_ingest.start source_id=%s url=%s", source_id, url)
     client = _common._get_supabase_client()
-    _update_source(client, source_id, status="processing", clear_failure_reason=True)
+    existing_metadata = _storage._get_source_metadata(client, source_id)
+    _update_source(
+        client,
+        source_id,
+        status="processing",
+        clear_failure_reason=True,
+        ingestion_metadata=_clear_youtube_failure_metadata(existing_metadata),
+    )
 
     try:
         transcript, info, captions_meta = _youtube._fetch_youtube_transcript(
@@ -185,16 +302,25 @@ def ingest_youtube_source(
         return {"source_id": source_id, "hub_id": hub_id, "chunks": chunk_count}
     except SoftTimeLimitExceeded as exc:
         logger.exception("worker.youtube_ingest.timeout source_id=%s", source_id)
+        failure_reason = "YouTube ingestion timed out while fetching captions or generating chunks"
         _update_source(
             client,
             source_id,
             status="failed",
-            failure_reason="YouTube ingestion timed out while fetching captions or generating chunks",
+            failure_reason=failure_reason,
+            ingestion_metadata=_build_youtube_failure_metadata(_storage._get_source_metadata(client, source_id), failure_reason),
         )
         raise
     except Exception as exc:
         logger.exception("worker.youtube_ingest.failed source_id=%s", source_id)
-        _update_source(client, source_id, status="failed", failure_reason=str(exc)[:500])
+        failure_reason = str(exc)[:500]
+        _update_source(
+            client,
+            source_id,
+            status="failed",
+            failure_reason=failure_reason,
+            ingestion_metadata=_build_youtube_failure_metadata(_storage._get_source_metadata(client, source_id), failure_reason),
+        )
         raise
 
 
@@ -343,6 +469,8 @@ def _update_source(
     ingestion_metadata: Optional[dict] = None,
     clear_failure_reason: bool = False,
 ) -> None:
+    current_metadata = _storage._get_source_metadata(client, source_id)
+    effective_metadata = ingestion_metadata if ingestion_metadata is not None else current_metadata
     _storage._update_source(
         client,
         source_id,
@@ -351,6 +479,25 @@ def _update_source(
         ingestion_metadata=ingestion_metadata,
         clear_failure_reason=clear_failure_reason,
     )
+    _mirror_youtube_fallback_parent_status(client, source_id, effective_metadata, status)
+
+
+def _build_media_runtime_metadata() -> dict:
+    # Captures the worker instance identity so intermittent media failures can be
+    # tied back to a specific process and resolved model configuration.
+    return {
+        "transcription_runtime_host": socket.gethostname(),
+        "transcription_runtime_pid": os.getpid(),
+        "transcription_model": settings.transcription_model,
+    }
+
+
+def _build_media_failure_metadata(storage_path: str) -> dict:
+    return {
+        **_build_media_runtime_metadata(),
+        "transcription_storage_path": storage_path,
+        "transcription_input_extension": _media._media_extension(storage_path).lstrip("."),
+    }
 
 
 # Reminder detection pipeline (regex + spaCy) and dispatch.

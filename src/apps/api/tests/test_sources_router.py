@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from app.dependencies import get_rate_limiter
 from app.main import app
 from app.routers import sources as sources_router
-from app.schemas import HubMember, MembershipRole, Source, SourceStatus, SourceSuggestion, SourceSuggestionStatus, SourceSuggestionType, SourceType
+from app.schemas import HubMember, MembershipRole, Source, SourceEnqueueResponse, SourceStatus, SourceSuggestion, SourceSuggestionStatus, SourceSuggestionType, SourceType
 from app.services import rate_limit as rate_limit_module
 from app.services import store as store_module
 from app.services.store import ConflictError
@@ -77,6 +77,31 @@ def test_create_source_success(client, monkeypatch) -> None:
     data = resp.json()
     assert data["source"]["id"] == "src-2"
     assert data["upload_url"] == "http://upload"
+
+
+# Verifies that create source accepts standalone manual media uploads.
+def test_create_source_manual_media_success(client, monkeypatch) -> None:
+    rl = rate_limit_module.RateLimitResult(allowed=True, remaining=1, reset_in_seconds=60)
+    monkeypatch.setitem(app.dependency_overrides, get_rate_limiter, lambda: FixedRateLimiter(rl))
+
+    source = Source(
+        id="src-media-1",
+        hub_id="11111111-1111-1111-1111-111111111111",
+        original_name="clip.mp4",
+        status=SourceStatus.queued,
+        type=SourceType.file,
+        ingestion_metadata={"file_kind": "media", "source_origin": "manual_media"},
+    )
+    monkeypatch.setattr(store_module.store, "create_source", lambda _client, payload: (source, "http://upload.media"))
+
+    resp = client.post(
+        "/sources",
+        json={"hub_id": "11111111-1111-1111-1111-111111111111", "original_name": "clip.mp4", "file_kind": "media"},
+    )
+    assert resp.status_code == 201
+    data = resp.json()
+    assert data["source"]["ingestion_metadata"]["file_kind"] == "media"
+    assert data["upload_url"] == "http://upload.media"
 
 
 # Verifies that get source status not found.
@@ -295,6 +320,84 @@ def test_create_youtube_source_invalid_video_id(client, monkeypatch) -> None:
     assert resp.status_code == 400
 
 
+# Verifies that duplicate YouTube source creation is rejected.
+def test_create_youtube_source_duplicate_video(client, monkeypatch) -> None:
+    rl = rate_limit_module.RateLimitResult(allowed=True, remaining=1, reset_in_seconds=60)
+    monkeypatch.setitem(app.dependency_overrides, get_rate_limiter, lambda: FixedRateLimiter(rl))
+
+    def raise_duplicate(_client, _payload):
+        raise ValueError("This YouTube video is already in this hub")
+
+    monkeypatch.setattr(store_module.store, "create_youtube_source", raise_duplicate)
+
+    resp = client.post(
+        "/sources/youtube",
+        json={
+            "hub_id": "11111111-1111-1111-1111-111111111111",
+            "url": "https://www.youtube.com/watch?v=abc123def45",
+            "language": "en",
+            "allow_auto_captions": True,
+        },
+    )
+    assert resp.status_code == 400
+    assert resp.json()["detail"] == "This YouTube video is already in this hub"
+
+
+# Verifies that create youtube fallback source success.
+def test_create_youtube_fallback_source_success(client, monkeypatch) -> None:
+    rl = rate_limit_module.RateLimitResult(allowed=True, remaining=1, reset_in_seconds=60)
+    monkeypatch.setitem(app.dependency_overrides, get_rate_limiter, lambda: FixedRateLimiter(rl))
+
+    source = Source(
+        id="src-fallback-1",
+        hub_id="11111111-1111-1111-1111-111111111111",
+        original_name="lecture.mp4",
+        status=SourceStatus.queued,
+        storage_path="11111111-1111-1111-1111-111111111111/src-fallback-1/lecture.mp4",
+        type=SourceType.file,
+        ingestion_metadata={"source_origin": "youtube_fallback"},
+    )
+    monkeypatch.setattr(
+        store_module.store,
+        "create_youtube_fallback_source",
+        lambda _client, _payload: (source, "http://upload.fallback"),
+    )
+
+    resp = client.post(
+        "/sources/youtube-fallback",
+        json={
+            "hub_id": "11111111-1111-1111-1111-111111111111",
+            "youtube_source_id": "22222222-2222-2222-2222-222222222222",
+            "original_name": "lecture.mp4",
+        },
+    )
+    assert resp.status_code == 201
+    data = resp.json()
+    assert data["source"]["id"] == "src-fallback-1"
+    assert data["upload_url"] == "http://upload.fallback"
+
+
+# Verifies that create youtube fallback source enforces store validation.
+def test_create_youtube_fallback_source_invalid_parent(client, monkeypatch) -> None:
+    rl = rate_limit_module.RateLimitResult(allowed=True, remaining=1, reset_in_seconds=60)
+    monkeypatch.setitem(app.dependency_overrides, get_rate_limiter, lambda: FixedRateLimiter(rl))
+    monkeypatch.setattr(
+        store_module.store,
+        "create_youtube_fallback_source",
+        lambda _client, _payload: (_ for _ in ()).throw(ValueError("This YouTube source is not eligible for manual upload fallback")),
+    )
+
+    resp = client.post(
+        "/sources/youtube-fallback",
+        json={
+            "hub_id": "11111111-1111-1111-1111-111111111111",
+            "youtube_source_id": "22222222-2222-2222-2222-222222222222",
+            "original_name": "lecture.mp4",
+        },
+    )
+    assert resp.status_code == 400
+
+
 # Verifies that create youtube source requires http url.
 def test_create_youtube_source_requires_http_url(client) -> None:
     # Missing scheme should fail validation.
@@ -395,6 +498,22 @@ def test_refresh_youtube_source_success(client, monkeypatch) -> None:
     assert sent["name"] == "ingest_youtube_source"
     assert sent["args"][0] == source_id
     assert sent["args"][-1] == "abc123def45"
+
+
+# Verifies that refresh youtube source rejects active manual recovery.
+def test_refresh_youtube_source_rejects_active_fallback(client, monkeypatch) -> None:
+    rl = rate_limit_module.RateLimitResult(allowed=True, remaining=1, reset_in_seconds=60)
+    monkeypatch.setitem(app.dependency_overrides, get_rate_limiter, lambda: FixedRateLimiter(rl))
+
+    source_id = "33333333-3333-3333-3333-333333333333"
+    monkeypatch.setattr(
+        store_module.store,
+        "refresh_source",
+        lambda _client, _source_id: (_ for _ in ()).throw(ValueError("This YouTube source already has an active manual upload recovery")),
+    )
+
+    resp = client.post(f"/sources/{source_id}/refresh")
+    assert resp.status_code == 400
 
 
 # Verifies that list source suggestions returns pending items.

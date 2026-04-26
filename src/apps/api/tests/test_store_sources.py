@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from app.schemas import Source, SourceCreate, SourceStatus, SourceSuggestion, SourceSuggestionStatus, SourceSuggestionType, SourceType
+from app.schemas import Source, SourceCreate, SourceStatus, SourceSuggestion, SourceSuggestionStatus, SourceSuggestionType, SourceType, YouTubeFallbackSourceCreate, YouTubeSourceCreate
 from app.services import store as store_module
 from app.services.store import source_helpers
 
@@ -128,6 +128,25 @@ def test_create_source_deletes_row_on_upload_url_failure(monkeypatch) -> None:
     assert fake_client.deleted == [("sources", {"id": str(source_id)})]
 
 
+# Verifies that standalone manual media uploads persist the media file kind metadata.
+def test_create_source_marks_manual_media_upload(monkeypatch) -> None:
+    fake_client = FakeClient()
+    source_id = uuid.UUID("12121212-1212-1212-1212-121212121212")
+    hub_id = uuid.UUID("abababab-abab-abab-abab-abababababab")
+
+    monkeypatch.setattr(store_module.uuid, "uuid4", lambda: source_id)
+    monkeypatch.setattr(store_module.store, "create_upload_url", lambda _path: "http://upload.media")
+
+    payload = SourceCreate(hub_id=hub_id, original_name="clip.mp4", file_kind="media")
+
+    source, upload_url = store_module.store.create_source(fake_client, payload)
+
+    assert source.type == SourceType.file
+    assert upload_url == "http://upload.media"
+    inserted = fake_client.inserted[0][1]
+    assert inserted["ingestion_metadata"] == {"file_kind": "media", "source_origin": "manual_media"}
+
+
 # Verifies that canonicalize web url strips tracking and fragment.
 def test_canonicalize_web_url_strips_tracking_and_fragment() -> None:
     canonical = source_helpers.canonicalize_web_url("https://www.Example.com/docs/?utm_source=test&topic=1#intro")
@@ -196,6 +215,177 @@ def test_find_existing_source_for_youtube_suggestion(monkeypatch) -> None:
     matched = store_module.store.find_existing_source_for_suggestion(object(), suggestion)
     assert matched is not None
     assert matched.id == existing.id
+
+
+# Verifies that duplicate YouTube videos are rejected within the same hub.
+def test_create_youtube_source_rejects_duplicate_video(monkeypatch) -> None:
+    fake_client = FakeClient()
+    existing = Source(
+        id="src-yt-1",
+        hub_id="11111111-1111-1111-1111-111111111111",
+        type=SourceType.youtube,
+        original_name="youtube.com/abc123def45",
+        status=SourceStatus.complete,
+        ingestion_metadata={"url": "https://youtu.be/abc123def45", "video_id": "abc123def45"},
+        created_at=datetime.now(timezone.utc),
+    )
+    payload = YouTubeSourceCreate(
+        hub_id=uuid.UUID("11111111-1111-1111-1111-111111111111"),
+        url="https://www.youtube.com/watch?v=abc123def45",
+        language="en",
+        allow_auto_captions=True,
+    )
+    monkeypatch.setattr(store_module.store, "list_sources", lambda _client, _hub_id: [existing])
+
+    with pytest.raises(ValueError, match="already in this hub"):
+        store_module.store.create_youtube_source(fake_client, payload)
+
+
+# Verifies that linked YouTube fallback sources are created as file sources with linkage metadata.
+def test_create_youtube_fallback_source_creates_linked_file(monkeypatch) -> None:
+    fake_client = FakeClient()
+    parent = Source(
+        id="src-yt-1",
+        hub_id="hub-1",
+        type=SourceType.youtube,
+        original_name="youtube.com/abc123def45",
+        status=SourceStatus.failed,
+        ingestion_metadata={
+            "url": "https://www.youtube.com/watch?v=abc123def45",
+            "video_id": "abc123def45",
+            "youtube_fallback_allowed": True,
+        },
+        created_at=datetime.now(timezone.utc),
+    )
+
+    payload = YouTubeFallbackSourceCreate(
+        hub_id=uuid.UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
+        youtube_source_id=uuid.UUID("11111111-1111-1111-1111-111111111111"),
+        original_name="lecture.mp4",
+    )
+    parent.id = "11111111-1111-1111-1111-111111111111"
+    parent.hub_id = str(payload.hub_id)
+    monkeypatch.setattr(store_module.store, "get_source", lambda _client, source_id: parent if source_id == parent.id else None)
+    monkeypatch.setattr(store_module.store, "create_upload_url", lambda _path: "http://upload.fallback")
+
+    source, upload_url = store_module.store.create_youtube_fallback_source(fake_client, payload)
+
+    assert source.type == SourceType.file
+    assert upload_url == "http://upload.fallback"
+    inserted = fake_client.inserted[0][1]
+    assert inserted["ingestion_metadata"]["source_origin"] == "youtube_fallback"
+    assert inserted["ingestion_metadata"]["youtube_fallback_parent_source_id"] == parent.id
+    assert fake_client.updates[-1][2]["ingestion_metadata"]["youtube_fallback_source_status"] == "pending_upload"
+
+
+# Verifies that stale pending-upload fallback rows are replaced by a new recovery attempt.
+def test_create_youtube_fallback_source_replaces_stale_pending_upload(monkeypatch) -> None:
+    fake_client = FakeClient()
+    parent = Source(
+        id="src-yt-2",
+        hub_id="hub-1",
+        type=SourceType.youtube,
+        original_name="youtube.com/xyz987uvw65",
+        status=SourceStatus.failed,
+        ingestion_metadata={
+            "url": "https://www.youtube.com/watch?v=xyz987uvw65",
+            "video_id": "xyz987uvw65",
+            "youtube_fallback_allowed": True,
+            "youtube_fallback_source_id": "src-fallback-stale",
+            "youtube_fallback_source_status": "pending_upload",
+        },
+        created_at=datetime.now(timezone.utc),
+    )
+
+    payload = YouTubeFallbackSourceCreate(
+        hub_id=uuid.UUID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"),
+        youtube_source_id=uuid.UUID("22222222-2222-2222-2222-222222222222"),
+        original_name="retry.mp4",
+    )
+    parent.id = "22222222-2222-2222-2222-222222222222"
+    parent.hub_id = str(payload.hub_id)
+    monkeypatch.setattr(store_module.store, "get_source", lambda _client, source_id: parent if source_id == parent.id else (_ for _ in ()).throw(KeyError("missing")))
+    monkeypatch.setattr(store_module.store, "create_upload_url", lambda _path: "http://upload.retry")
+
+    source, upload_url = store_module.store.create_youtube_fallback_source(fake_client, payload)
+
+    assert source.type == SourceType.file
+    assert upload_url == "http://upload.retry"
+    assert ("sources", {"id": "src-fallback-stale"}) in fake_client.deleted
+
+
+# Verifies that parent YouTube refresh is blocked while a manual recovery owns the retry flow.
+def test_refresh_youtube_source_rejects_active_fallback(monkeypatch) -> None:
+    source = Source(
+        id="src-yt-3",
+        hub_id="hub-1",
+        type=SourceType.youtube,
+        original_name="youtube.com/abc123def45",
+        status=SourceStatus.failed,
+        ingestion_metadata={
+            "url": "https://www.youtube.com/watch?v=abc123def45",
+            "video_id": "abc123def45",
+            "youtube_fallback_source_id": "src-fallback-active",
+            "youtube_fallback_source_status": "processing",
+        },
+        created_at=datetime.now(timezone.utc),
+    )
+    monkeypatch.setattr(store_module.store, "get_source", lambda _client, _source_id: source)
+
+    with pytest.raises(ValueError, match="active manual upload recovery"):
+        store_module.store.refresh_youtube_source(object(), source.id)
+
+
+# Verifies that deleting an older fallback child does not clear the parent's current recovery pointer.
+def test_delete_source_preserves_newer_fallback_parent_pointer(monkeypatch) -> None:
+    fake_client = FakeClient()
+    deleted_child = Source(
+        id="src-fallback-old",
+        hub_id="hub-1",
+        type=SourceType.file,
+        original_name="old.mp4",
+        storage_path="hub-1/src-fallback-old/old.mp4",
+        status=SourceStatus.failed,
+        ingestion_metadata={
+            "source_origin": "youtube_fallback",
+            "youtube_fallback_parent_source_id": "src-yt-parent",
+        },
+        created_at=datetime.now(timezone.utc),
+    )
+    parent = Source(
+        id="src-yt-parent",
+        hub_id="hub-1",
+        type=SourceType.youtube,
+        original_name="youtube.com/abc123def45",
+        status=SourceStatus.failed,
+        ingestion_metadata={
+            "youtube_fallback_source_id": "src-fallback-current",
+            "youtube_fallback_source_status": "processing",
+        },
+        created_at=datetime.now(timezone.utc),
+    )
+
+    storage_remove = []
+
+    def fake_get_source(_client, source_id):
+        if source_id == deleted_child.id:
+            return deleted_child
+        if source_id == parent.id:
+            return parent
+        raise KeyError(source_id)
+
+    monkeypatch.setattr(store_module.store, "get_source", fake_get_source)
+    monkeypatch.setattr(
+        store_module.store.service_client.storage,
+        "from_",
+        lambda _bucket: type("FakeBucket", (), {"remove": lambda _self, paths: storage_remove.append(paths)})(),
+    )
+
+    store_module.store.delete_source(fake_client, deleted_child.id)
+
+    assert fake_client.deleted == [("sources", {"id": deleted_child.id})]
+    assert storage_remove == [[deleted_child.storage_path]]
+    assert fake_client.updates == []
 
 
 # Verifies that update source suggestion uses expected status guard.

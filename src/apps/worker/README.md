@@ -49,6 +49,10 @@ Worker-specific settings include:
 - `YOUTUBE_TASK_SOFT_TIME_LIMIT_SECONDS`
 - `YOUTUBE_TASK_TIME_LIMIT_SECONDS`
 - `YOUTUBE_COOKIES_FILE`, `YOUTUBE_COOKIES_B64`, or `YOUTUBE_COOKIES_RAW` when hosted YouTube requests require authenticated cookies
+- `MEDIA_UPLOAD_MAX_BYTES` for the largest manual media upload the worker will accept before preprocessing
+- `FFMPEG_BINARY` for the FFmpeg executable used to preprocess oversized manual media uploads
+- `OPENAI_TRANSCRIPTION_MODEL` or `TRANSCRIPTION_MODEL` for manual YouTube fallback media uploads
+- `TRANSCRIPTION_MAX_BYTES` for the maximum media upload size the transcription fallback accepts
 - `DEFAULT_TIMEZONE`
 
 Reminder detection also requires a spaCy English model such as `en_core_web_sm`.
@@ -83,6 +87,14 @@ YouTube ingestion:
 5. The worker chunks, embeds, and writes retrieval records
 6. Refresh re-fetches metadata and captions, while reprocess uses the stored snapshot
 
+Manual YouTube fallback:
+
+1. A YouTube source fails with a recoverable caption-ingestion error
+2. The worker stores a machine-readable failure code plus fallback eligibility in source metadata
+3. The web app offers an `Upload audio/video instead` recovery action on the failed YouTube source
+4. The user uploads an audio or video file they already own or have permission to transcribe
+5. The worker transcribes the uploaded media with OpenAI, then chunks and embeds the transcript like any other source
+
 Hosted workers can be challenged by YouTube with `Sign in to confirm you're not a bot`. In that case,
 export YouTube cookies in Netscape `cookies.txt` format and configure one of:
 
@@ -91,6 +103,15 @@ export YouTube cookies in Netscape `cookies.txt` format and configure one of:
 - `YOUTUBE_COOKIES_RAW`: raw `cookies.txt` contents, useful only if the host supports multiline secrets cleanly
 
 Prefer `YOUTUBE_COOKIES_FILE` or `YOUTUBE_COOKIES_B64` for deployment. Do not commit cookie files.
+
+Manual media fallback uploads currently accept `mp3`, `mp4`, and `m4a`.
+The worker accepts uploads up to 50 MB by default. The web app now compresses oversized manual media
+uploads in the browser before the direct storage upload begins. Files above the direct 25 MB transcription cap are
+preprocessed with FFmpeg into a lower-bitrate speech-oriented MP3 before transcription.
+
+Worker deployments that need media uploads above 25 MB must have FFmpeg installed and available on PATH
+or at the configured `FFMPEG_BINARY` location. If a large upload still cannot be reduced below the 25 MB
+transcription cap, the source fails with a clear size-limit error instead of being partially processed.
 
 ## Module Ownership
 
@@ -102,6 +123,7 @@ The `worker/` package is split by responsibility:
 - `worker/content.py`: file extraction helpers for uploaded documents
 - `worker/web.py`: web crawling, validation, robots, and extraction helpers
 - `worker/youtube.py`: YouTube metadata, caption selection, and transcript helpers
+- `worker/media.py`: media transcription helpers for linked YouTube fallback uploads
 - `worker/storage.py`: Supabase Storage and source-row helper operations
 - `worker/common.py`: shared normalization, batching, and parsing helpers
 - `worker/response_utils.py`: defensive OpenAI response parsing helpers

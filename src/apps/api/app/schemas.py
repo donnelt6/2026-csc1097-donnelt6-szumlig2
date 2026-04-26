@@ -209,6 +209,7 @@ class Source(BaseModel):
 class SourceCreate(StrictModel):
     hub_id: UUID
     original_name: str = Field(..., min_length=1, max_length=255)
+    file_kind: Optional[str] = Field(default=None)
 
     # Reject filenames that contain null bytes or path separators.
     @field_validator("original_name")
@@ -269,6 +270,21 @@ class YouTubeSourceCreate(StrictModel):
             return None
         return cleaned
 
+
+class YouTubeFallbackSourceCreate(StrictModel):
+    hub_id: UUID
+    youtube_source_id: UUID
+    original_name: str = Field(..., min_length=1, max_length=255)
+
+    # Reuse the same filename validation as normal file uploads.
+    @field_validator("original_name")
+    @classmethod
+    def validate_original_name(cls, value: str) -> str:
+        if "\x00" in value:
+            raise ValueError("File name contains invalid characters.")
+        if "/" in value or "\\" in value:
+            raise ValueError("File name must not include path separators.")
+        return value
 
 class SourceEnqueueResponse(BaseModel):
     source: Source
