@@ -1,6 +1,6 @@
 """test_tasks.py: Exercises worker task flows plus helpers from their owning modules."""
 
-from worker import common, content, media, tasks, web, youtube
+from worker import common, config, content, media, tasks, web, youtube
 
 
 # Text cleanup helpers.
@@ -333,6 +333,17 @@ def test_validate_transcription_model_rejects_chat_model() -> None:
         raise AssertionError("Expected RuntimeError for non-transcription model")
 
 
+# Verifies that Whisper remains accepted alongside newer `*-transcribe` models.
+def test_validate_transcription_model_accepts_whisper_one() -> None:
+    media._validate_transcription_model("whisper-1")
+
+
+# Verifies that quoted numeric worker settings are normalized before parsing.
+def test_clean_int_env_strips_quotes(monkeypatch) -> None:
+    monkeypatch.setenv("CHUNK_SIZE", ' "800" ')
+    assert config._clean_int_env("CHUNK_SIZE", 100) == 800
+
+
 # Verifies that smaller media uploads go straight to transcription without preprocessing.
 def test_prepare_transcription_input_keeps_direct_media_under_limit(monkeypatch) -> None:
     monkeypatch.setattr(media.settings, "transcription_max_bytes", 25)
@@ -441,6 +452,7 @@ def test_update_source_mirrors_youtube_fallback_status(monkeypatch) -> None:
 
     assert updates[0][0] == "src-child-1"
     assert updates[1][0] == "src-parent-1"
+    assert updates[1][1]["status"] == "failed"
     assert updates[1][1]["ingestion_metadata"]["youtube_fallback_source_status"] == "processing"
 
 

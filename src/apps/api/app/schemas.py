@@ -2,7 +2,7 @@
 
 from datetime import datetime
 from enum import Enum
-from typing import List, Optional
+from typing import List, Literal, Optional
 from urllib.parse import urlparse
 from uuid import UUID
 
@@ -209,7 +209,7 @@ class Source(BaseModel):
 class SourceCreate(StrictModel):
     hub_id: UUID
     original_name: str = Field(..., min_length=1, max_length=255)
-    file_kind: Optional[str] = Field(default=None)
+    file_kind: Optional[Literal["document", "media"]] = Field(default=None)
 
     # Reject filenames that contain null bytes or path separators.
     @field_validator("original_name")

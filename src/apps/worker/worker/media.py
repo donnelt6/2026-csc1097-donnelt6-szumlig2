@@ -163,9 +163,11 @@ def _validate_transcription_model(model: str) -> None:
     normalized = (model or "").strip().lower()
     if not normalized:
         raise RuntimeError("OPENAI transcription model is missing in worker configuration")
-    if "transcribe" not in normalized:
+    # `whisper-1` remains valid even though newer GPT audio models use the
+    # `*-transcribe` naming pattern.
+    if normalized != "whisper-1" and "transcribe" not in normalized:
         raise RuntimeError(
-            f"Configured transcription model '{model}' is invalid for audio transcription; use a *-transcribe model"
+            f"Configured transcription model '{model}' is invalid for audio transcription; use whisper-1 or a *-transcribe model"
         )
 
 

@@ -363,7 +363,13 @@ export function AddSourceModal({ hubId, open, onClose, onRefresh, youtubeFallbac
             try {
               await failSource(sourceId, reason);
               onRefresh();
-            } catch {}
+            } catch (failErr) {
+              const failReason = failErr instanceof Error ? failErr.message : "Unknown error";
+              setStatusMessage({
+                text: `Upload failed, and Caddie could not mark the source as failed automatically: ${failReason}`,
+                type: "error",
+              });
+            }
           }
         }
       }

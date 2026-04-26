@@ -327,6 +327,7 @@ def test_create_youtube_fallback_source_creates_linked_file(monkeypatch) -> None
 # Verifies that stale pending-upload fallback rows are replaced by a new recovery attempt.
 def test_create_youtube_fallback_source_replaces_stale_pending_upload(monkeypatch) -> None:
     fake_client = FakeClient()
+    deleted_source_ids: list[str] = []
     parent = Source(
         id="src-yt-2",
         hub_id="hub-1",
@@ -352,12 +353,13 @@ def test_create_youtube_fallback_source_replaces_stale_pending_upload(monkeypatc
     parent.hub_id = str(payload.hub_id)
     monkeypatch.setattr(store_module.store, "get_source", lambda _client, source_id: parent if source_id == parent.id else (_ for _ in ()).throw(KeyError("missing")))
     monkeypatch.setattr(store_module.store, "create_upload_url", lambda _path: "http://upload.retry")
+    monkeypatch.setattr(store_module.store, "delete_source", lambda _client, source_id: deleted_source_ids.append(source_id))
 
     source, upload_url = store_module.store.create_youtube_fallback_source(fake_client, payload)
 
     assert source.type == SourceType.file
     assert upload_url == "http://upload.retry"
-    assert ("sources", {"id": "src-fallback-stale"}) in fake_client.deleted
+    assert deleted_source_ids == ["src-fallback-stale"]
 
 
 # Verifies that stale fallback cleanup logs the original delete failure before surfacing a friendly error.
@@ -385,20 +387,11 @@ def test_create_youtube_fallback_source_logs_delete_failure(monkeypatch) -> None
     parent.id = "22222222-2222-2222-2222-222222222222"
     parent.hub_id = str(payload.hub_id)
 
-    class FailingDeleteTable(FakeTable):
-        def execute(self) -> FakeResponse:
-            if self._op == "delete" and self.name == "sources":
-                raise RuntimeError("delete denied")
-            return super().execute()
-
-    class FailingDeleteClient(FakeClient):
-        def table(self, name: str) -> FakeTable:
-            return FailingDeleteTable(self, name)
-
-    fake_client = FailingDeleteClient()
+    fake_client = FakeClient()
     logged: list[str] = []
 
     monkeypatch.setattr(store_module.store, "get_source", lambda _client, source_id: parent if source_id == parent.id else (_ for _ in ()).throw(KeyError("missing")))
+    monkeypatch.setattr(store_module.store, "delete_source", lambda _client, _source_id: (_ for _ in ()).throw(RuntimeError("delete denied")))
     monkeypatch.setattr(sources_module.logger, "exception", lambda message, *args, **kwargs: logged.append(message))
 
     with pytest.raises(ValueError, match="already being prepared"):

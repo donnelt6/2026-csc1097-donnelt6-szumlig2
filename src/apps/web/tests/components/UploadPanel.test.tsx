@@ -177,6 +177,38 @@ describe("UploadPanel", () => {
     await waitFor(() => expect(failSource).toHaveBeenCalledWith("src-2", "Upload failed with status 500"));
   });
 
+  it("surfaces a follow-up error when marking a failed upload source also fails", async () => {
+    vi.mocked(createSource).mockResolvedValue({
+      source: {
+        id: "src-2c",
+        hub_id: "hub-1",
+        type: "file",
+        original_name: "bad-mark.md",
+        status: "queued",
+        created_at: "2025-01-01T00:00:00Z",
+      },
+      upload_url: "http://upload.test/file",
+    });
+    vi.mocked(failSource).mockRejectedValueOnce(new Error("mark failed request timed out"));
+    mockXhr(500);
+
+    renderWithQueryClient(
+      <UploadPanel hubId="hub-1" sources={[]} onRefresh={vi.fn()} />
+    );
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Add Source" }));
+
+    const input = document.querySelector(".add-source-modal__file-input") as HTMLInputElement;
+    const file = new File(["oops"], "bad-mark.md", { type: "text/plain" });
+    fireEvent.change(input, { target: { files: [file] } });
+
+    await waitFor(() => expect(failSource).toHaveBeenCalledWith("src-2c", "Upload failed with status 500"));
+    await waitFor(() =>
+      expect(screen.getByText(/could not mark the source as failed automatically: mark failed request timed out/i)).toBeInTheDocument()
+    );
+  });
+
   it("does not delete a failed upload source when reopening the modal", async () => {
     vi.mocked(createSource).mockResolvedValue({
       source: {

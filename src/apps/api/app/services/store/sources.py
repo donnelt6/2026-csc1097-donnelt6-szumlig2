@@ -170,7 +170,7 @@ class SourceStoreMixin:
         if existing_fallback_id:
             if existing_fallback_status == "pending_upload":
                 try:
-                    client.table("sources").delete().eq("id", existing_fallback_id).execute()
+                    self.delete_source(client, existing_fallback_id)
                 except Exception:
                     logger.exception(
                         "Failed to delete stale pending YouTube fallback source before creating a replacement",

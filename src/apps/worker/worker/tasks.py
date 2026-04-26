@@ -124,6 +124,9 @@ def _mirror_youtube_fallback_parent_status(
         return
     parent_metadata["youtube_fallback_source_id"] = source_id
     parent_metadata["youtube_fallback_source_status"] = status
+    # Keep the parent row failed because the original YouTube import did fail.
+    # Recovery progress is mirrored through metadata on that failed row instead
+    # of rewriting the parent status to match the child upload.
     _storage._update_source(
         client,
         parent_source_id,
