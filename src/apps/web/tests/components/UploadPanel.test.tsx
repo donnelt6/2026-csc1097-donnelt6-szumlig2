@@ -6,16 +6,23 @@ import type { ComponentProps } from "react";
 import { UploadPanel } from "../../components/UploadPanel";
 import {
   createSource,
+  createYouTubeFallbackSource,
   createWebSource,
   createYouTubeSource,
   deleteSource,
   enqueueSource,
+  failSource,
 } from "../../lib/api";
+import {
+  MEDIA_COMPRESSION_INPUT_MAX_BYTES,
+  prepareMediaFileForUpload,
+} from "../../lib/mediaCompression";
 import type { Source } from "@shared/index";
 import { renderWithQueryClient } from "../test-utils";
 
 vi.mock("../../lib/api", () => ({
   createSource: vi.fn(),
+  createYouTubeFallbackSource: vi.fn(),
   createWebSource: vi.fn(),
   createYouTubeSource: vi.fn(),
   listSourceSuggestions: vi.fn().mockResolvedValue([]),
@@ -23,7 +30,15 @@ vi.mock("../../lib/api", () => ({
   decideSourceSuggestion: vi.fn(),
   deleteSource: vi.fn(),
   enqueueSource: vi.fn(),
+  failSource: vi.fn(),
   refreshSource: vi.fn(),
+}));
+
+vi.mock("../../lib/mediaCompression", () => ({
+  MEDIA_UPLOAD_MAX_BYTES: 50 * 1024 * 1024,
+  MEDIA_COMPRESSION_INPUT_MAX_BYTES: 200 * 1024 * 1024,
+  mediaUploadRequiresCompression: (file: File) => file.size > 50 * 1024 * 1024,
+  prepareMediaFileForUpload: vi.fn(async (file: File) => file),
 }));
 
 function mockXhr(status = 200) {
@@ -159,6 +174,39 @@ describe("UploadPanel", () => {
 
     await waitFor(() => expect(screen.getByText(/Failed/i)).toBeInTheDocument(), { timeout: 3000 });
     expect(enqueueSource).not.toHaveBeenCalled();
+    await waitFor(() => expect(failSource).toHaveBeenCalledWith("src-2", "Upload failed with status 500"));
+  });
+
+  it("does not delete a failed upload source when reopening the modal", async () => {
+    vi.mocked(createSource).mockResolvedValue({
+      source: {
+        id: "src-2b",
+        hub_id: "hub-1",
+        type: "file",
+        original_name: "bad-again.md",
+        status: "queued",
+        created_at: "2025-01-01T00:00:00Z",
+      },
+      upload_url: "http://upload.test/file",
+    });
+    mockXhr(500);
+
+    renderWithQueryClient(
+      <UploadPanel hubId="hub-1" sources={[]} onRefresh={vi.fn()} />
+    );
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Add Source" }));
+
+    const input = document.querySelector(".add-source-modal__file-input") as HTMLInputElement;
+    const file = new File(["oops"], "bad-again.md", { type: "text/plain" });
+    fireEvent.change(input, { target: { files: [file] } });
+
+    await waitFor(() => expect(screen.getByText(/Failed/i)).toBeInTheDocument(), { timeout: 3000 });
+    await user.click(screen.getByRole("button", { name: "Close" }));
+    await user.click(screen.getByRole("button", { name: "Add Source" }));
+
+    expect(deleteSource).not.toHaveBeenCalled();
   });
 
   it("shows error details for a failed source", async () => {
@@ -179,6 +227,84 @@ describe("UploadPanel", () => {
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "View error" }));
     expect(screen.getByText("upload failed")).toBeInTheDocument();
+  });
+
+  it("shows manual upload fallback for eligible failed YouTube sources", async () => {
+    const failedSource: Source = {
+      id: "src-yt-failed",
+      hub_id: "hub-1",
+      type: "youtube",
+      original_name: "youtube.com/abc123def45",
+      status: "failed",
+      created_at: "2025-01-01T00:00:00Z",
+      failure_reason: "No captions available for this YouTube video",
+      ingestion_metadata: {
+        youtube_fallback_allowed: true,
+        youtube_fallback_user_message: "Upload the audio or video file manually instead.",
+      },
+    };
+
+    renderWithQueryClient(
+      <UploadPanel hubId="hub-1" sources={[failedSource]} onRefresh={() => undefined} />
+    );
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "View error" }));
+    expect(screen.getByRole("button", { name: "Upload audio/video instead" })).toBeInTheDocument();
+  });
+
+  it("hides manual upload fallback when a recovery is already active", async () => {
+    const failedSource: Source = {
+      id: "src-yt-active",
+      hub_id: "hub-1",
+      type: "youtube",
+      original_name: "youtube.com/abc123def45",
+      status: "failed",
+      created_at: "2025-01-01T00:00:00Z",
+      failure_reason: "No captions available for this YouTube video",
+      ingestion_metadata: {
+        youtube_fallback_allowed: true,
+        youtube_fallback_source_id: "src-fallback-1",
+        youtube_fallback_source_status: "processing",
+        youtube_fallback_user_message: "Upload the audio or video file manually instead.",
+      },
+    };
+
+    renderWithQueryClient(
+      <UploadPanel hubId="hub-1" sources={[failedSource]} onRefresh={() => undefined} />
+    );
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "View error" }));
+    expect(screen.queryByRole("button", { name: "Upload audio/video instead" })).not.toBeInTheDocument();
+    expect(screen.getByText("Recovery processing")).toBeInTheDocument();
+  });
+
+  it("keeps manual upload fallback available while a recovery upload is only pending", async () => {
+    const failedSource: Source = {
+      id: "src-yt-pending",
+      hub_id: "hub-1",
+      type: "youtube",
+      original_name: "youtube.com/abc123def45",
+      status: "failed",
+      created_at: "2025-01-01T00:00:00Z",
+      failure_reason: "No captions available for this YouTube video",
+      ingestion_metadata: {
+        youtube_fallback_allowed: true,
+        youtube_fallback_source_id: "src-fallback-1",
+        youtube_fallback_source_status: "pending_upload",
+        youtube_fallback_user_message: "Upload the audio or video file manually instead.",
+      },
+    };
+
+    renderWithQueryClient(
+      <UploadPanel hubId="hub-1" sources={[failedSource]} onRefresh={() => undefined} />
+    );
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "View error" }));
+    expect(screen.getByRole("button", { name: "Upload audio/video instead" })).toBeInTheDocument();
+    expect(screen.getByText("Recovery upload pending")).toBeInTheDocument();
   });
 
   it("hides upload controls for viewers", () => {
@@ -246,6 +372,182 @@ describe("UploadPanel", () => {
       })
     );
     expect(onRefresh).toHaveBeenCalled();
+  });
+
+  it("does not enqueue the same YouTube URL twice on rapid repeat submit", async () => {
+    const onRefresh = vi.fn();
+    vi.mocked(createYouTubeSource).mockResolvedValue({
+      id: "src-yt-1",
+      hub_id: "hub-1",
+      type: "youtube",
+      original_name: "youtube.com/abc123def45",
+      status: "queued",
+      created_at: "2025-01-01T00:00:00Z",
+    });
+
+    renderWithQueryClient(<UploadPanel hubId="hub-1" sources={[]} onRefresh={onRefresh} />);
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Add Source" }));
+    await user.click(screen.getByRole("button", { name: /YouTube Video/ }));
+    await user.type(
+      screen.getByPlaceholderText("https://youtube.com/watch?v=..."),
+      "https://www.youtube.com/watch?v=abc123def45"
+    );
+
+    const importButton = screen.getByRole("button", { name: "Import" });
+    await user.dblClick(importButton);
+
+    await waitFor(() => expect(createYouTubeSource).toHaveBeenCalledTimes(1));
+  });
+
+  it("submits a standalone manual media upload from the YouTube tab", async () => {
+    const onRefresh = vi.fn();
+    vi.mocked(createSource).mockResolvedValue({
+      source: {
+        id: "src-media-1",
+        hub_id: "hub-1",
+        type: "file",
+        original_name: "clip.mp4",
+        status: "queued",
+        created_at: "2025-01-01T00:00:00Z",
+        ingestion_metadata: { file_kind: "media", source_origin: "manual_media" },
+      },
+      upload_url: "http://upload.test/media",
+    });
+    vi.mocked(enqueueSource).mockResolvedValue({ status: "queued" });
+    mockXhr(200);
+
+    renderWithQueryClient(<UploadPanel hubId="hub-1" sources={[]} onRefresh={onRefresh} />);
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Add Source" }));
+    await user.click(screen.getByRole("button", { name: /YouTube Video/ }));
+    expect(screen.getByText("Faster when captions are available; if import fails, you can upload media manually.")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /Upload audio\/video manually/i }));
+
+    const input = document.querySelector(".add-source-modal__file-input") as HTMLInputElement;
+    expect(input.accept).toBe(".mp3,.mp4,.m4a");
+    expect(screen.getByText(/mp3, mp4, or m4a files\. files above 50mb are compressed before upload\./i)).toBeInTheDocument();
+    const file = new File(["media"], "clip.mp4", { type: "video/mp4" });
+    fireEvent.change(input, { target: { files: [file] } });
+
+    await waitFor(() =>
+      expect(createSource).toHaveBeenCalledWith({
+        hub_id: "hub-1",
+        original_name: "clip.mp4",
+        file_kind: "media",
+      })
+    );
+    await waitFor(() => expect(enqueueSource).toHaveBeenCalledWith("src-media-1"));
+    expect(onRefresh).toHaveBeenCalled();
+  });
+
+  it("submits a YouTube fallback media upload", async () => {
+    const onRefresh = vi.fn();
+    vi.mocked(createYouTubeFallbackSource).mockResolvedValue({
+      source: {
+        id: "src-fallback-1",
+        hub_id: "hub-1",
+        type: "file",
+        original_name: "lecture.mp4",
+        status: "queued",
+        created_at: "2025-01-01T00:00:00Z",
+        ingestion_metadata: { source_origin: "youtube_fallback" },
+      },
+      upload_url: "http://upload.test/fallback",
+    });
+    vi.mocked(enqueueSource).mockResolvedValue({ status: "queued" });
+    mockXhr(200);
+
+    const failedSource: Source = {
+      id: "src-yt-failed",
+      hub_id: "hub-1",
+      type: "youtube",
+      original_name: "youtube.com/abc123def45",
+      status: "failed",
+      created_at: "2025-01-01T00:00:00Z",
+      failure_reason: "No captions available for this YouTube video",
+      ingestion_metadata: {
+        youtube_fallback_allowed: true,
+        youtube_fallback_user_message: "Upload the audio or video file manually instead.",
+      },
+    };
+
+    renderWithQueryClient(<UploadPanel hubId="hub-1" sources={[failedSource]} onRefresh={onRefresh} />);
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "View error" }));
+    await user.click(screen.getByRole("button", { name: "Upload audio/video instead" }));
+
+    const input = document.querySelector(".add-source-modal__file-input") as HTMLInputElement;
+    expect(input.accept).toBe(".mp3,.mp4,.m4a");
+    const file = new File(["media"], "lecture.mp4", { type: "video/mp4" });
+    fireEvent.change(input, { target: { files: [file] } });
+
+    await waitFor(() =>
+      expect(createYouTubeFallbackSource).toHaveBeenCalledWith({
+        hub_id: "hub-1",
+        youtube_source_id: "src-yt-failed",
+        original_name: "lecture.mp4",
+      })
+    );
+    await waitFor(() => expect(enqueueSource).toHaveBeenCalledWith("src-fallback-1"));
+    expect(onRefresh).toHaveBeenCalled();
+  });
+
+  it("rejects manual media uploads above 50 MB before enqueueing", async () => {
+    renderWithQueryClient(<UploadPanel hubId="hub-1" sources={[]} onRefresh={() => undefined} />);
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Add Source" }));
+    await user.click(screen.getByRole("button", { name: /YouTube Video/ }));
+    await user.click(screen.getByRole("button", { name: /Upload audio\/video manually/i }));
+
+    const input = document.querySelector(".add-source-modal__file-input") as HTMLInputElement;
+    const file = new File(["media"], "lecture.mp4", { type: "video/mp4" });
+    Object.defineProperty(file, "size", { value: 60 * 1024 * 1024 });
+    const compressed = new File(["compressed"], "lecture-speech.mp3", { type: "audio/mpeg" });
+    vi.mocked(prepareMediaFileForUpload).mockResolvedValueOnce(compressed);
+    vi.mocked(createSource).mockResolvedValue({
+      source: {
+        id: "src-media-2",
+        hub_id: "hub-1",
+        type: "file",
+        original_name: "lecture-speech.mp3",
+        status: "queued",
+        created_at: "2025-01-01T00:00:00Z",
+      },
+      upload_url: "http://upload.test/file",
+    });
+    vi.mocked(enqueueSource).mockResolvedValue({ status: "queued" });
+    mockXhr(200);
+
+    fireEvent.change(input, { target: { files: [file] } });
+
+    await waitFor(() => expect(prepareMediaFileForUpload).toHaveBeenCalledWith(file));
+    await waitFor(() =>
+      expect(createSource).toHaveBeenCalledWith({ hub_id: "hub-1", original_name: "lecture-speech.mp3", file_kind: "media" })
+    );
+    await waitFor(() => expect(enqueueSource).toHaveBeenCalledWith("src-media-2"));
+  });
+
+  it("rejects manual media uploads above the browser compression input limit before enqueueing", async () => {
+    renderWithQueryClient(<UploadPanel hubId="hub-1" sources={[]} onRefresh={() => undefined} />);
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Add Source" }));
+    await user.click(screen.getByRole("button", { name: /YouTube Video/ }));
+    await user.click(screen.getByRole("button", { name: /Upload audio\/video manually/i }));
+
+    const input = document.querySelector(".add-source-modal__file-input") as HTMLInputElement;
+    const file = new File(["media"], "too-large.mp4", { type: "video/mp4" });
+    Object.defineProperty(file, "size", { value: MEDIA_COMPRESSION_INPUT_MAX_BYTES + 1 });
+    fireEvent.change(input, { target: { files: [file] } });
+
+    await waitFor(() => expect(screen.getByText(/too-large\.mp4 exceeded the 200 mb raw size limit for browser compression/i)).toBeInTheDocument());
+    expect(createSource).not.toHaveBeenCalled();
+    expect(enqueueSource).not.toHaveBeenCalled();
   });
 
   it("shows delete for a non-failed source when uploads are allowed", () => {
@@ -341,6 +643,25 @@ describe("UploadPanel", () => {
     renderWithQueryClient(<UploadPanel hubId="hub-1" sources={[webSource]} onRefresh={() => undefined} />);
 
     expect(screen.getByRole("button", { name: "Refresh" })).toBeInTheDocument();
+  });
+
+  it("hides refresh for YouTube sources with active recovery", () => {
+    const source: Source = {
+      id: "src-yt-recovery",
+      hub_id: "hub-1",
+      type: "youtube",
+      original_name: "youtube.com/abc123def45",
+      status: "failed",
+      created_at: "2025-01-01T00:00:00Z",
+      ingestion_metadata: {
+        youtube_fallback_source_id: "src-fallback-1",
+        youtube_fallback_source_status: "queued",
+      },
+    };
+
+    renderWithQueryClient(<UploadPanel hubId="hub-1" sources={[source]} onRefresh={() => undefined} />);
+
+    expect(screen.queryByRole("button", { name: "Refresh" })).not.toBeInTheDocument();
   });
 
   it("renders selection toggles for complete sources and not for incomplete", () => {

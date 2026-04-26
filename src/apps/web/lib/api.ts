@@ -155,7 +155,11 @@ export async function listSources(hubId: string): Promise<Source[]> {
   return handle<Source[]>(res);
 }
 
-export async function createSource(data: { hub_id: string; original_name: string }): Promise<{ source: Source; upload_url: string }> {
+export async function createSource(data: {
+  hub_id: string;
+  original_name: string;
+  file_kind?: "document" | "media";
+}): Promise<{ source: Source; upload_url: string }> {
   const res = await authedFetch(`${API_BASE}/sources`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -180,6 +184,19 @@ export async function createYouTubeSource(data: {
   allow_auto_captions?: boolean;
 }): Promise<Source> {
   const res = await authedFetch(`${API_BASE}/sources/youtube`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  return handle(res);
+}
+
+export async function createYouTubeFallbackSource(data: {
+  hub_id: string;
+  youtube_source_id: string;
+  original_name: string;
+}): Promise<{ source: Source; upload_url: string }> {
+  const res = await authedFetch(`${API_BASE}/sources/youtube-fallback`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),

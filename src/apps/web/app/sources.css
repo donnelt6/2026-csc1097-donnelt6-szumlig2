@@ -629,10 +629,25 @@
 }
 
 .sources__resource-meta {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
   font-size: 0.8rem;
   color: var(--text-secondary);
   line-height: 1.2;
   margin-top: 3px;
+}
+
+.sources__recovery-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--accent);
+  font-size: 0.6875rem;
+  font-weight: var(--font-semibold);
 }
 
 .sources__resource-name-skeleton {
@@ -1230,8 +1245,6 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-top: 8px;
-  margin-left: auto;
   padding: 4px;
   border: none;
   background: none;
@@ -1249,6 +1262,33 @@
 .sources__error-popover-copy-icon {
   width: 16px;
   height: 16px;
+}
+
+.sources__error-popover-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.sources__error-popover-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border));
+  background: color-mix(in srgb, var(--accent) 8%, var(--card));
+  color: var(--accent);
+  font-size: 0.75rem;
+  font-weight: var(--font-semibold);
+  cursor: pointer;
+  transition: background var(--transition-fast), border-color var(--transition-fast);
+}
+
+.sources__error-popover-cta:hover {
+  background: color-mix(in srgb, var(--accent) 12%, var(--card));
+  border-color: var(--accent);
 }
 
 .sources__chunks-header {
@@ -1646,6 +1686,42 @@
   flex-direction: column;
   flex: 1;
   gap: 20px;
+}
+
+.add-source-modal__choice-row {
+  display: grid;
+  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
+  gap: 10px;
+}
+
+.add-source-modal__choice {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-secondary);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color var(--transition-fast), background var(--transition-fast), transform var(--transition-fast);
+}
+
+.add-source-modal__choice:hover {
+  border-color: var(--border-hover);
+  background: color-mix(in srgb, var(--card) 82%, var(--accent) 18%);
+}
+
+.add-source-modal__choice--active {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--card) 76%, var(--accent) 24%);
+}
+
+.add-source-modal__choice-title {
+  font-size: 0.875rem;
+  font-weight: var(--font-semibold);
 }
 
 .add-source-modal__link-description {
