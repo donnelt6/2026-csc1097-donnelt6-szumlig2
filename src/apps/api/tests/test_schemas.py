@@ -3,7 +3,7 @@ import pytest
 
 from pydantic import ValidationError
 
-from app.schemas import ChatSessionRenameRequest, CreateRevisionRequest, HubUpdate
+from app.schemas import ChatSessionRenameRequest, CreateRevisionRequest, HubUpdate, SourceCreate
 
 
 # Verifies that hub update rejects blank name.
@@ -42,3 +42,13 @@ def test_create_revision_rejects_blank_content() -> None:
 def test_create_revision_trims_content() -> None:
     payload = CreateRevisionRequest(content="  Updated answer  ")
     assert payload.content == "Updated answer"
+
+
+# Verifies that source creation rejects unknown file kinds before store logic runs.
+def test_source_create_rejects_unknown_file_kind() -> None:
+    with pytest.raises(ValidationError):
+        SourceCreate(
+            hub_id="11111111-1111-1111-1111-111111111111",
+            original_name="clip.mp4",
+            file_kind="video",
+        )

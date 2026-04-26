@@ -28,6 +28,7 @@ __pycache__/
 dist/
 build/
 *.tsbuildinfo
+apps/web/public/ffmpeg/
 
 # Python packaging metadata
 *.egg-info/

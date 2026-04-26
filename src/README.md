@@ -78,6 +78,7 @@ Additional worker-only configuration includes:
 
 - Web crawling settings such as `WEB_MAX_BYTES`, `WEB_USER_AGENT`, `WEB_TIMEOUT_SECONDS`, and `WEB_RESPECT_ROBOTS`
 - YouTube caption settings such as `YOUTUBE_DEFAULT_LANGUAGE`, `YOUTUBE_ALLOW_AUTO_CAPTIONS`, `YOUTUBE_MAX_BYTES`, `YOUTUBE_REQUEST_TIMEOUT_SECONDS`, `YOUTUBE_METADATA_RETRIES`, and optional YouTube cookie settings for hosted bot checks
+- Worker transcription settings such as `OPENAI_TRANSCRIPTION_MODEL`, `TRANSCRIPTION_MAX_BYTES`, `MEDIA_UPLOAD_MAX_BYTES`, and `FFMPEG_BINARY` for manual YouTube fallback uploads
 - `DEFAULT_TIMEZONE` for reminder delivery defaults
 
 ## Run Locally
@@ -136,6 +137,10 @@ YouTube ingestion:
 - The worker fetches metadata and captions with `yt-dlp`, stores a transcript snapshot, then chunks and embeds it.
 - Reprocess uses the stored snapshot. Refresh re-fetches captions and metadata.
 - If the hosted worker gets YouTube's bot-check error, configure `YOUTUBE_COOKIES_FILE` or `YOUTUBE_COOKIES_B64` in the worker deployment with exported YouTube `cookies.txt` content.
+- Recoverable YouTube failures expose a manual fallback in the web app so users can upload a downloaded audio or video file instead.
+- Manual fallback uploads currently accept `mp3`, `mp4`, and `m4a`, with a 50 MB storage upload limit.
+- In the web app, oversized manual media uploads are compressed in the browser to speech-oriented MP3 before the direct storage upload begins.
+- Files above the direct 25 MB transcription cap are preprocessed with FFmpeg in the worker before transcription.
 
 Chat:
 

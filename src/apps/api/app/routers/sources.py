@@ -22,6 +22,7 @@ from ..schemas import (
     SourceStatusResponse,
     SourceUploadUrlResponse,
     WebSourceCreate,
+    YouTubeFallbackSourceCreate,
     YouTubeSourceCreate,
 )
 from ..dependencies import CurrentUser, get_current_user, get_supabase_user_client, rate_limit_user_ip
@@ -121,6 +122,37 @@ def create_youtube_source(
     )
     store.log_activity(client, source.hub_id, current_user.id, "created", "source", source.id, {"name": source.original_name, "type": "youtube"})
     return source
+
+
+# Create a linked upload fallback for a failed YouTube source.
+@router.post(
+    "/youtube-fallback",
+    response_model=SourceEnqueueResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(rate_limit_user_ip("sources:write", "rate_limit_sources_per_minute"))],
+)
+def create_youtube_fallback_source(
+    payload: YouTubeFallbackSourceCreate,
+    client: Client = Depends(get_supabase_user_client),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> SourceEnqueueResponse:
+    try:
+        source, upload_url = store.create_youtube_fallback_source(client, payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except APIError as exc:
+        raise_postgrest_error(exc)
+
+    store.log_activity(
+        client,
+        source.hub_id,
+        current_user.id,
+        "created",
+        "source",
+        source.id,
+        {"name": source.original_name, "type": source.type, "source_origin": "youtube_fallback"},
+    )
+    return SourceEnqueueResponse(source=source, upload_url=upload_url)
 
 
 # Suggestion review routes.

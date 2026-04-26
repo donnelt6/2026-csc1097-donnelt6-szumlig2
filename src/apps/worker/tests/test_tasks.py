@@ -1,6 +1,6 @@
 """test_tasks.py: Exercises worker task flows plus helpers from their owning modules."""
 
-from worker import common, content, tasks, web, youtube
+from worker import common, config, content, media, tasks, web, youtube
 
 
 # Text cleanup helpers.
@@ -205,6 +205,7 @@ def test_ingest_youtube_source_success(monkeypatch) -> None:
 
     monkeypatch.setattr(tasks._common, "_get_supabase_client", lambda: object())
     monkeypatch.setattr(tasks._storage, "_upload_pseudo_doc", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(tasks._storage, "_get_source_metadata", lambda *_args, **_kwargs: {})
 
     # Simulate the inner ingestion step completing and marking the source as done.
     def fake_ingest(_client, source_id, hub_id, text, extra_metadata=None):
@@ -253,6 +254,7 @@ def test_ingest_youtube_source_timeout_marks_failed(monkeypatch) -> None:
     updates: list[dict] = []
 
     monkeypatch.setattr(tasks._common, "_get_supabase_client", lambda: object())
+    monkeypatch.setattr(tasks._storage, "_get_source_metadata", lambda *_args, **_kwargs: {})
 
     def fake_fetch(*_args, **_kwargs):
         raise tasks.SoftTimeLimitExceeded()
@@ -278,6 +280,198 @@ def test_ingest_youtube_source_timeout_marks_failed(monkeypatch) -> None:
     assert updates[0]["status"] == "processing"
     assert updates[-1]["status"] == "failed"
     assert "timed out" in updates[-1]["failure_reason"].lower()
+
+
+# Verifies that YouTube failures are classified into stable fallback codes.
+def test_classify_youtube_failure_marks_recoverable_cases() -> None:
+    code, allowed, _message = tasks._classify_youtube_failure("No captions available for this YouTube video")
+    assert code == "youtube_no_captions"
+    assert allowed is True
+
+    code, allowed, _message = tasks._classify_youtube_failure("yt-dlp is required for YouTube ingestion")
+    assert code == "youtube_dependency_error"
+    assert allowed is False
+
+
+# Verifies that media fallback uploads are transcribed instead of document extraction.
+def test_ingest_source_transcribes_media_fallback(monkeypatch) -> None:
+    updates: list[dict] = []
+
+    monkeypatch.setattr(tasks._common, "_get_supabase_client", lambda: object())
+    monkeypatch.setattr(tasks._storage, "_get_source_metadata", lambda *_args, **_kwargs: {})
+    monkeypatch.setattr(tasks._storage, "_download_from_storage", lambda _path: b"media-bytes")
+    monkeypatch.setattr(tasks._storage, "_get_source_metadata", lambda *_args, **_kwargs: {"file_kind": "media", "source_origin": "youtube_fallback"})
+    monkeypatch.setattr(tasks._media, "_transcribe_media_bytes", lambda raw, path: ("hello from media", {"media_extension": "mp4"}))
+    monkeypatch.setattr(tasks, "_ingest_text_for_source", lambda *_args, **kwargs: 2)
+    monkeypatch.setattr(tasks, "_update_source", lambda _client, _source_id, status, **kwargs: updates.append({"status": status, **kwargs}))
+
+    result = tasks.ingest_source.run("src-media-1", "hub-1", "hub-1/src-media-1/clip.mp4")
+
+    assert result["chunks"] == 2
+    assert updates[0]["status"] == "processing"
+
+
+# Verifies that unsupported media uploads fail before OpenAI transcription.
+def test_transcribe_media_bytes_rejects_unsupported_extension(monkeypatch) -> None:
+    monkeypatch.setattr(media.settings, "transcription_max_bytes", 25_000_000)
+    monkeypatch.setattr(media.settings, "media_upload_max_bytes", 100 * 1024 * 1024)
+    try:
+        media._transcribe_media_bytes(b"data", "upload.avi")
+    except ValueError as exc:
+        assert "unsupported media format" in str(exc).lower()
+    else:
+        raise AssertionError("Expected ValueError for unsupported media format")
+
+
+# Verifies that media transcription fails fast when the configured model is not an audio transcription model.
+def test_validate_transcription_model_rejects_chat_model() -> None:
+    try:
+        media._validate_transcription_model("gpt-4o-mini")
+    except RuntimeError as exc:
+        assert "invalid for audio transcription" in str(exc).lower()
+    else:
+        raise AssertionError("Expected RuntimeError for non-transcription model")
+
+
+# Verifies that Whisper remains accepted alongside newer `*-transcribe` models.
+def test_validate_transcription_model_accepts_whisper_one() -> None:
+    media._validate_transcription_model("whisper-1")
+
+
+# Verifies that quoted numeric worker settings are normalized before parsing.
+def test_clean_int_env_strips_quotes(monkeypatch) -> None:
+    monkeypatch.setenv("CHUNK_SIZE", ' "800" ')
+    assert config._clean_int_env("CHUNK_SIZE", 100) == 800
+
+
+# Verifies that smaller media uploads go straight to transcription without preprocessing.
+def test_prepare_transcription_input_keeps_direct_media_under_limit(monkeypatch) -> None:
+    monkeypatch.setattr(media.settings, "transcription_max_bytes", 25)
+
+    name, payload, metadata = media._prepare_transcription_input(b"small-media", "upload.mp4")
+
+    assert name == "upload.mp4"
+    assert payload == b"small-media"
+    assert metadata["transcription_input_mode"] == "direct"
+    assert metadata["transcription_input_extension"] == "mp4"
+    assert metadata["transcription_input_bytes"] == len(b"small-media")
+
+
+# Verifies that larger but accepted media uploads use ffmpeg preprocessing first.
+def test_prepare_transcription_input_preprocesses_large_media(monkeypatch) -> None:
+    monkeypatch.setattr(media.settings, "transcription_max_bytes", 10)
+    monkeypatch.setattr(media, "_compress_media_for_transcription", lambda raw, path: ("upload-transcription.mp3", b"small"))
+
+    name, payload, metadata = media._prepare_transcription_input(b"this is larger than ten bytes", "upload.mp4")
+
+    assert name == "upload-transcription.mp3"
+    assert payload == b"small"
+    assert metadata["transcription_input_mode"] == "ffmpeg_preprocessed"
+    assert metadata["transcription_input_extension"] == "mp3"
+    assert metadata["original_media_bytes"] == len(b"this is larger than ten bytes")
+    assert metadata["transcription_input_bytes"] == len(b"small")
+
+
+# Verifies that uploads above the worker acceptance cap fail before preprocessing or transcription.
+def test_transcribe_media_bytes_rejects_media_above_upload_limit(monkeypatch) -> None:
+    monkeypatch.setattr(media.settings, "media_upload_max_bytes", 10)
+    monkeypatch.setattr(media.settings, "transcription_max_bytes", 5)
+
+    try:
+        media._transcribe_media_bytes(b"01234567890", "upload.mp4")
+    except ValueError as exc:
+        assert "upload size limit" in str(exc).lower()
+    else:
+        raise AssertionError("Expected ValueError for oversized media upload")
+
+
+# Verifies that failed media ingestion records runtime metadata for intermittent-worker debugging.
+def test_ingest_source_persists_media_failure_metadata(monkeypatch) -> None:
+    updates: list[dict] = []
+
+    monkeypatch.setattr(tasks._common, "_get_supabase_client", lambda: object())
+    monkeypatch.setattr(tasks._storage, "_download_from_storage", lambda _path: b"media-bytes")
+    monkeypatch.setattr(tasks._storage, "_get_source_metadata", lambda *_args, **_kwargs: {"file_kind": "media"})
+    monkeypatch.setattr(
+        tasks._media,
+        "_transcribe_media_bytes",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("bad transcription model")),
+    )
+    monkeypatch.setattr(tasks.socket, "gethostname", lambda: "worker-a")
+    monkeypatch.setattr(tasks.os, "getpid", lambda: 4242)
+    monkeypatch.setattr(tasks.settings, "transcription_model", "gpt-4o-mini")
+    monkeypatch.setattr(tasks, "_update_source", lambda _client, _source_id, status, **kwargs: updates.append({"status": status, **kwargs}))
+
+    try:
+        tasks.ingest_source.run("src-media-2", "hub-1", "hub-1/src-media-2/clip.mp4")
+    except RuntimeError as exc:
+        assert "bad transcription model" in str(exc).lower()
+    else:
+        raise AssertionError("Expected RuntimeError for failed media transcription")
+
+    assert updates[0]["status"] == "processing"
+    assert updates[-1]["status"] == "failed"
+    assert updates[-1]["ingestion_metadata"]["transcription_runtime_host"] == "worker-a"
+    assert updates[-1]["ingestion_metadata"]["transcription_runtime_pid"] == 4242
+    assert updates[-1]["ingestion_metadata"]["transcription_model"] == "gpt-4o-mini"
+    assert updates[-1]["ingestion_metadata"]["transcription_input_extension"] == "mp4"
+
+
+# Verifies that missing ffmpeg produces a clear dependency error when preprocessing is required.
+def test_compress_media_for_transcription_requires_ffmpeg(monkeypatch) -> None:
+    monkeypatch.setattr(media.settings, "ffmpeg_binary", "ffmpeg")
+    monkeypatch.setattr(media.shutil, "which", lambda _binary: None)
+
+    try:
+        media._compress_media_for_transcription(b"01234567890", "upload.mp4")
+    except RuntimeError as exc:
+        assert "ffmpeg is required" in str(exc).lower()
+    else:
+        raise AssertionError("Expected RuntimeError when ffmpeg is missing")
+
+
+# Verifies that linked fallback child status updates are mirrored onto the failed YouTube parent.
+def test_update_source_mirrors_youtube_fallback_status(monkeypatch) -> None:
+    updates: list[tuple[str, dict]] = []
+
+    def fake_get_metadata(_client, source_id):
+        if source_id == "src-child-1":
+            return {
+                "source_origin": "youtube_fallback",
+                "youtube_fallback_parent_source_id": "src-parent-1",
+            }
+        return {"youtube_failure_code": "youtube_no_captions"}
+
+    def fake_storage_update(_client, source_id, status, **kwargs):
+        updates.append((source_id, {"status": status, **kwargs}))
+
+    monkeypatch.setattr(tasks._storage, "_get_source_metadata", fake_get_metadata)
+    monkeypatch.setattr(tasks._storage, "_update_source", fake_storage_update)
+
+    tasks._update_source(object(), "src-child-1", status="processing", source_might_be_youtube_fallback=True)
+
+    assert updates[0][0] == "src-child-1"
+    assert updates[1][0] == "src-parent-1"
+    assert updates[1][1]["status"] == "failed"
+    assert updates[1][1]["ingestion_metadata"]["youtube_fallback_source_status"] == "processing"
+
+
+# Verifies that non-fallback status updates do not fetch metadata just to discover they have no parent to mirror.
+def test_update_source_skips_metadata_fetch_for_non_fallback_sources(monkeypatch) -> None:
+    updates: list[tuple[str, dict]] = []
+
+    def fail_get_metadata(_client, _source_id):
+        raise AssertionError("metadata lookup should be skipped")
+
+    def fake_storage_update(_client, source_id, status, **kwargs):
+        updates.append((source_id, {"status": status, **kwargs}))
+
+    monkeypatch.setattr(tasks._storage, "_get_source_metadata", fail_get_metadata)
+    monkeypatch.setattr(tasks._storage, "_update_source", fake_storage_update)
+
+    tasks._update_source(object(), "src-web-1", status="processing")
+
+    assert updates == [("src-web-1", {"status": "processing", "failure_reason": None, "ingestion_metadata": None, "clear_failure_reason": False})]
 
 
 # Suggested source selection helpers.

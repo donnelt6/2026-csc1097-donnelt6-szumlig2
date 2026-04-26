@@ -72,7 +72,7 @@ export function UploadPanel({
   const [statusMessage, setStatusMessage] = useState<{ text: string; type: "success" | "error" } | null>(null);
   const [deletingSourceIds, setDeletingSourceIds] = useState<Set<string>>(new Set());
   const [refreshingSourceIds, setRefreshingSourceIds] = useState<Set<string>>(new Set());
-  const [typeFilter, setTypeFilter] = useState<"all" | "file" | "web" | "youtube">("all");
+  const [typeFilter, setTypeFilter] = useState<"all" | "file" | "media" | "web" | "youtube">("all");
   const [statusFilter, setStatusFilter] = useState<"all" | "complete" | "incomplete">("all");
   const [pageSize, setPageSize] = useState(10);
   const [page, setPage] = useState(0);
@@ -81,6 +81,7 @@ export function UploadPanel({
   const [viewChunks, setViewChunks] = useState<{ chunk_index: number; text: string }[]>([]);
   const [isLoadingChunks, setIsLoadingChunks] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [youtubeFallbackSource, setYouTubeFallbackSource] = useState<Source | null>(null);
   const [errorPopoverId, setErrorPopoverId] = useState<string | null>(null);
   const [errorPopoverFlip, setErrorPopoverFlip] = useState(false);
   const errorPopoverRef = useRef<HTMLDivElement>(null);
@@ -207,6 +208,12 @@ export function UploadPanel({
     }
   };
 
+  const openYouTubeFallbackModal = (source: Source) => {
+    setYouTubeFallbackSource(source);
+    setShowAddModal(true);
+    setErrorPopoverId(null);
+  };
+
 
   const handleViewChunks = async (source: Source) => {
     setViewingSource(source);
@@ -271,7 +278,11 @@ export function UploadPanel({
   const filteredSources = useMemo(() => {
     let result = sortedSources;
     if (typeFilter !== "all") {
-      result = result.filter((s) => s.type === typeFilter);
+      result = result.filter((s) => {
+        if (typeFilter === "media") return isMediaSource(s);
+        if (typeFilter === "file") return s.type === "file" && !isMediaSource(s);
+        return s.type === typeFilter;
+      });
     }
     if (statusFilter !== "all") {
       result = result.filter((s) =>
@@ -285,9 +296,10 @@ export function UploadPanel({
     return result;
   }, [sortedSources, typeFilter, statusFilter, searchQuery]);
   const typeCounts = useMemo(() => {
-    const counts = { all: sortedSources.length, file: 0, web: 0, youtube: 0, complete: 0, incomplete: 0, failed: 0 };
+    const counts = { all: sortedSources.length, file: 0, media: 0, web: 0, youtube: 0, complete: 0, incomplete: 0, failed: 0 };
     for (const s of sortedSources) {
-      if (s.type in counts) counts[s.type as "file" | "web" | "youtube"]++;
+      if (isMediaSource(s)) counts.media++;
+      else if (s.type in counts) counts[s.type as "file" | "web" | "youtube"]++;
       if (s.status === "complete") counts.complete++;
       else counts.incomplete++;
       if (s.status === "failed") counts.failed++;
@@ -353,7 +365,10 @@ export function UploadPanel({
             <button
               type="button"
               className="button button--primary sources__add-btn"
-              onClick={() => setShowAddModal(true)}
+              onClick={() => {
+                setYouTubeFallbackSource(null);
+                setShowAddModal(true);
+              }}
             >
               <PlusIcon className="sources__btn-icon" />
               Add Source
@@ -399,14 +414,14 @@ export function UploadPanel({
               >
                 All
               </button>
-              {(["file", "web", "youtube"] as const).map((type) => (
+              {(["file", "web", "youtube", "media"] as const).map((type) => (
                 <button
                   key={type}
                   type="button"
                   className={`sources__filter-pill${typeFilter === type ? " sources__filter-pill--active" : ""}`}
                   onClick={() => { setTypeFilter(typeFilter === type ? "all" : type); setPage(0); }}
                 >
-                  {type === "file" ? "Files" : type === "web" ? "Web" : "YouTube"} ({typeCounts[type]})
+                  {type === "file" ? "Files" : type === "media" ? "Media" : type === "web" ? "Web" : "YouTube"} ({typeCounts[type]})
                 </button>
               ))}
             </div>
@@ -449,12 +464,18 @@ export function UploadPanel({
       {/* Table rows */}
       <div className="sources__table-body">
         {sourcesLoading ? sourceSkeletonRows : pagedSources.map((source) => {
+          const metadata = getSourceMetadata(source);
           const isSelectable = source.status === "complete";
           const isSelected = isSelectable && selectedSourceSet.has(source.id);
+          const canRefreshThisSource = canSourceRefresh(source);
           const isRemoteSource = source.type === "web" || source.type === "youtube";
           const isDeleting = deletingSourceIds.has(source.id);
           const isRefreshingThis = refreshingSourceIds.has(source.id);
           const isHighlighted = highlightedSourceId === source.id;
+          const displayName = getSourceDisplayName(source);
+          const displayType = getSourceDisplayType(source);
+          const recoveryStatus = getYouTubeRecoveryStatus(source);
+          const canUseYouTubeFallback = canSourceUseYouTubeFallback(source);
           return (
             <div
               key={source.id}
@@ -498,16 +519,29 @@ export function UploadPanel({
               <div className="sources__cell sources__cell--name">
                 <div className="sources__resource-main">
                   <div className={`sources__resource-icon sources__resource-icon--${source.type}`}>
-                    {source.type === "file" && <DocumentTextIcon className="sources__type-icon sources__type-icon--file" />}
+                    {metadata.source_origin === "youtube_fallback" || metadata.source_origin === "manual_media"
+                      ? <PlayCircleIcon className="sources__type-icon sources__type-icon--youtube" />
+                      : source.type === "file"
+                        ? <DocumentTextIcon className="sources__type-icon sources__type-icon--file" />
+                        : null}
                     {source.type === "web" && <GlobeAltIcon className="sources__type-icon sources__type-icon--web" />}
                     {source.type === "youtube" && <PlayCircleIcon className="sources__type-icon sources__type-icon--youtube" />}
                   </div>
                   <div className="sources__resource-details">
-                    <span className="sources__resource-name">{source.original_name}</span>
+                    <span className="sources__resource-name">{displayName}</span>
                     <span className="sources__resource-meta">
                       Uploaded {formatRelativeDate(new Date(source.created_at))}
                       {source.type === "youtube" && (source.ingestion_metadata as Record<string, unknown> | null)?.captions_source === "auto" && (
                         <span className="sources__auto-caption-badge" title="Auto-generated captions">&#x26A0; Auto-captions</span>
+                      )}
+                      {metadata.source_origin === "youtube_fallback" && (
+                        <span className="sources__recovery-badge">YouTube Recovery</span>
+                      )}
+                      {metadata.source_origin === "manual_media" && (
+                        <span className="sources__recovery-badge">Manual Media</span>
+                      )}
+                      {source.type === "youtube" && source.status === "failed" && recoveryStatus && (
+                        <span className="sources__recovery-badge">{recoveryStatus}</span>
                       )}
                     </span>
                   </div>
@@ -516,8 +550,8 @@ export function UploadPanel({
 
               {/* Type badge */}
               <div className="sources__cell sources__cell--type">
-                <span className={`sources__type-badge sources__type-badge--${source.type}`}>
-                  {source.type === "file" ? "Document" : source.type === "web" ? "Web" : "YouTube"}
+                <span className={`sources__type-badge sources__type-badge--${getSourceDisplayTypeVariant(source)}`}>
+                  {displayType}
                 </span>
               </div>
 
@@ -536,7 +570,7 @@ export function UploadPanel({
               {/* Actions — fixed 3-slot layout: refresh | eye/warning | delete */}
               <div className="sources__cell sources__cell--actions">
                 {/* Slot 1: refresh (remote sources) or placeholder */}
-                {isRemoteSource ? (
+                {isRemoteSource && canRefreshThisSource ? (
                   <button
                     className="sources__action-btn"
                     type="button"
@@ -585,17 +619,30 @@ export function UploadPanel({
                     </button>
                     {errorPopoverId === source.id && (
                       <div className={`sources__error-popover${errorPopoverFlip ? " sources__error-popover--below" : ""}`}>
-                        <p className="sources__error-popover-text">{source.failure_reason || "Processing failed. Try deleting and re-uploading."}</p>
-                        {source.failure_reason && (
-                          <button
-                            className="sources__error-popover-copy"
-                            type="button"
-                            onClick={() => navigator.clipboard.writeText(source.failure_reason!)}
-                            title="Copy error"
-                          >
-                            <ClipboardDocumentIcon className="sources__error-popover-copy-icon" />
-                          </button>
-                        )}
+                        <p className="sources__error-popover-text">
+                          {getSourceErrorMessage(source)}
+                        </p>
+                        <div className="sources__error-popover-actions">
+                          {canUseYouTubeFallback && canUpload && (
+                            <button
+                              className="sources__error-popover-cta"
+                              type="button"
+                              onClick={() => openYouTubeFallbackModal(source)}
+                            >
+                              Upload Video/Audio instead
+                            </button>
+                          )}
+                          {source.failure_reason && (
+                            <button
+                              className="sources__error-popover-copy"
+                              type="button"
+                              onClick={() => navigator.clipboard.writeText(source.failure_reason!)}
+                              title="Copy error"
+                            >
+                              <ClipboardDocumentIcon className="sources__error-popover-copy-icon" />
+                            </button>
+                          )}
+                        </div>
                       </div>
                     )}
                   </div>
@@ -713,12 +760,89 @@ export function UploadPanel({
       <AddSourceModal
         hubId={hubId}
         open={showAddModal}
-        onClose={() => setShowAddModal(false)}
+        onClose={() => {
+          setShowAddModal(false);
+          setYouTubeFallbackSource(null);
+        }}
         onRefresh={onRefresh}
+        youtubeFallbackSource={youtubeFallbackSource}
       />
 
     </div>
   );
+}
+
+function getSourceMetadata(source: Source): Record<string, unknown> {
+  return (source.ingestion_metadata as Record<string, unknown> | null) ?? {};
+}
+
+function isMediaSource(source: Source): boolean {
+  const metadata = getSourceMetadata(source);
+  return metadata.source_origin === "youtube_fallback" || metadata.source_origin === "manual_media";
+}
+
+function canSourceUseYouTubeFallback(source: Source): boolean {
+  const metadata = getSourceMetadata(source);
+  if (!(source.type === "youtube" && source.status === "failed" && metadata.youtube_fallback_allowed === true)) {
+    return false;
+  }
+  const fallbackStatus = String(metadata.youtube_fallback_source_status || "").trim();
+  return !["queued", "processing", "complete"].includes(fallbackStatus);
+}
+
+function canSourceRefresh(source: Source): boolean {
+  if (source.type === "web") return true;
+  if (source.type !== "youtube") return false;
+  const metadata = getSourceMetadata(source);
+  const fallbackStatus = String(metadata.youtube_fallback_source_status || "").trim();
+  return !["pending_upload", "queued", "processing", "complete"].includes(fallbackStatus);
+}
+
+function getSourceDisplayName(source: Source): string {
+  const metadata = getSourceMetadata(source);
+  if (metadata.source_origin === "youtube_fallback" || metadata.source_origin === "manual_media") {
+    return source.original_name || "Media Upload";
+  }
+  return source.original_name;
+}
+
+function getSourceDisplayType(source: Source): string {
+  const metadata = getSourceMetadata(source);
+  if (metadata.source_origin === "youtube_fallback" || metadata.source_origin === "manual_media") {
+    return "Media";
+  }
+  return source.type === "file" ? "Document" : source.type === "web" ? "Web" : "YouTube";
+}
+
+function getSourceDisplayTypeVariant(source: Source): "file" | "web" | "youtube" {
+  const metadata = getSourceMetadata(source);
+  if (metadata.source_origin === "youtube_fallback" || metadata.source_origin === "manual_media") {
+    return "youtube";
+  }
+  return source.type === "file" || source.type === "web" ? source.type : "youtube";
+}
+
+function getYouTubeRecoveryStatus(source: Source): string | null {
+  const metadata = getSourceMetadata(source);
+  if (source.type !== "youtube" || source.status !== "failed") return null;
+  const status = String(metadata.youtube_fallback_source_status || "").trim();
+  if (!status) {
+    return metadata.youtube_fallback_allowed === true ? "Recovery available" : null;
+  }
+  if (status === "pending_upload") return "Recovery upload pending";
+  if (status === "queued") return "Recovery queued";
+  if (status === "processing") return "Recovery processing";
+  if (status === "complete") return "Recovery complete";
+  if (status === "failed") return "Recovery failed";
+  return null;
+}
+
+function getSourceErrorMessage(source: Source): string {
+  const metadata = getSourceMetadata(source);
+  if (canSourceUseYouTubeFallback(source) && typeof metadata.youtube_fallback_user_message === "string") {
+    return metadata.youtube_fallback_user_message;
+  }
+  return source.failure_reason || "Processing failed. Try deleting and re-uploading.";
 }
 
 function StatusIndicator({ status }: { status: Source["status"] }) {
