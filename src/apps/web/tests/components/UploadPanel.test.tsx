@@ -250,7 +250,7 @@ describe("UploadPanel", () => {
 
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "View error" }));
-    expect(screen.getByRole("button", { name: "Upload audio/video instead" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Upload Video/Audio instead" })).toBeInTheDocument();
   });
 
   it("hides manual upload fallback when a recovery is already active", async () => {
@@ -276,7 +276,7 @@ describe("UploadPanel", () => {
 
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "View error" }));
-    expect(screen.queryByRole("button", { name: "Upload audio/video instead" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Upload Video/Audio instead" })).not.toBeInTheDocument();
     expect(screen.getByText("Recovery processing")).toBeInTheDocument();
   });
 
@@ -303,7 +303,7 @@ describe("UploadPanel", () => {
 
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "View error" }));
-    expect(screen.getByRole("button", { name: "Upload audio/video instead" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Upload Video/Audio instead" })).toBeInTheDocument();
     expect(screen.getByText("Recovery upload pending")).toBeInTheDocument();
   });
 
@@ -356,7 +356,7 @@ describe("UploadPanel", () => {
 
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "Add Source" }));
-    await user.click(screen.getByRole("button", { name: /YouTube Video/ }));
+    await user.click(screen.getByRole("button", { name: /Video\/Audio/ }));
     await user.type(
       screen.getByPlaceholderText("https://youtube.com/watch?v=..."),
       "https://www.youtube.com/watch?v=abc123def45"
@@ -389,7 +389,7 @@ describe("UploadPanel", () => {
 
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "Add Source" }));
-    await user.click(screen.getByRole("button", { name: /YouTube Video/ }));
+    await user.click(screen.getByRole("button", { name: /Video\/Audio/ }));
     await user.type(
       screen.getByPlaceholderText("https://youtube.com/watch?v=..."),
       "https://www.youtube.com/watch?v=abc123def45"
@@ -422,7 +422,7 @@ describe("UploadPanel", () => {
 
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "Add Source" }));
-    await user.click(screen.getByRole("button", { name: /YouTube Video/ }));
+    await user.click(screen.getByRole("button", { name: /Video\/Audio/ }));
     expect(screen.getByText("Faster when captions are available; if import fails, you can upload media manually.")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /Upload audio\/video manually/i }));
 
@@ -478,7 +478,7 @@ describe("UploadPanel", () => {
 
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "View error" }));
-    await user.click(screen.getByRole("button", { name: "Upload audio/video instead" }));
+    await user.click(screen.getByRole("button", { name: "Upload Video/Audio instead" }));
 
     const input = document.querySelector(".add-source-modal__file-input") as HTMLInputElement;
     expect(input.accept).toBe(".mp3,.mp4,.m4a");
@@ -501,7 +501,7 @@ describe("UploadPanel", () => {
 
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "Add Source" }));
-    await user.click(screen.getByRole("button", { name: /YouTube Video/ }));
+    await user.click(screen.getByRole("button", { name: /Video\/Audio/ }));
     await user.click(screen.getByRole("button", { name: /Upload audio\/video manually/i }));
 
     const input = document.querySelector(".add-source-modal__file-input") as HTMLInputElement;
@@ -537,7 +537,7 @@ describe("UploadPanel", () => {
 
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "Add Source" }));
-    await user.click(screen.getByRole("button", { name: /YouTube Video/ }));
+    await user.click(screen.getByRole("button", { name: /Video\/Audio/ }));
     await user.click(screen.getByRole("button", { name: /Upload audio\/video manually/i }));
 
     const input = document.querySelector(".add-source-modal__file-input") as HTMLInputElement;
