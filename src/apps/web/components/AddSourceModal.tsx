@@ -211,6 +211,12 @@ export function AddSourceModal({ hubId, open, onClose, onRefresh, youtubeFallbac
   }, [open]);
 
   // Process queue sequentially — handles all source types
+  const syncQueue = useCallback((updater: (items: QueueItem[]) => QueueItem[]) => {
+    const next = updater(queueRef.current);
+    queueRef.current = next;
+    setQueue(next);
+  }, []);
+
   const processQueue = useCallback(async () => {
     if (isProcessingRef.current) return;
     isProcessingRef.current = true;
@@ -226,14 +232,14 @@ export function AddSourceModal({ hubId, open, onClose, onRefresh, youtubeFallbac
         if (nextItem.kind === "file") {
           let file = nextItem.file;
           if (nextItem.sourceKind !== "document" && mediaUploadRequiresCompression(file)) {
-            setQueue((prev) =>
-              prev.map((item) =>
+            syncQueue((items) =>
+              items.map((item) =>
                 item.id === itemId ? { ...item, status: "preparing" as UploadStatus, progress: 0 } : item
               )
             );
             file = await prepareMediaFileForUpload(file);
-            setQueue((prev) =>
-              prev.map((item) =>
+            syncQueue((items) =>
+              items.map((item) =>
                 item.id === itemId && item.kind === "file"
                   ? { ...item, file, label: file.name, size: file.size }
                   : item
@@ -243,8 +249,8 @@ export function AddSourceModal({ hubId, open, onClose, onRefresh, youtubeFallbac
 
           // Compression happens before the direct storage upload so the signed PUT stays below
           // the active Supabase project limit.
-          setQueue((prev) =>
-            prev.map((item) =>
+          syncQueue((items) =>
+            items.map((item) =>
               item.id === itemId ? { ...item, status: "uploading" as UploadStatus, progress: 0 } : item
             )
           );
@@ -264,8 +270,8 @@ export function AddSourceModal({ hubId, open, onClose, onRefresh, youtubeFallbac
           const contentType = resolveContentType(file);
 
           // Track the backend source ID so we can clean up on failure
-          setQueue((prev) =>
-            prev.map((item) =>
+          syncQueue((items) =>
+            items.map((item) =>
               item.id === itemId && item.kind === "file" ? { ...item, sourceId: enqueueResult.source.id } : item
             )
           );
@@ -279,8 +285,8 @@ export function AddSourceModal({ hubId, open, onClose, onRefresh, youtubeFallbac
             xhr.upload.onprogress = (event) => {
               if (event.lengthComputable) {
                 const pct = Math.round((event.loaded / event.total) * 100);
-                setQueue((prev) =>
-                  prev.map((item) =>
+                syncQueue((items) =>
+                  items.map((item) =>
                     item.id === itemId ? { ...item, progress: pct } : item
                   )
                 );
@@ -299,15 +305,15 @@ export function AddSourceModal({ hubId, open, onClose, onRefresh, youtubeFallbac
           });
 
           // Step 3: Enqueue for processing
-          setQueue((prev) =>
-            prev.map((item) =>
+          syncQueue((items) =>
+            items.map((item) =>
               item.id === itemId ? { ...item, status: "enqueuing" as UploadStatus, progress: 100 } : item
             )
           );
           await enqueueSource(enqueueResult.source.id);
         } else if (nextItem.kind === "webpage") {
-          setQueue((prev) =>
-            prev.map((item) =>
+          syncQueue((items) =>
+            items.map((item) =>
               item.id === itemId ? { ...item, status: "creating" as UploadStatus, progress: 0 } : item
             )
           );
@@ -317,8 +323,8 @@ export function AddSourceModal({ hubId, open, onClose, onRefresh, youtubeFallbac
           }
           await createWebSource({ hub_id: hubId, url: finalUrl });
         } else if (nextItem.kind === "youtube") {
-          setQueue((prev) =>
-            prev.map((item) =>
+          syncQueue((items) =>
+            items.map((item) =>
               item.id === itemId ? { ...item, status: "creating" as UploadStatus, progress: 0 } : item
             )
           );
@@ -335,16 +341,16 @@ export function AddSourceModal({ hubId, open, onClose, onRefresh, youtubeFallbac
         }
 
         // Done
-        setQueue((prev) =>
-          prev.map((item) =>
+        syncQueue((items) =>
+          items.map((item) =>
             item.id === itemId ? { ...item, status: "complete" as UploadStatus, progress: 100 } : item
           )
         );
         onRefresh();
       } catch (err) {
         const reason = err instanceof Error ? err.message : "Failed.";
-        setQueue((prev) =>
-          prev.map((item) =>
+        syncQueue((items) =>
+          items.map((item) =>
             item.id === itemId ? { ...item, status: "error" as UploadStatus, error: reason } : item
           )
         );
@@ -365,7 +371,7 @@ export function AddSourceModal({ hubId, open, onClose, onRefresh, youtubeFallbac
     }
 
     isProcessingRef.current = false;
-  }, [hubId, onRefresh]);
+  }, [hubId, onRefresh, syncQueue]);
 
   // Trigger processing whenever pending items appear in the queue
   useEffect(() => {
