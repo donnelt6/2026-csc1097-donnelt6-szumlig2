@@ -170,6 +170,7 @@ export function AddSourceModal({ hubId, open, onClose, onRefresh, youtubeFallbac
   const [statusMessage, setStatusMessage] = useState<{ text: string; type: "success" | "error" } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const isProcessingRef = useRef(false);
+  const isAddingYouTubeUrlRef = useRef(false);
   const queueRef = useRef(queue);
   const queuedYoutubeUrlsRef = useRef<Set<string>>(new Set());
   queueRef.current = queue;
@@ -189,6 +190,10 @@ export function AddSourceModal({ hubId, open, onClose, onRefresh, youtubeFallbac
         .map((item) => item.url),
     );
   }, [queue]);
+
+  useEffect(() => {
+    isAddingYouTubeUrlRef.current = false;
+  }, [queue, youtubeUrl]);
 
   // Auto-dismiss status messages
   useEffect(() => {
@@ -444,11 +449,15 @@ export function AddSourceModal({ hubId, open, onClose, onRefresh, youtubeFallbac
   }, [url]);
 
   const addYouTubeUrl = useCallback(() => {
+    if (isAddingYouTubeUrlRef.current) {
+      return;
+    }
     const trimmed = youtubeUrl.trim();
     if (!trimmed) {
       setStatusMessage({ text: "Enter a YouTube URL to ingest.", type: "error" });
       return;
     }
+    isAddingYouTubeUrlRef.current = true;
     if (
       queuedYoutubeUrlsRef.current.has(trimmed)
       || queueRef.current.some((i) => "url" in i && i.url === trimmed && i.status !== "error" && i.status !== "complete")
