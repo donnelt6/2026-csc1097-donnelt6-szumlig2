@@ -193,7 +193,7 @@ export function AddSourceModal({ hubId, open, onClose, onRefresh, youtubeFallbac
 
   useEffect(() => {
     isAddingYouTubeUrlRef.current = false;
-  }, [queue, youtubeUrl]);
+  }, [queue]);
 
   // Auto-dismiss status messages
   useEffect(() => {
@@ -457,7 +457,6 @@ export function AddSourceModal({ hubId, open, onClose, onRefresh, youtubeFallbac
       setStatusMessage({ text: "Enter a YouTube URL to ingest.", type: "error" });
       return;
     }
-    isAddingYouTubeUrlRef.current = true;
     if (
       queuedYoutubeUrlsRef.current.has(trimmed)
       || queueRef.current.some((i) => "url" in i && i.url === trimmed && i.status !== "error" && i.status !== "complete")
@@ -466,6 +465,7 @@ export function AddSourceModal({ hubId, open, onClose, onRefresh, youtubeFallbac
       return;
     }
     queuedYoutubeUrlsRef.current.add(trimmed);
+    isAddingYouTubeUrlRef.current = true;
     setQueue((prev) => {
       if (prev.some((i) => "url" in i && i.url === trimmed && i.status !== "error" && i.status !== "complete")) {
         return prev;
