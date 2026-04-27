@@ -105,8 +105,8 @@ export YouTube cookies in Netscape `cookies.txt` format and configure one of:
 Prefer `YOUTUBE_COOKIES_FILE` or `YOUTUBE_COOKIES_B64` for deployment. Do not commit cookie files.
 
 Manual media fallback uploads currently accept `mp3`, `mp4`, and `m4a`.
-The worker accepts uploads up to 50 MB by default. The web app now compresses oversized manual media
-uploads in the browser before the direct storage upload begins. Files above the direct 25 MB transcription cap are
+The worker accepts uploads up to 50 MB by default. The web app now compresses manual media uploads above 20 MB
+in the browser before the direct storage upload begins. Files above the direct 25 MB transcription cap are
 preprocessed with FFmpeg into a lower-bitrate speech-oriented MP3 before transcription.
 
 Worker deployments that need media uploads above 25 MB must have FFmpeg installed and available on PATH

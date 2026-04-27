@@ -3,8 +3,12 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "ensure:ffmpeg-assets": "node ../../scripts/copy-ffmpeg-assets.mjs",
+    "predev": "npm run ensure:ffmpeg-assets",
     "dev": "next dev",
+    "prebuild": "npm run ensure:ffmpeg-assets",
     "build": "next build",
+    "prestart": "npm run ensure:ffmpeg-assets",
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",

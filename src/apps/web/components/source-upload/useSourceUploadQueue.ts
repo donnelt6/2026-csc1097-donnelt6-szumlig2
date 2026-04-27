@@ -97,7 +97,7 @@ export function getFileModeConfig(sourceKind: FileQueueItem["sourceKind"]) {
     acceptedExtensions: MEDIA_ACCEPTED_EXTENSIONS,
     acceptedMimeTypes: MEDIA_ACCEPTED_MIME_TYPES,
     maxSize: MEDIA_COMPRESSION_INPUT_MAX_BYTES,
-    acceptsLabel: "MP3, MP4, or M4A files. Files above 50MB are compressed before upload.",
+    acceptsLabel: "MP3, MP4, or M4A files. Files above 20MB are compressed before upload.",
     unsupportedMessage: "No supported media selected. Accepted: MP3, MP4, M4A.",
     tooLargeLabel: "200 MB",
     allowMultiple: sourceKind === "manual_media",

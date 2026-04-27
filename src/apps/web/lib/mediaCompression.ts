@@ -4,6 +4,7 @@ import { FFmpeg } from "@ffmpeg/ffmpeg";
 import { fetchFile, toBlobURL } from "@ffmpeg/util";
 
 export const MEDIA_UPLOAD_MAX_BYTES = 50 * 1024 * 1024;
+export const MEDIA_BROWSER_COMPRESSION_THRESHOLD_BYTES = 20 * 1024 * 1024;
 export const MEDIA_COMPRESSION_INPUT_MAX_BYTES = 200 * 1024 * 1024;
 
 const FFMPEG_CORE_BASE_PATH = "/ffmpeg";
@@ -56,10 +57,11 @@ async function _loadFfmpeg(): Promise<FFmpeg> {
 }
 
 export function mediaUploadRequiresCompression(file: File): boolean {
-  return file.size > MEDIA_UPLOAD_MAX_BYTES;
+  return file.size > MEDIA_BROWSER_COMPRESSION_THRESHOLD_BYTES;
 }
 
-// Oversized media must be reduced in the browser before the direct storage upload begins.
+// Keep browser-side compression below the worker's direct transcription limit so hosted
+// environments do not depend on server-side FFmpeg for common manual uploads.
 export async function prepareMediaFileForUpload(file: File): Promise<File> {
   if (!mediaUploadRequiresCompression(file)) {
     return file;
