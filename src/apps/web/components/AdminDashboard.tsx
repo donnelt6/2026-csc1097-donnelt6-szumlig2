@@ -2,7 +2,7 @@
 
 // AdminDashboard.tsx: Admin-only overview dashboard with platform-wide statistics.
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowPathIcon,
@@ -117,6 +117,7 @@ export function AdminDashboard({ hubId, hubRole, onSwitchTab }: AdminDashboardPr
   const queryClient = useQueryClient();
   const { activeAdminTab } = useHubDashboardTab();
   const canModerate = hubRole === 'owner' || hubRole === 'admin';
+  const editRequestTokenRef = useRef(0);
 
   const [modTab, setModTab] = useState<ModTab>('chats');
   const [sugTab, setSugTab] = useState<'pending' | 'reviewed'>('pending');
@@ -324,13 +325,21 @@ export function AdminDashboard({ hubId, hubRole, onSwitchTab }: AdminDashboardPr
   };
 
   const openEditModal = async (flagId: string) => {
+    const requestToken = editRequestTokenRef.current + 1;
+    editRequestTokenRef.current = requestToken;
     setEditFlagId(flagId);
     setEditModalOpen(true);
     try {
       const detail = await getFlaggedChat(hubId, flagId);
+      if (editRequestTokenRef.current !== requestToken) {
+        return;
+      }
       setDraftContent(detail.flagged_message.content);
       setDraftCitations(JSON.stringify(detail.flagged_message.citations));
     } catch {
+      if (editRequestTokenRef.current !== requestToken) {
+        return;
+      }
       setDraftContent('');
       setDraftCitations('[]');
     }

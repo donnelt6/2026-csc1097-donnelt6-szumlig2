@@ -68,6 +68,39 @@ export function useChatSession({ hubId, sources, onSourceSelectionChange }: UseC
   const sessionSourceCacheRef = useRef<Map<string | null, string[]>>(new Map());
   const pendingSessionSourceIdsRef = useRef<string[] | null>(null);
   const hasActivatedNewSessionDraftRef = useRef(false);
+  const activeLoadTokenRef = useRef(0);
+
+  function reportStorageFailure(message: string, error: unknown) {
+    console.error(message, error);
+    setPanelError((current) => current ?? message);
+  }
+
+  function readLastSessionId(): string | null {
+    try {
+      return localStorage.getItem(`caddie:last-session:${hubId}`);
+    } catch (error) {
+      reportStorageFailure("Chat session preferences could not be read from local storage.", error);
+      return null;
+    }
+  }
+
+  function persistLastSessionId(sessionId: string) {
+    try {
+      localStorage.setItem(`caddie:last-session:${hubId}`, sessionId);
+    } catch (error) {
+      reportStorageFailure("Chat session preferences could not be saved to local storage.", error);
+    }
+  }
+
+  function clearLastSessionId(sessionId: string) {
+    try {
+      if (localStorage.getItem(`caddie:last-session:${hubId}`) === sessionId) {
+        localStorage.removeItem(`caddie:last-session:${hubId}`);
+      }
+    } catch (error) {
+      reportStorageFailure("Chat session preferences could not be updated in local storage.", error);
+    }
+  }
 
   const readSessionSourceCache = (sessionId: string | null): string[] | null => {
     const inMemory = sessionSourceCacheRef.current.get(sessionId);
@@ -78,7 +111,8 @@ export function useChatSession({ hubId, sources, onSourceSelectionChange }: UseC
       if (!raw) return null;
       const parsed = JSON.parse(raw);
       return Array.isArray(parsed) ? parsed : null;
-    } catch {
+    } catch (error) {
+      reportStorageFailure("Chat source filters could not be restored from local storage.", error);
       return null;
     }
   };
@@ -143,7 +177,9 @@ export function useChatSession({ hubId, sources, onSourceSelectionChange }: UseC
     if (activeSessionId !== null) {
       try {
         localStorage.setItem(`caddie:session-sources:${activeSessionId}`, JSON.stringify(selectedSourceIds));
-      } catch {}
+      } catch (error) {
+        reportStorageFailure("Chat source filters could not be saved to local storage.", error);
+      }
     }
   }, [activeSessionId, selectedSourceIds]);
 
@@ -245,7 +281,7 @@ export function useChatSession({ hubId, sources, onSourceSelectionChange }: UseC
       pendingSessionSourceIdsRef.current = null;
     }
     setActiveSessionId(session.id);
-    localStorage.setItem(`caddie:last-session:${hubId}`, session.id);
+    persistLastSessionId(session.id);
     setMessages(convertSessionMessagesToPairs(sessionMessages));
     setScope(session.scope);
     setSelectedSourceIds(activeSelection);
@@ -274,14 +310,15 @@ export function useChatSession({ hubId, sources, onSourceSelectionChange }: UseC
     sessionId: string,
     summary?: ChatSessionSummary,
     updateUrl = true,
-    cancelled = false,
+    loadToken = activeLoadTokenRef.current,
     fallbackToAnotherSession = true,
   ) {
+    const isStale = () => loadToken !== activeLoadTokenRef.current;
     setIsLoadingSession(true);
     setPanelError(null);
     try {
       const detail = await getChatSessionMessages(sessionId, hubId);
-      if (cancelled) {
+      if (isStale()) {
         return;
       }
       hydrateSession(detail.session, detail.messages);
@@ -290,40 +327,38 @@ export function useChatSession({ hubId, sources, onSourceSelectionChange }: UseC
         syncSessionQuery(detail.session.id);
       }
     } catch (error) {
-      if (cancelled) {
+      if (isStale()) {
         return;
       }
       updateSessionCache((current) => current.filter((session) => session.id !== sessionId));
-      try {
-        if (localStorage.getItem(`caddie:last-session:${hubId}`) === sessionId) {
-          localStorage.removeItem(`caddie:last-session:${hubId}`);
-        }
-      } catch {}
+      clearLastSessionId(sessionId);
       const fallbackSession = fallbackToAnotherSession
         ? sessionList.find((session) => session.id !== sessionId) ?? null
         : null;
       if (fallbackSession) {
-        await openSession(fallbackSession.id, fallbackSession, true);
+        await openSession(fallbackSession.id, fallbackSession, true, loadToken);
       } else {
         activateDraft(buildDraftState(draftState, completeSourceIds), true);
       }
       setPanelError(error instanceof Error ? error.message : String(error));
     } finally {
-      if (!cancelled) {
+      if (!isStale()) {
         setIsLoadingSession(false);
       }
     }
   }
 
   useEffect(() => {
-    let cancelled = false;
+    const loadToken = activeLoadTokenRef.current + 1;
+    activeLoadTokenRef.current = loadToken;
+    const isStale = () => loadToken !== activeLoadTokenRef.current;
 
     async function initializeChat() {
       setIsBootstrapping(true);
       setPanelError(null);
       try {
         const { data: sessions = [] } = await refetchSessionList();
-        if (cancelled) {
+        if (isStale()) {
           return;
         }
 
@@ -333,37 +368,40 @@ export function useChatSession({ hubId, sources, onSourceSelectionChange }: UseC
           return;
         }
 
-        const cachedSessionId = localStorage.getItem(`caddie:last-session:${hubId}`);
+        const cachedSessionId = readLastSessionId();
         const preferredSessionId = initialSessionParam ?? cachedSessionId;
 
         if (preferredSessionId && sessions.some((session) => session.id === preferredSessionId)) {
           try {
             const detail = await getChatSessionMessages(preferredSessionId, hubId);
-            if (cancelled) {
+            if (isStale()) {
               return;
             }
             hydrateSession(detail.session, detail.messages);
             updateSessionCache((current) => upsertSessionSummary(current, detail.session));
             syncSessionQuery(detail.session.id, { preserveMessage: true });
             return;
-          } catch {
+          } catch (error) {
+            if (!isStale()) {
+              setPanelError(error instanceof Error ? error.message : String(error));
+            }
             syncSessionQuery(null);
           }
         }
 
         if (sessions.length > 0) {
-          await openSession(sessions[0].id, sessions[0], true, cancelled);
+          await openSession(sessions[0].id, sessions[0], true, loadToken);
           return;
         }
 
         activateDraft(buildDraftState(draftState, completeSourceIdsRef.current), false);
       } catch (error) {
-        if (!cancelled) {
+        if (!isStale()) {
           setPanelError(error instanceof Error ? error.message : String(error));
           activateDraft(buildDraftState(draftState, completeSourceIdsRef.current), false);
         }
       } finally {
-        if (!cancelled) {
+        if (!isStale()) {
           setIsBootstrapping(false);
         }
       }
@@ -371,7 +409,9 @@ export function useChatSession({ hubId, sources, onSourceSelectionChange }: UseC
 
     initializeChat();
     return () => {
-      cancelled = true;
+      if (activeLoadTokenRef.current === loadToken) {
+        activeLoadTokenRef.current += 1;
+      }
     };
   }, [hubId, refetchSessionList]);
 
@@ -389,7 +429,9 @@ export function useChatSession({ hubId, sources, onSourceSelectionChange }: UseC
       return;
     }
     if (currentSessionParam && currentSessionParam !== activeSessionId) {
-      void openSession(currentSessionParam, undefined, false, false, false);
+      const loadToken = activeLoadTokenRef.current + 1;
+      activeLoadTokenRef.current = loadToken;
+      void openSession(currentSessionParam, undefined, false, loadToken, false);
     }
   }, [currentSessionParam, activeSessionId, isBootstrapping, completeSourceIds, scope]);
 

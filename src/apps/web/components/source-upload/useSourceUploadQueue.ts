@@ -162,23 +162,6 @@ export function useSourceUploadQueue({
   const [queue, setQueue] = useState<QueueItem[]>([]);
   const [statusMessage, setStatusMessage] = useState<StatusMessage | null>(null);
   const isProcessingRef = useRef(false);
-  const isAddingYouTubeUrlRef = useRef(false);
-  const queueRef = useRef(queue);
-  const queuedYoutubeUrlsRef = useRef<Set<string>>(new Set());
-  queueRef.current = queue;
-
-  useEffect(() => {
-    queuedYoutubeUrlsRef.current = new Set(
-      queue
-        .filter((item): item is YouTubeQueueItem => item.kind === "youtube")
-        .filter((item) => item.status !== "error" && item.status !== "complete")
-        .map((item) => item.url),
-    );
-  }, [queue]);
-
-  useEffect(() => {
-    isAddingYouTubeUrlRef.current = false;
-  }, [queue]);
 
   useEffect(() => {
     if (!statusMessage) return;
@@ -193,169 +176,128 @@ export function useSourceUploadQueue({
     }
   }, [open]);
 
-  const syncQueue = useCallback((updater: (items: QueueItem[]) => QueueItem[]) => {
-    const next = updater(queueRef.current);
-    queueRef.current = next;
-    setQueue(next);
+  const updateQueueItem = useCallback((itemId: string, updater: (item: QueueItem) => QueueItem) => {
+    setQueue((items) =>
+      items.map((item) => (item.id === itemId ? updater(item) : item)),
+    );
   }, []);
 
-  const processQueue = useCallback(async () => {
-    if (isProcessingRef.current) return;
+  const processQueueItem = useCallback(async (nextItem: QueueItem) => {
     isProcessingRef.current = true;
+    const itemId = nextItem.id;
+    let createdSourceId: string | undefined;
 
-    while (true) {
-      const nextItem = queueRef.current.find((item) => item.status === "pending");
-      if (!nextItem) break;
-
-      const itemId = nextItem.id;
-
-      try {
-        if (nextItem.kind === "file") {
-          let file = nextItem.file;
-          if (nextItem.sourceKind !== "document" && mediaUploadRequiresCompression(file)) {
-            syncQueue((items) =>
-              items.map((item) =>
-                item.id === itemId ? { ...item, status: "preparing" as UploadStatus, progress: 0 } : item,
-              ),
-            );
-            file = await prepareMediaFileForUpload(file);
-            syncQueue((items) =>
-              items.map((item) =>
-                item.id === itemId && item.kind === "file"
-                  ? { ...item, file, label: file.name, size: file.size }
-                  : item,
-              ),
-            );
-          }
-
-          syncQueue((items) =>
-            items.map((item) =>
-              item.id === itemId ? { ...item, status: "uploading" as UploadStatus, progress: 0 } : item,
-            ),
+    try {
+      if (nextItem.kind === "file") {
+        let file = nextItem.file;
+        if (nextItem.sourceKind !== "document" && mediaUploadRequiresCompression(file)) {
+          updateQueueItem(itemId, (item) => ({ ...item, status: "preparing" as UploadStatus, progress: 0 }));
+          file = await prepareMediaFileForUpload(file);
+          updateQueueItem(itemId, (item) =>
+            item.kind === "file" ? { ...item, file, label: file.name, size: file.size } : item,
           );
-
-          const enqueueResult = nextItem.sourceKind === "youtube_fallback"
-            ? await createYouTubeFallbackSource({
-                hub_id: hubId,
-                youtube_source_id: nextItem.youtubeSourceId!,
-                original_name: file.name,
-              })
-            : await createSource(
-                nextItem.sourceKind === "manual_media"
-                  ? { hub_id: hubId, original_name: file.name, file_kind: "media" }
-                  : { hub_id: hubId, original_name: file.name },
-              );
-          const contentType = resolveContentType(file);
-
-          syncQueue((items) =>
-            items.map((item) =>
-              item.id === itemId && item.kind === "file" ? { ...item, sourceId: enqueueResult.source.id } : item,
-            ),
-          );
-
-          await new Promise<void>((resolve, reject) => {
-            const xhr = new XMLHttpRequest();
-            xhr.open("PUT", enqueueResult.upload_url);
-            xhr.setRequestHeader("Content-Type", contentType);
-
-            xhr.upload.onprogress = (event) => {
-              if (event.lengthComputable) {
-                const pct = Math.round((event.loaded / event.total) * 100);
-                syncQueue((items) =>
-                  items.map((item) =>
-                    item.id === itemId ? { ...item, progress: pct } : item,
-                  ),
-                );
-              }
-            };
-
-            xhr.onload = () => {
-              if (xhr.status >= 200 && xhr.status < 300) {
-                resolve();
-              } else {
-                reject(new Error(buildUploadFailureMessage(xhr)));
-              }
-            };
-            xhr.onerror = () => reject(new Error("Upload failed - network error"));
-            xhr.send(file);
-          });
-
-          syncQueue((items) =>
-            items.map((item) =>
-              item.id === itemId ? { ...item, status: "enqueuing" as UploadStatus, progress: 100 } : item,
-            ),
-          );
-          await enqueueSource(enqueueResult.source.id);
-        } else if (nextItem.kind === "webpage") {
-          syncQueue((items) =>
-            items.map((item) =>
-              item.id === itemId ? { ...item, status: "creating" as UploadStatus, progress: 0 } : item,
-            ),
-          );
-          let finalUrl = nextItem.url;
-          if (!/^https?:\/\//i.test(finalUrl)) {
-            finalUrl = `https://${finalUrl}`;
-          }
-          await createWebSource({ hub_id: hubId, url: finalUrl });
-        } else if (nextItem.kind === "youtube") {
-          syncQueue((items) =>
-            items.map((item) =>
-              item.id === itemId ? { ...item, status: "creating" as UploadStatus, progress: 0 } : item,
-            ),
-          );
-          let finalUrl = nextItem.url;
-          if (!/^https?:\/\//i.test(finalUrl)) {
-            finalUrl = `https://${finalUrl}`;
-          }
-          await createYouTubeSource({
-            hub_id: hubId,
-            url: finalUrl,
-            language: nextItem.language.trim() || undefined,
-            allow_auto_captions: nextItem.allowAutoCaptions,
-          });
         }
 
-        syncQueue((items) =>
-          items.map((item) =>
-            item.id === itemId ? { ...item, status: "complete" as UploadStatus, progress: 100 } : item,
-          ),
-        );
-        onRefresh();
-      } catch (err) {
-        const reason = err instanceof Error ? err.message : "Failed.";
-        syncQueue((items) =>
-          items.map((item) =>
-            item.id === itemId ? { ...item, status: "error" as UploadStatus, error: reason } : item,
-          ),
+        updateQueueItem(itemId, (item) => ({ ...item, status: "uploading" as UploadStatus, progress: 0 }));
+
+        const enqueueResult = nextItem.sourceKind === "youtube_fallback"
+          ? await createYouTubeFallbackSource({
+              hub_id: hubId,
+              youtube_source_id: nextItem.youtubeSourceId!,
+              original_name: file.name,
+            })
+          : await createSource(
+              nextItem.sourceKind === "manual_media"
+                ? { hub_id: hubId, original_name: file.name, file_kind: "media" }
+                : { hub_id: hubId, original_name: file.name },
+            );
+        createdSourceId = enqueueResult.source.id;
+        const contentType = resolveContentType(file);
+
+        updateQueueItem(itemId, (item) =>
+          item.kind === "file" ? { ...item, sourceId: createdSourceId } : item,
         );
 
-        if (nextItem.kind === "file") {
-          const match = queueRef.current.find((item) => item.id === itemId && item.kind === "file");
-          const sourceId = match?.kind === "file" ? match.sourceId : undefined;
-          if (sourceId) {
-            try {
-              await failSource(sourceId, reason);
-              onRefresh();
-            } catch (failErr) {
-              const failReason = failErr instanceof Error ? failErr.message : "Unknown error";
-              setStatusMessage({
-                text: `Upload failed, and Caddie could not mark the source as failed automatically: ${failReason}`,
-                type: "error",
-              });
+        await new Promise<void>((resolve, reject) => {
+          const xhr = new XMLHttpRequest();
+          xhr.open("PUT", enqueueResult.upload_url);
+          xhr.setRequestHeader("Content-Type", contentType);
+
+          xhr.upload.onprogress = (event) => {
+            if (event.lengthComputable) {
+              const pct = Math.round((event.loaded / event.total) * 100);
+              updateQueueItem(itemId, (item) => ({ ...item, progress: pct }));
             }
+          };
+
+          xhr.onload = () => {
+            if (xhr.status >= 200 && xhr.status < 300) {
+              resolve();
+            } else {
+              reject(new Error(buildUploadFailureMessage(xhr)));
+            }
+          };
+          xhr.onerror = () => reject(new Error("Upload failed - network error"));
+          xhr.send(file);
+        });
+
+        updateQueueItem(itemId, (item) => ({ ...item, status: "enqueuing" as UploadStatus, progress: 100 }));
+        await enqueueSource(enqueueResult.source.id);
+      } else if (nextItem.kind === "webpage") {
+        updateQueueItem(itemId, (item) => ({ ...item, status: "creating" as UploadStatus, progress: 0 }));
+        let finalUrl = nextItem.url;
+        if (!/^https?:\/\//i.test(finalUrl)) {
+          finalUrl = `https://${finalUrl}`;
+        }
+        await createWebSource({ hub_id: hubId, url: finalUrl });
+      } else if (nextItem.kind === "youtube") {
+        updateQueueItem(itemId, (item) => ({ ...item, status: "creating" as UploadStatus, progress: 0 }));
+        let finalUrl = nextItem.url;
+        if (!/^https?:\/\//i.test(finalUrl)) {
+          finalUrl = `https://${finalUrl}`;
+        }
+        await createYouTubeSource({
+          hub_id: hubId,
+          url: finalUrl,
+          language: nextItem.language.trim() || undefined,
+          allow_auto_captions: nextItem.allowAutoCaptions,
+        });
+      }
+
+      updateQueueItem(itemId, (item) => ({ ...item, status: "complete" as UploadStatus, progress: 100 }));
+      onRefresh();
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : "Failed.";
+      updateQueueItem(itemId, (item) => ({ ...item, status: "error" as UploadStatus, error: reason }));
+
+      if (nextItem.kind === "file") {
+        if (createdSourceId) {
+          try {
+            await failSource(createdSourceId, reason);
+            onRefresh();
+          } catch (failErr) {
+            const failReason = failErr instanceof Error ? failErr.message : "Unknown error";
+            setStatusMessage({
+              text: `Upload failed, and Caddie could not mark the source as failed automatically: ${failReason}`,
+              type: "error",
+            });
           }
         }
       }
+    } finally {
+      isProcessingRef.current = false;
     }
-
-    isProcessingRef.current = false;
-  }, [hubId, onRefresh, syncQueue]);
+  }, [hubId, onRefresh, updateQueueItem]);
 
   useEffect(() => {
-    if (queue.some((item) => item.status === "pending")) {
-      void processQueue();
+    if (isProcessingRef.current) {
+      return;
     }
-  }, [processQueue, queue]);
+    const nextItem = queue.find((item) => item.status === "pending");
+    if (nextItem) {
+      void processQueueItem(nextItem);
+    }
+  }, [processQueueItem, queue]);
 
   const addFiles = useCallback((files: FileList | File[], sourceKind: FileQueueItem["sourceKind"]) => {
     const newItems: QueueItem[] = [];
@@ -416,7 +358,7 @@ export function useSourceUploadQueue({
       setStatusMessage({ text: "Enter a URL to ingest.", type: "error" });
       return false;
     }
-    if (queueRef.current.some((item) => "url" in item && item.url === trimmed && item.status !== "error" && item.status !== "complete")) {
+    if (queue.some((item) => "url" in item && item.url === trimmed && item.status !== "error" && item.status !== "complete")) {
       setStatusMessage({ text: "That URL is already in the queue.", type: "error" });
       return false;
     }
@@ -434,7 +376,7 @@ export function useSourceUploadQueue({
       }];
     });
     return true;
-  }, []);
+  }, [queue]);
 
   const addYouTubeUrl = useCallback(({
     url,
@@ -445,23 +387,17 @@ export function useSourceUploadQueue({
     language: string;
     allowAutoCaptions: boolean;
   }) => {
-    if (isAddingYouTubeUrlRef.current) {
-      return false;
-    }
     const trimmed = url.trim();
     if (!trimmed) {
       setStatusMessage({ text: "Enter a YouTube URL to ingest.", type: "error" });
       return false;
     }
     if (
-      queuedYoutubeUrlsRef.current.has(trimmed) ||
-      queueRef.current.some((item) => "url" in item && item.url === trimmed && item.status !== "error" && item.status !== "complete")
+      queue.some((item) => "url" in item && item.url === trimmed && item.status !== "error" && item.status !== "complete")
     ) {
       setStatusMessage({ text: "That URL is already in the queue.", type: "error" });
       return false;
     }
-    queuedYoutubeUrlsRef.current.add(trimmed);
-    isAddingYouTubeUrlRef.current = true;
     setQueue((prev) => {
       if (prev.some((item) => "url" in item && item.url === trimmed && item.status !== "error" && item.status !== "complete")) {
         return prev;
@@ -478,7 +414,7 @@ export function useSourceUploadQueue({
       }];
     });
     return true;
-  }, []);
+  }, [queue]);
 
   const removeFromQueue = useCallback((itemId: string) => {
     setQueue((prev) => prev.filter((item) => item.id !== itemId));

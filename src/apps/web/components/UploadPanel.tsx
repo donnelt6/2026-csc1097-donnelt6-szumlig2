@@ -222,8 +222,12 @@ export function UploadPanel({
     try {
       const chunks = await listSourceChunks(source.id);
       setViewChunks(chunks);
-    } catch {
+    } catch (error) {
       setViewChunks([]);
+      setStatusMessage({
+        text: error instanceof Error ? error.message : "Source chunks could not be loaded.",
+        type: "error",
+      });
     } finally {
       setIsLoadingChunks(false);
     }
