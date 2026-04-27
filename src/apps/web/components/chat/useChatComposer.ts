@@ -14,7 +14,6 @@ interface UseChatComposerArgs {
   canSuggestPrompt: boolean;
   completeSourceIds: string[];
   isBootstrapping: boolean;
-  isComposerLocked: boolean;
   messagesLength: number;
   sourcesLoading?: boolean;
   submitQuestion: (question: string) => Promise<boolean>;
@@ -27,7 +26,6 @@ export function useChatComposer({
   canSuggestPrompt,
   completeSourceIds,
   isBootstrapping,
-  isComposerLocked,
   messagesLength,
   sourcesLoading,
   submitQuestion,
