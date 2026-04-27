@@ -230,6 +230,38 @@ describe("MembersPanel", () => {
     expect(within(viewerRow).getByTitle("Remove member")).toBeInTheDocument();
   });
 
+  it("keeps owner separate from admin in role filter counts", async () => {
+    vi.mocked(listMembers).mockResolvedValue([
+      {
+        hub_id: "hub-1",
+        user_id: "owner-1",
+        role: "owner",
+        accepted_at: "2026-03-22T10:00:00Z",
+        email: "owner@example.com",
+      },
+      {
+        hub_id: "hub-1",
+        user_id: "admin-1",
+        role: "admin",
+        accepted_at: "2026-03-22T10:00:00Z",
+        email: "admin@example.com",
+      },
+      {
+        hub_id: "hub-1",
+        user_id: "admin-2",
+        role: "admin",
+        accepted_at: "2026-03-22T10:00:00Z",
+        email: "admin2@example.com",
+      },
+    ]);
+
+    renderWithQueryClient(<MembersPanel hubId="hub-1" role="owner" />);
+
+    await screen.findByText("owner@example.com");
+    expect(screen.getByRole("button", { name: "Owner (1)" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Admin (2)" })).toBeInTheDocument();
+  });
+
   it("shows a leave hub action below capacity for non-owners", async () => {
     mockUserId = "editor-1";
     vi.mocked(listMembers).mockResolvedValue([
