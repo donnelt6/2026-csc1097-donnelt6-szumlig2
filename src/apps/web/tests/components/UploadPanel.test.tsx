@@ -462,7 +462,7 @@ describe("UploadPanel", () => {
 
     const input = document.querySelector(".add-source-modal__file-input") as HTMLInputElement;
     expect(input.accept).toBe(".mp3,.mp4,.m4a");
-    expect(screen.getByText(/mp3, mp4, or m4a files\. files above 50mb are compressed before upload\./i)).toBeInTheDocument();
+    expect(screen.getByText(/mp3, mp4, or m4a files\. files above 20mb are compressed before upload\./i)).toBeInTheDocument();
     const file = new File(["media"], "clip.mp4", { type: "video/mp4" });
     fireEvent.change(input, { target: { files: [file] } });
 
