@@ -540,6 +540,7 @@ describe("ChatPanel", () => {
   });
 
   it("ignores a stale send response after the user switches sessions", async () => {
+    vi.useFakeTimers();
     currentSearchParams = "session=session-1";
     vi.mocked(listChatSessions).mockResolvedValue([
       {
@@ -590,41 +591,46 @@ describe("ChatPanel", () => {
       };
     });
 
-    let resolveAsk!: (value: Awaited<ReturnType<typeof askQuestion>>) => void;
     vi.mocked(askQuestion).mockImplementation(
       () =>
         new Promise((resolve) => {
-          resolveAsk = resolve;
+          setTimeout(() => {
+            resolve({
+              answer: "Use Moodle.",
+              citations: [],
+              message_id: "message-1",
+              session_id: "session-1",
+              session_title: "Assignments",
+              flag_status: "none",
+            });
+          }, 50);
         })
     );
 
-    const { rerender } = renderWithQueryClient(
-      <ChatPanel hubId="hub-1" sources={sources} />
-    );
+    try {
+      const { rerender } = renderWithQueryClient(
+        <ChatPanel hubId="hub-1" sources={sources} />
+      );
 
-    const user = userEvent.setup();
-    await waitFor(() => expect(screen.getByText("Assignments")).toBeInTheDocument());
-    await user.type(screen.getByLabelText("Ask a question"), "How do I submit assignments?");
-    await user.click(screen.getByRole("button", { name: "Send message" }));
-    await waitFor(() => expect(askQuestion).toHaveBeenCalledTimes(1));
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      await waitFor(() => expect(screen.getByText("Assignments")).toBeInTheDocument());
+      await user.type(screen.getByLabelText("Ask a question"), "How do I submit assignments?");
+      await user.click(screen.getByRole("button", { name: "Send message" }));
+      await waitFor(() => expect(askQuestion).toHaveBeenCalledTimes(1));
 
-    currentSearchParams = "session=session-2";
-    rerender(<ChatPanel hubId="hub-1" sources={sources} />);
-    await waitFor(() => expect(screen.getByText("Exams")).toBeInTheDocument());
-    const replaceCallsBeforeResolve = replaceMock.mock.calls.length;
+      currentSearchParams = "session=session-2";
+      rerender(<ChatPanel hubId="hub-1" sources={sources} />);
+      await waitFor(() => expect(screen.getByText("Exams")).toBeInTheDocument());
+      const replaceCallsBeforeResolve = replaceMock.mock.calls.length;
 
-    resolveAsk({
-      answer: "Use Moodle.",
-      citations: [],
-      message_id: "message-1",
-      session_id: "session-1",
-      session_title: "Assignments",
-      flag_status: "none",
-    });
+      await vi.advanceTimersByTimeAsync(50);
 
-    await waitFor(() => expect(screen.getByText("Exams")).toBeInTheDocument());
-    expect(screen.queryByText("Use Moodle.")).not.toBeInTheDocument();
-    expect(replaceMock.mock.calls).toHaveLength(replaceCallsBeforeResolve);
+      await waitFor(() => expect(screen.getByText("Exams")).toBeInTheDocument());
+      expect(screen.queryByText("Use Moodle.")).not.toBeInTheDocument();
+      expect(replaceMock.mock.calls).toHaveLength(replaceCallsBeforeResolve);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("flags an assistant response for moderation", async () => {
