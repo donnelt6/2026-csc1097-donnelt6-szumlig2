@@ -22,10 +22,6 @@ vi.mock("../../components/auth/AuthProvider", () => ({
   }),
 }));
 
-vi.mock("../../components/navigation/ThemeToggle", () => ({
-  ThemeToggle: () => <div>theme</div>,
-}));
-
 vi.mock("../../components/navigation/ProfileMenu", () => ({
   ProfileMenu: () => <div>profile</div>,
 }));

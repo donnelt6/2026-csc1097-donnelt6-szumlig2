@@ -896,7 +896,7 @@
 }
 
 .menu-item--theme {
-  display: none;
+  display: flex;
 }
 
 .menu-item:hover {

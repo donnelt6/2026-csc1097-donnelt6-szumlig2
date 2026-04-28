@@ -8,7 +8,6 @@ import { useParams, usePathname, useRouter, useSearchParams } from 'next/navigat
 import { useQuery } from '@tanstack/react-query';
 import { Bars3Icon, ChatBubbleLeftRightIcon, DocumentTextIcon, MagnifyingGlassIcon } from '@heroicons/react/24/outline';
 import { Sidebar } from './navigation/Sidebar';
-import { ThemeToggle } from './navigation/ThemeToggle';
 import { ProfileMenu } from './navigation/ProfileMenu';
 import { NotificationsMenu } from './navigation/NotificationsMenu';
 import { useAuth } from './auth/AuthProvider';
@@ -384,7 +383,6 @@ function AppShellChrome({ children }: AppShellProps) {
               </div>
             )}
             <div className="nav-actions">
-              <ThemeToggle compact />
               <NotificationsMenu />
               <ProfileMenu />
             </div>
