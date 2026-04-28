@@ -6,13 +6,18 @@ import { HubTabProvider } from "../lib/HubTabContext";
 
 const testQueryClients = new Set<QueryClient>();
 
-export function cleanupTestQueryClients() {
-  for (const queryClient of testQueryClients) {
-    // Cancel in-flight work so polling queries cannot outlive the test that created them.
-    void queryClient.cancelQueries(undefined, { silent: true });
-    queryClient.clear();
-  }
+export async function cleanupTestQueryClients() {
+  const queryClients = Array.from(testQueryClients);
   testQueryClients.clear();
+
+  await Promise.allSettled(
+    queryClients.map(async (queryClient) => {
+      // Wait for cancellation before clearing so refetch timers and in-flight work
+      // do not leak past the test that created the client.
+      await queryClient.cancelQueries(undefined, { silent: true });
+      queryClient.clear();
+    }),
+  );
 }
 
 export function renderWithQueryClient(ui: ReactElement) {

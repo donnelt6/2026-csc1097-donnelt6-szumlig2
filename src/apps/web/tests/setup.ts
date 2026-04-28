@@ -20,9 +20,9 @@ if (typeof window !== "undefined" && typeof window.matchMedia !== "function") {
   });
 }
 
-afterEach(() => {
+afterEach(async () => {
   // Reset leaked fake timers so one test cannot keep the Vitest worker alive.
   vi.useRealTimers();
   cleanup();
-  cleanupTestQueryClients();
+  await cleanupTestQueryClients();
 });

@@ -636,6 +636,81 @@ describe("ChatPanel", () => {
     expect(replaceMock.mock.calls).toHaveLength(replaceCallsBeforeResolve);
   });
 
+  it("switches to a new draft without loading a fake 'new' session or applying a stale send", async () => {
+    currentSearchParams = "session=session-1";
+    vi.mocked(listChatSessions).mockResolvedValue([
+      {
+        id: "session-1",
+        hub_id: "hub-1",
+        title: "Assignments",
+        scope: "hub",
+        source_ids: ["src-1", "src-2"],
+        created_at: "2026-01-02T12:00:00Z",
+        last_message_at: "2026-01-02T12:00:00Z",
+      },
+    ]);
+    vi.mocked(getChatSessionMessages).mockResolvedValue({
+      session: {
+        id: "session-1",
+        hub_id: "hub-1",
+        title: "Assignments",
+        scope: "hub",
+        source_ids: ["src-1", "src-2"],
+        created_at: "2026-01-02T12:00:00Z",
+        last_message_at: "2026-01-02T12:00:00Z",
+      },
+      messages: [],
+    });
+
+    let settleAsk!: () => void;
+    const askSettled = new Promise<void>((resolve) => {
+      settleAsk = resolve;
+    });
+    let resolveAsk!: (value: Awaited<ReturnType<typeof askQuestion>>) => void;
+    vi.mocked(askQuestion).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveAsk = (value) => {
+            resolve(value);
+            settleAsk();
+          };
+        })
+    );
+
+    const { rerender } = renderWithQueryClient(
+      <ChatPanel hubId="hub-1" sources={sources} />
+    );
+
+    const user = userEvent.setup();
+    await waitFor(() => expect(screen.getByText("Assignments")).toBeInTheDocument());
+    await user.type(screen.getByLabelText("Ask a question"), "How do I submit assignments?");
+    await user.click(screen.getByRole("button", { name: "Send message" }));
+    await waitFor(() => expect(askQuestion).toHaveBeenCalledTimes(1));
+
+    const messageLoadCallsBeforeSwitch = vi.mocked(getChatSessionMessages).mock.calls.length;
+    currentSearchParams = "session=new";
+    rerender(<ChatPanel hubId="hub-1" sources={sources} />);
+
+    await waitFor(() => expect(screen.getByText("New Chat")).toBeInTheDocument());
+    expect(vi.mocked(getChatSessionMessages).mock.calls).toHaveLength(messageLoadCallsBeforeSwitch);
+    expect(vi.mocked(getChatSessionMessages).mock.calls.some(([sessionId]) => sessionId === "new")).toBe(false);
+
+    const replaceCallsBeforeResolve = replaceMock.mock.calls.length;
+    resolveAsk({
+      answer: "Use Moodle.",
+      citations: [],
+      message_id: "message-1",
+      session_id: "session-1",
+      session_title: "Assignments",
+      flag_status: "none",
+    });
+    await askSettled;
+
+    await waitFor(() => expect(screen.getByText("New Chat")).toBeInTheDocument());
+    expect(screen.queryByText("Use Moodle.")).not.toBeInTheDocument();
+    expect(replaceMock.mock.calls).toHaveLength(replaceCallsBeforeResolve);
+  });
+
   it("flags an assistant response for moderation", async () => {
     vi.mocked(listChatSessions).mockResolvedValue([]);
     vi.mocked(askQuestion).mockResolvedValue({

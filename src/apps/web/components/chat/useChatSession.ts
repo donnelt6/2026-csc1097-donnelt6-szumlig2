@@ -70,6 +70,12 @@ export function useChatSession({ hubId, sources, onSourceSelectionChange }: UseC
   const hasActivatedNewSessionDraftRef = useRef(false);
   const activeLoadTokenRef = useRef(0);
 
+  function invalidateActiveLoadToken() {
+    // Session navigation must invalidate both in-flight loads and pending sends.
+    activeLoadTokenRef.current += 1;
+    return activeLoadTokenRef.current;
+  }
+
   function reportStorageFailure(message: string, error: unknown) {
     console.error(message, error);
     setPanelError((current) => current ?? message);
@@ -418,19 +424,17 @@ export function useChatSession({ hubId, sources, onSourceSelectionChange }: UseC
   const currentSessionParam = searchParams.get("session");
   useEffect(() => {
     if (isBootstrapping) return;
-    if (
-      currentSessionParam === "new" &&
-      activeSessionId === null &&
-      !hasActivatedNewSessionDraftRef.current
-    ) {
-      hasActivatedNewSessionDraftRef.current = true;
-      sessionSourceCacheRef.current.delete(null);
-      activateDraft({ messages: [], scope, selectedSourceIds: [...completeSourceIds] }, false);
+    if (currentSessionParam === "new") {
+      if (activeSessionId !== null || !hasActivatedNewSessionDraftRef.current) {
+        hasActivatedNewSessionDraftRef.current = true;
+        invalidateActiveLoadToken();
+        sessionSourceCacheRef.current.delete(null);
+        activateDraft({ messages: [], scope, selectedSourceIds: [...completeSourceIds] }, false);
+      }
       return;
     }
     if (currentSessionParam && currentSessionParam !== activeSessionId) {
-      const loadToken = activeLoadTokenRef.current + 1;
-      activeLoadTokenRef.current = loadToken;
+      const loadToken = invalidateActiveLoadToken();
       void openSession(currentSessionParam, undefined, false, loadToken, false);
     }
   }, [currentSessionParam, activeSessionId, isBootstrapping, completeSourceIds, scope]);
