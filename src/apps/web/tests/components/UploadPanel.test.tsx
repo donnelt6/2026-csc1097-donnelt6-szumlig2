@@ -71,7 +71,7 @@ function mockXhr(status = 200) {
         status,
       };
       instance.send.mockImplementation(() => {
-        setTimeout(() => instance.onload?.(), 0);
+        queueMicrotask(() => instance.onload?.());
       });
       instances.push(instance);
       return instance;

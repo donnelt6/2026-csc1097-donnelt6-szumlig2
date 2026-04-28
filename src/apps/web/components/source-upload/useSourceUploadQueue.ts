@@ -162,25 +162,65 @@ export function useSourceUploadQueue({
   const [queue, setQueue] = useState<QueueItem[]>([]);
   const [statusMessage, setStatusMessage] = useState<StatusMessage | null>(null);
   const isProcessingRef = useRef(false);
+  const isMountedRef = useRef(true);
+  const statusTimeoutRef = useRef<number | null>(null);
+  const activeUploadXhrsRef = useRef(new Set<XMLHttpRequest>());
+
+  const setQueueIfMounted = useCallback((updater: (items: QueueItem[]) => QueueItem[]) => {
+    if (!isMountedRef.current) return;
+    setQueue(updater);
+  }, []);
+
+  const setStatusMessageIfMounted = useCallback((message: StatusMessage | null) => {
+    if (!isMountedRef.current) return;
+    setStatusMessage(message);
+  }, []);
 
   useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+      isProcessingRef.current = false;
+      if (statusTimeoutRef.current !== null) {
+        window.clearTimeout(statusTimeoutRef.current);
+        statusTimeoutRef.current = null;
+      }
+      for (const xhr of activeUploadXhrsRef.current) {
+        xhr.abort();
+      }
+      activeUploadXhrsRef.current.clear();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (statusTimeoutRef.current !== null) {
+      window.clearTimeout(statusTimeoutRef.current);
+      statusTimeoutRef.current = null;
+    }
     if (!statusMessage) return;
-    const timeout = window.setTimeout(() => setStatusMessage(null), 5000);
-    return () => window.clearTimeout(timeout);
-  }, [statusMessage]);
+    statusTimeoutRef.current = window.setTimeout(() => {
+      statusTimeoutRef.current = null;
+      setStatusMessageIfMounted(null);
+    }, 5000);
+    return () => {
+      if (statusTimeoutRef.current !== null) {
+        window.clearTimeout(statusTimeoutRef.current);
+        statusTimeoutRef.current = null;
+      }
+    };
+  }, [setStatusMessageIfMounted, statusMessage]);
 
   // Drop finished rows when the modal opens again so the queue shows only active work.
   useEffect(() => {
     if (open) {
-      setQueue((prev) => prev.filter((item) => item.status !== "complete" && item.status !== "error"));
+      setQueueIfMounted((prev) => prev.filter((item) => item.status !== "complete" && item.status !== "error"));
     }
-  }, [open]);
+  }, [open, setQueueIfMounted]);
 
   const updateQueueItem = useCallback((itemId: string, updater: (item: QueueItem) => QueueItem) => {
-    setQueue((items) =>
+    setQueueIfMounted((items) =>
       items.map((item) => (item.id === itemId ? updater(item) : item)),
     );
-  }, []);
+  }, [setQueueIfMounted]);
 
   const processQueueItem = useCallback(async (nextItem: QueueItem) => {
     isProcessingRef.current = true;
@@ -220,6 +260,7 @@ export function useSourceUploadQueue({
 
         await new Promise<void>((resolve, reject) => {
           const xhr = new XMLHttpRequest();
+          activeUploadXhrsRef.current.add(xhr);
           xhr.open("PUT", enqueueResult.upload_url);
           xhr.setRequestHeader("Content-Type", contentType);
 
@@ -231,13 +272,17 @@ export function useSourceUploadQueue({
           };
 
           xhr.onload = () => {
+            activeUploadXhrsRef.current.delete(xhr);
             if (xhr.status >= 200 && xhr.status < 300) {
               resolve();
             } else {
               reject(new Error(buildUploadFailureMessage(xhr)));
             }
           };
-          xhr.onerror = () => reject(new Error("Upload failed - network error"));
+          xhr.onerror = () => {
+            activeUploadXhrsRef.current.delete(xhr);
+            reject(new Error("Upload failed - network error"));
+          };
           xhr.send(file);
         });
 
@@ -265,7 +310,9 @@ export function useSourceUploadQueue({
       }
 
       updateQueueItem(itemId, (item) => ({ ...item, status: "complete" as UploadStatus, progress: 100 }));
-      onRefresh();
+      if (isMountedRef.current) {
+        onRefresh();
+      }
     } catch (err) {
       const reason = err instanceof Error ? err.message : "Failed.";
       updateQueueItem(itemId, (item) => ({ ...item, status: "error" as UploadStatus, error: reason }));
@@ -274,10 +321,12 @@ export function useSourceUploadQueue({
         if (createdSourceId) {
           try {
             await failSource(createdSourceId, reason);
-            onRefresh();
+            if (isMountedRef.current) {
+              onRefresh();
+            }
           } catch (failErr) {
             const failReason = failErr instanceof Error ? failErr.message : "Unknown error";
-            setStatusMessage({
+            setStatusMessageIfMounted({
               text: `Upload failed, and Caddie could not mark the source as failed automatically: ${failReason}`,
               type: "error",
             });
@@ -287,7 +336,7 @@ export function useSourceUploadQueue({
     } finally {
       isProcessingRef.current = false;
     }
-  }, [hubId, onRefresh, updateQueueItem]);
+  }, [hubId, onRefresh, setStatusMessageIfMounted, updateQueueItem]);
 
   useEffect(() => {
     if (isProcessingRef.current) {
@@ -326,7 +375,7 @@ export function useSourceUploadQueue({
     }
 
     if (!config.allowMultiple && candidates.length > 1) {
-      setStatusMessage({
+      setStatusMessageIfMounted({
         text: sourceKind === "youtube_fallback"
           ? "Upload one audio or video file at a time for this YouTube recovery."
           : "Upload one audio or video file at a time for each manual media import.",
@@ -334,7 +383,7 @@ export function useSourceUploadQueue({
       });
     }
     if (rejected.length > 0) {
-      setStatusMessage({
+      setStatusMessageIfMounted({
         text: sourceKind === "document"
           ? `${rejected.join(", ")} exceeded the ${config.tooLargeLabel} limit`
           : `${rejected.join(", ")} exceeded the ${config.tooLargeLabel} raw size limit for browser compression`,
@@ -342,28 +391,28 @@ export function useSourceUploadQueue({
       });
     }
     if (newItems.length === 0 && rejected.length === 0) {
-      setStatusMessage({ text: config.unsupportedMessage, type: "error" });
+      setStatusMessageIfMounted({ text: config.unsupportedMessage, type: "error" });
       return false;
     }
     if (newItems.length === 0) {
       return false;
     }
-    setQueue((prev) => [...prev, ...newItems]);
+    setQueueIfMounted((prev) => [...prev, ...newItems]);
     return true;
-  }, [youtubeFallbackSourceId]);
+  }, [setQueueIfMounted, setStatusMessageIfMounted, youtubeFallbackSourceId]);
 
   const addWebUrl = useCallback((url: string) => {
     const trimmed = url.trim();
     if (!trimmed) {
-      setStatusMessage({ text: "Enter a URL to ingest.", type: "error" });
+      setStatusMessageIfMounted({ text: "Enter a URL to ingest.", type: "error" });
       return false;
     }
     if (queue.some((item) => "url" in item && item.url === trimmed && item.status !== "error" && item.status !== "complete")) {
-      setStatusMessage({ text: "That URL is already in the queue.", type: "error" });
+      setStatusMessageIfMounted({ text: "That URL is already in the queue.", type: "error" });
       return false;
     }
     let queued = false;
-    setQueue((prev) => {
+    setQueueIfMounted((prev) => {
       if (prev.some((item) => "url" in item && item.url === trimmed && item.status !== "error" && item.status !== "complete")) {
         return prev;
       }
@@ -378,10 +427,10 @@ export function useSourceUploadQueue({
       }];
     });
     if (!queued) {
-      setStatusMessage({ text: "That URL is already in the queue.", type: "error" });
+      setStatusMessageIfMounted({ text: "That URL is already in the queue.", type: "error" });
     }
     return queued;
-  }, [queue]);
+  }, [queue, setQueueIfMounted, setStatusMessageIfMounted]);
 
   const addYouTubeUrl = useCallback(({
     url,
@@ -394,17 +443,17 @@ export function useSourceUploadQueue({
   }) => {
     const trimmed = url.trim();
     if (!trimmed) {
-      setStatusMessage({ text: "Enter a YouTube URL to ingest.", type: "error" });
+      setStatusMessageIfMounted({ text: "Enter a YouTube URL to ingest.", type: "error" });
       return false;
     }
     if (
       queue.some((item) => "url" in item && item.url === trimmed && item.status !== "error" && item.status !== "complete")
     ) {
-      setStatusMessage({ text: "That URL is already in the queue.", type: "error" });
+      setStatusMessageIfMounted({ text: "That URL is already in the queue.", type: "error" });
       return false;
     }
     let queued = false;
-    setQueue((prev) => {
+    setQueueIfMounted((prev) => {
       if (prev.some((item) => "url" in item && item.url === trimmed && item.status !== "error" && item.status !== "complete")) {
         return prev;
       }
@@ -421,14 +470,14 @@ export function useSourceUploadQueue({
       }];
     });
     if (!queued) {
-      setStatusMessage({ text: "That URL is already in the queue.", type: "error" });
+      setStatusMessageIfMounted({ text: "That URL is already in the queue.", type: "error" });
     }
     return queued;
-  }, [queue]);
+  }, [queue, setQueueIfMounted, setStatusMessageIfMounted]);
 
   const removeFromQueue = useCallback((itemId: string) => {
-    setQueue((prev) => prev.filter((item) => item.id !== itemId));
-  }, []);
+    setQueueIfMounted((prev) => prev.filter((item) => item.id !== itemId));
+  }, [setQueueIfMounted]);
 
   const pendingCount = queue.filter((item) =>
     item.status === "pending" ||
@@ -445,7 +494,7 @@ export function useSourceUploadQueue({
     addWebUrl,
     addYouTubeUrl,
     allDone,
-    clearStatusMessage: () => setStatusMessage(null),
+    clearStatusMessage: () => setStatusMessageIfMounted(null),
     completedCount,
     pendingCount,
     queue,
