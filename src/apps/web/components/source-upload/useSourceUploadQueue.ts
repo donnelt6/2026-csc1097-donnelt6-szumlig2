@@ -320,7 +320,7 @@ export function useSourceUploadQueue({
 
         updateQueueItem(itemId, (item) => ({ ...item, status: "enqueuing" as UploadStatus, progress: 100 }));
         await enqueueSource(enqueueResult.source.id);
-        upsertSourceCache({ ...enqueueResult.source, status: "complete", failure_reason: undefined });
+        upsertSourceCache({ ...enqueueResult.source, status: "queued", failure_reason: undefined });
       } else if (nextItem.kind === "webpage") {
         updateQueueItem(itemId, (item) => ({ ...item, status: "creating" as UploadStatus, progress: 0 }));
         let finalUrl = nextItem.url;

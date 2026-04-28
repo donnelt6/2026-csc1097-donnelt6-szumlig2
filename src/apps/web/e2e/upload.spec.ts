@@ -24,5 +24,6 @@ test("upload reaches complete state in the sources UI", async ({ page }) => {
 
   const sourceRow = page.locator(".sources__row", { hasText: "lecture-notes.txt" });
   await expect(sourceRow).toBeVisible();
+  await expect(sourceRow).toContainText("Indexing");
   await expect(sourceRow).toContainText("Complete");
 });

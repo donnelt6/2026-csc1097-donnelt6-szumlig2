@@ -195,7 +195,7 @@ export default function HubDetail({ params }: { params: { hubId: string } }) {
               onSourceSelectionChange={handleChatSourceChange}
             />
           </div>
-          {activeTab === 'sources' && (
+          <div style={{ display: activeTab === 'sources' ? 'contents' : 'none' }}>
             <UploadPanel
               hubId={params.hubId}
               sources={sources ?? []}
@@ -226,7 +226,7 @@ export default function HubDetail({ params }: { params: { hubId: string } }) {
                 router.replace(`/hubs/${params.hubId}?${p.toString()}`, { scroll: false });
               }}
             />
-          )}
+          </div>
           {activeTab === 'members' && (
             <MembersPanel hubId={params.hubId} role={hub?.role ?? undefined} />
           )}
