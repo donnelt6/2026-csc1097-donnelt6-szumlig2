@@ -76,6 +76,7 @@ describe("ChatPanel", () => {
   afterEach(() => {
     vi.clearAllMocks();
     vi.unstubAllGlobals();
+    vi.useRealTimers();
     localStorage.clear();
   });
 
@@ -540,7 +541,6 @@ describe("ChatPanel", () => {
   });
 
   it("ignores a stale send response after the user switches sessions", async () => {
-    vi.useFakeTimers();
     currentSearchParams = "session=session-1";
     vi.mocked(listChatSessions).mockResolvedValue([
       {
@@ -591,46 +591,49 @@ describe("ChatPanel", () => {
       };
     });
 
+    let settleAsk!: () => void;
+    const askSettled = new Promise<void>((resolve) => {
+      settleAsk = resolve;
+    });
+    let resolveAsk!: (value: Awaited<ReturnType<typeof askQuestion>>) => void;
     vi.mocked(askQuestion).mockImplementation(
       () =>
         new Promise((resolve) => {
-          setTimeout(() => {
-            resolve({
-              answer: "Use Moodle.",
-              citations: [],
-              message_id: "message-1",
-              session_id: "session-1",
-              session_title: "Assignments",
-              flag_status: "none",
-            });
-          }, 50);
+          resolveAsk = (value) => {
+            resolve(value);
+            settleAsk();
+          };
         })
     );
 
-    try {
-      const { rerender } = renderWithQueryClient(
-        <ChatPanel hubId="hub-1" sources={sources} />
-      );
+    const { rerender } = renderWithQueryClient(
+      <ChatPanel hubId="hub-1" sources={sources} />
+    );
 
-      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-      await waitFor(() => expect(screen.getByText("Assignments")).toBeInTheDocument());
-      await user.type(screen.getByLabelText("Ask a question"), "How do I submit assignments?");
-      await user.click(screen.getByRole("button", { name: "Send message" }));
-      await waitFor(() => expect(askQuestion).toHaveBeenCalledTimes(1));
+    const user = userEvent.setup();
+    await waitFor(() => expect(screen.getByText("Assignments")).toBeInTheDocument());
+    await user.type(screen.getByLabelText("Ask a question"), "How do I submit assignments?");
+    await user.click(screen.getByRole("button", { name: "Send message" }));
+    await waitFor(() => expect(askQuestion).toHaveBeenCalledTimes(1));
 
-      currentSearchParams = "session=session-2";
-      rerender(<ChatPanel hubId="hub-1" sources={sources} />);
-      await waitFor(() => expect(screen.getByText("Exams")).toBeInTheDocument());
-      const replaceCallsBeforeResolve = replaceMock.mock.calls.length;
+    currentSearchParams = "session=session-2";
+    rerender(<ChatPanel hubId="hub-1" sources={sources} />);
+    await waitFor(() => expect(screen.getByText("Exams")).toBeInTheDocument());
+    const replaceCallsBeforeResolve = replaceMock.mock.calls.length;
 
-      await vi.advanceTimersByTimeAsync(50);
+    resolveAsk({
+      answer: "Use Moodle.",
+      citations: [],
+      message_id: "message-1",
+      session_id: "session-1",
+      session_title: "Assignments",
+      flag_status: "none",
+    });
+    await askSettled;
 
-      await waitFor(() => expect(screen.getByText("Exams")).toBeInTheDocument());
-      expect(screen.queryByText("Use Moodle.")).not.toBeInTheDocument();
-      expect(replaceMock.mock.calls).toHaveLength(replaceCallsBeforeResolve);
-    } finally {
-      vi.useRealTimers();
-    }
+    await waitFor(() => expect(screen.getByText("Exams")).toBeInTheDocument());
+    expect(screen.queryByText("Use Moodle.")).not.toBeInTheDocument();
+    expect(replaceMock.mock.calls).toHaveLength(replaceCallsBeforeResolve);
   });
 
   it("flags an assistant response for moderation", async () => {
