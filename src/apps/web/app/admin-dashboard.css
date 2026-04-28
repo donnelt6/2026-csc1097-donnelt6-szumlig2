@@ -939,8 +939,27 @@
 }
 
 @media (max-width: 1024px) {
+  .admin {
+    padding: 20px 20px;
+    flex: none;
+    min-height: auto;
+    overflow: visible;
+  }
+  .admin__stats {
+    grid-template-columns: 1fr;
+  }
   .admin__main {
     grid-template-columns: 1fr;
+  }
+  .admin__column {
+    overflow: visible;
+    min-height: auto;
+  }
+  .admin__panel-body,
+  .admin__mod-list {
+    flex: none;
+    overflow: visible;
+    min-height: auto;
   }
 }
 

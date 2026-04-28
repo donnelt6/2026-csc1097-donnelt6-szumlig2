@@ -1936,7 +1936,7 @@
   }
 }
 
-@media (max-width: 900px) {
+@media (max-width: 1024px) {
   .hdash__layout {
     grid-template-columns: 1fr;
     padding: 16px;
@@ -3302,7 +3302,7 @@
   }
 }
 
-@media (max-width: 768px) {
+@media (max-width: 1024px) {
   .hdash__faqs .hubs-pagination,
   .hdash__guides .hubs-pagination {
     position: static;

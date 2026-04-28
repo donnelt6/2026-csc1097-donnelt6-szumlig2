@@ -760,7 +760,7 @@
 
 /* Responsive */
 
-@media (max-width: 900px) {
+@media (max-width: 1024px) {
   .members__layout {
     grid-template-columns: 1fr;
   }
@@ -779,6 +779,22 @@
   .members__info-card {
     margin-top: 0;
     padding: 20px;
+  }
+  .members__subtitle-row {
+    flex-wrap: wrap;
+  }
+  .members__invite-btn,
+  .members__transfer-btn {
+    transform: none;
+  }
+
+  .members,
+  .members__main,
+  .members__table-body {
+    overflow: visible;
+    min-height: auto;
+    height: auto;
+    flex: none;
   }
 }
 
