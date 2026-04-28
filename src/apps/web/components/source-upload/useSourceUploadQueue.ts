@@ -168,6 +168,7 @@ export function useSourceUploadQueue({
   const isMountedRef = useRef(true);
   const statusTimeoutRef = useRef<number | null>(null);
   const activeUploadXhrsRef = useRef(new Set<XMLHttpRequest>());
+  const activeQueuedUrlsRef = useRef(new Set<string>());
 
   const setQueueIfMounted = useCallback((updater: (items: QueueItem[]) => QueueItem[]) => {
     if (!isMountedRef.current) return;
@@ -211,6 +212,15 @@ export function useSourceUploadQueue({
       }
     };
   }, [setStatusMessageIfMounted, statusMessage]);
+
+  useEffect(() => {
+    activeQueuedUrlsRef.current = new Set(
+      queue
+        .filter((item): item is WebQueueItem | YouTubeQueueItem => "url" in item)
+        .filter((item) => item.status !== "error" && item.status !== "complete")
+        .map((item) => item.url),
+    );
+  }, [queue]);
 
   // Drop finished rows when the modal opens again so the queue shows only active work.
   useEffect(() => {
@@ -432,16 +442,15 @@ export function useSourceUploadQueue({
       setStatusMessageIfMounted({ text: "Enter a URL to ingest.", type: "error" });
       return false;
     }
-    if (queue.some((item) => "url" in item && item.url === trimmed && item.status !== "error" && item.status !== "complete")) {
+    if (activeQueuedUrlsRef.current.has(trimmed)) {
       setStatusMessageIfMounted({ text: "That URL is already in the queue.", type: "error" });
       return false;
     }
-    let queued = false;
+    activeQueuedUrlsRef.current.add(trimmed);
     setQueueIfMounted((prev) => {
       if (prev.some((item) => "url" in item && item.url === trimmed && item.status !== "error" && item.status !== "complete")) {
         return prev;
       }
-      queued = true;
       return [...prev, {
         kind: "webpage" as const,
         id: `web-${++queueIdCounter}`,
@@ -451,11 +460,8 @@ export function useSourceUploadQueue({
         progress: 0,
       }];
     });
-    if (!queued) {
-      setStatusMessageIfMounted({ text: "That URL is already in the queue.", type: "error" });
-    }
-    return queued;
-  }, [queue, setQueueIfMounted, setStatusMessageIfMounted]);
+    return true;
+  }, [setQueueIfMounted, setStatusMessageIfMounted]);
 
   const addYouTubeUrl = useCallback(({
     url,
@@ -471,18 +477,15 @@ export function useSourceUploadQueue({
       setStatusMessageIfMounted({ text: "Enter a YouTube URL to ingest.", type: "error" });
       return false;
     }
-    if (
-      queue.some((item) => "url" in item && item.url === trimmed && item.status !== "error" && item.status !== "complete")
-    ) {
+    if (activeQueuedUrlsRef.current.has(trimmed)) {
       setStatusMessageIfMounted({ text: "That URL is already in the queue.", type: "error" });
       return false;
     }
-    let queued = false;
+    activeQueuedUrlsRef.current.add(trimmed);
     setQueueIfMounted((prev) => {
       if (prev.some((item) => "url" in item && item.url === trimmed && item.status !== "error" && item.status !== "complete")) {
         return prev;
       }
-      queued = true;
       return [...prev, {
         kind: "youtube" as const,
         id: `yt-${++queueIdCounter}`,
@@ -494,11 +497,8 @@ export function useSourceUploadQueue({
         progress: 0,
       }];
     });
-    if (!queued) {
-      setStatusMessageIfMounted({ text: "That URL is already in the queue.", type: "error" });
-    }
-    return queued;
-  }, [queue, setQueueIfMounted, setStatusMessageIfMounted]);
+    return true;
+  }, [setQueueIfMounted, setStatusMessageIfMounted]);
 
   const removeFromQueue = useCallback((itemId: string) => {
     setQueueIfMounted((prev) => prev.filter((item) => item.id !== itemId));
