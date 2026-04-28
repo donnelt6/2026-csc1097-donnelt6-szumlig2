@@ -379,6 +379,22 @@ describe("UploadPanel", () => {
     expect(onRefresh).toHaveBeenCalled();
   });
 
+  it("rejects YouTube URLs from the webpage import flow", async () => {
+    renderWithQueryClient(<UploadPanel hubId="hub-1" sources={[]} onRefresh={() => undefined} />);
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Add Source" }));
+    await user.click(screen.getByRole("button", { name: /Webpage Link/ }));
+    await user.type(
+      screen.getByPlaceholderText("https://example.com/article"),
+      "https://www.youtube.com/watch?v=abc123def45"
+    );
+    await user.click(screen.getByRole("button", { name: "Import" }));
+
+    expect(await screen.findByText("Use the Video/Audio tab for YouTube links.")).toBeInTheDocument();
+    expect(createWebSource).not.toHaveBeenCalled();
+  });
+
   it("submits a YouTube URL for ingestion", async () => {
     const onRefresh = vi.fn();
     vi.mocked(createYouTubeSource).mockResolvedValue({

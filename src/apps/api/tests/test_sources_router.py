@@ -260,6 +260,16 @@ def test_create_web_source_success(client, monkeypatch) -> None:
     assert sent["args"][0] == "src-web-1"
 
 
+# Verifies that create web source rejects YouTube URLs so they use the dedicated flow.
+def test_create_web_source_rejects_youtube_url(client) -> None:
+    resp = client.post(
+        "/sources/web",
+        json={"hub_id": "11111111-1111-1111-1111-111111111111", "url": "https://www.youtube.com/watch?v=abc123def45"},
+    )
+    assert resp.status_code == 422
+    assert resp.json()["detail"][0]["msg"] == "Value error, Use the YouTube import flow for YouTube links."
+
+
 # Verifies that create youtube source success.
 def test_create_youtube_source_success(client, monkeypatch) -> None:
     # Mocks YouTube source creation; expect ingest_youtube_source task enqueued.

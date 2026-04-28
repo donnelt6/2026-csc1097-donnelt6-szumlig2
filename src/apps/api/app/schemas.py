@@ -75,6 +75,13 @@ def _trim_and_reject_blank(value: Optional[str]) -> Optional[str]:
     return trimmed
 
 
+def _is_youtube_host(hostname: str) -> bool:
+    host = (hostname or "").lower()
+    if host.startswith("www."):
+        host = host[4:]
+    return host == "youtu.be" or host.endswith("youtube.com") or host.endswith("youtube-nocookie.com")
+
+
 # Hub, user, and membership models.
 class UserProfileSummary(BaseModel):
     user_id: str
@@ -233,6 +240,9 @@ class WebSourceCreate(StrictModel):
         lower = value.strip()
         if not lower.startswith(("http://", "https://")):
             raise ValueError("URL must start with http:// or https://")
+        parsed = urlparse(lower)
+        if _is_youtube_host(parsed.hostname or ""):
+            raise ValueError("Use the YouTube import flow for YouTube links.")
         return lower
 
 
@@ -250,12 +260,9 @@ class YouTubeSourceCreate(StrictModel):
         if not lower.startswith(("http://", "https://")):
             raise ValueError("URL must start with http:// or https://")
         parsed = urlparse(lower)
-        host = (parsed.hostname or "").lower()
-        if host.startswith("www."):
-            host = host[4:]
-        if not host:
+        if not parsed.hostname:
             raise ValueError("URL must include a host")
-        if host == "youtu.be" or host.endswith("youtube.com") or host.endswith("youtube-nocookie.com"):
+        if _is_youtube_host(parsed.hostname):
             return lower
         raise ValueError("URL must be a YouTube domain")
 

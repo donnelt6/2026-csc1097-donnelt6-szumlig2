@@ -142,6 +142,20 @@ function buildUploadFailureMessage(xhr: XMLHttpRequest): string {
   return `Upload failed with status ${xhr.status}`;
 }
 
+function isYouTubeUrl(value: string): boolean {
+  try {
+    const normalized = /^https?:\/\//i.test(value) ? value : `https://${value}`;
+    const parsed = new URL(normalized);
+    let host = parsed.hostname.toLowerCase();
+    if (host.startsWith("www.")) {
+      host = host.slice(4);
+    }
+    return host === "youtu.be" || host.endsWith("youtube.com") || host.endsWith("youtube-nocookie.com");
+  } catch {
+    return false;
+  }
+}
+
 export function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -443,6 +457,10 @@ export function useSourceUploadQueue({
     const trimmed = url.trim();
     if (!trimmed) {
       setStatusMessageIfMounted({ text: "Enter a URL to ingest.", type: "error" });
+      return false;
+    }
+    if (isYouTubeUrl(trimmed)) {
+      setStatusMessageIfMounted({ text: "Use the Video/Audio tab for YouTube links.", type: "error" });
       return false;
     }
     if (activeQueuedUrlsRef.current.has(trimmed)) {
