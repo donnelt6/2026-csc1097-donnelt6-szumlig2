@@ -181,6 +181,9 @@ export function useSourceUploadQueue({
   }, []);
 
   useEffect(() => {
+    // Next dev / React Strict Mode runs an extra mount cleanup cycle, so restore
+    // the mounted flag on setup before any later queue/status writes.
+    isMountedRef.current = true;
     return () => {
       isMountedRef.current = false;
       isProcessingRef.current = false;
