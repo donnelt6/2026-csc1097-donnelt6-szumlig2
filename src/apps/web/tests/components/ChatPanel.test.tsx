@@ -611,6 +611,7 @@ describe("ChatPanel", () => {
     currentSearchParams = "session=session-2";
     rerender(<ChatPanel hubId="hub-1" sources={sources} />);
     await waitFor(() => expect(screen.getByText("Exams")).toBeInTheDocument());
+    const replaceCallsBeforeResolve = replaceMock.mock.calls.length;
 
     resolveAsk({
       answer: "Use Moodle.",
@@ -623,7 +624,7 @@ describe("ChatPanel", () => {
 
     await waitFor(() => expect(screen.getByText("Exams")).toBeInTheDocument());
     expect(screen.queryByText("Use Moodle.")).not.toBeInTheDocument();
-    expect(replaceMock).not.toHaveBeenCalledWith("/hubs/hub-1?session=session-1", { scroll: false });
+    expect(replaceMock.mock.calls).toHaveLength(replaceCallsBeforeResolve);
   });
 
   it("flags an assistant response for moderation", async () => {
