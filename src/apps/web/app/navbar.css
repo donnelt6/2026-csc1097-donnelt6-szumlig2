@@ -771,6 +771,39 @@
   margin-left: 0;
 }
 
+.settings-appearance {
+  width: min(100%, 720px);
+  padding: 24px 28px;
+  display: grid;
+  gap: 16px;
+  border-radius: 22px;
+  margin-top: 16px;
+}
+
+.settings-appearance__header {
+  display: grid;
+  gap: 4px;
+}
+
+.settings-appearance__title {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: var(--font-semibold);
+  color: var(--text);
+}
+
+.settings-appearance__description {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+}
+
+.settings-appearance .theme-toggle {
+  width: auto;
+  justify-self: start;
+  border: 1px solid var(--border);
+}
+
 @media (max-width: 960px) {
   .profile-avatar-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));

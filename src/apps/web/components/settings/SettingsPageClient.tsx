@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { ProfileAvatar } from "../profile/ProfileAvatar";
 import { ProfilePicker } from "../profile/ProfilePicker";
+import { ThemeToggle } from "../navigation/ThemeToggle";
 import { useAuth } from "../auth/AuthProvider";
 import {
   buildProfileFormValue,
@@ -121,6 +122,14 @@ export function SettingsPageClient() {
             </button>
           </div>
         </form>
+
+        <section className="card settings-appearance">
+          <div className="settings-appearance__header">
+            <h2 className="settings-appearance__title">Appearance</h2>
+            <p className="settings-appearance__description">Switch between light and dark mode.</p>
+          </div>
+          <ThemeToggle />
+        </section>
       </div>
     </main>
   );
