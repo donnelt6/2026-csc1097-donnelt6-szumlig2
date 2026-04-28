@@ -7,8 +7,9 @@ import { HubTabProvider } from "../lib/HubTabContext";
 export function renderWithQueryClient(ui: ReactElement) {
   const queryClient = new QueryClient({
     defaultOptions: {
-      queries: { retry: false },
-      mutations: { retry: false },
+      // Test query clients should not schedule cache-GC timers that keep Vitest alive.
+      queries: { retry: false, gcTime: Infinity },
+      mutations: { retry: false, gcTime: Infinity },
     },
   });
 
