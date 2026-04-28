@@ -46,6 +46,7 @@ interface MockApiState {
   sourcesByHub: Record<string, Source[]>;
   sessionsByHub: Record<string, Array<{ id: string; hub_id: string; title: string; scope: "hub" | "global"; source_ids: string[]; created_at: string; last_message_at: string }>>;
   uploadedSourceIds: Set<string>;
+  queuedSourcePolls: Record<string, number>;
 }
 
 function nowIso() {
@@ -98,6 +99,7 @@ export function createMockApiState(overrides?: Partial<MockApiState>): MockApiSt
     },
     sessionsByHub: overrides?.sessionsByHub ?? { "hub-1": [] },
     uploadedSourceIds: overrides?.uploadedSourceIds ?? new Set<string>(),
+    queuedSourcePolls: overrides?.queuedSourcePolls ?? {},
   };
 }
 
@@ -160,7 +162,20 @@ export async function installMockApi(page: Page, state: MockApiState) {
 
     if (method === "GET" && /^\/sources\/[^/]+$/.test(path)) {
       const hubId = path.split("/")[2];
-      return jsonResponse(route, state.sourcesByHub[hubId] ?? []);
+      const sources = state.sourcesByHub[hubId] ?? [];
+      for (const source of sources) {
+        const pollsRemaining = state.queuedSourcePolls[source.id];
+        if (pollsRemaining === undefined) {
+          continue;
+        }
+        if (pollsRemaining <= 0) {
+          source.status = "complete";
+          delete state.queuedSourcePolls[source.id];
+          continue;
+        }
+        state.queuedSourcePolls[source.id] = pollsRemaining - 1;
+      }
+      return jsonResponse(route, sources);
     }
 
     if (method === "POST" && path === "/sources") {
@@ -189,8 +204,9 @@ export async function installMockApi(page: Page, state: MockApiState) {
       if (!source) {
         return jsonResponse(route, { detail: "Source not found" }, 404);
       }
-      source.status = "complete";
+      source.status = "queued";
       state.uploadedSourceIds.add(sourceId);
+      state.queuedSourcePolls[sourceId] = 1;
       return jsonResponse(route, { status: "queued" });
     }
 

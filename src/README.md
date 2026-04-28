@@ -31,8 +31,6 @@ Node workspace:
 ```powershell
 cd 2026-csc1097-donnelt6-szumlig2/src
 npm install
-cd apps/web
-npm install
 ```
 
 API Python environment:
@@ -111,6 +109,9 @@ cd 2026-csc1097-donnelt6-szumlig2/src/apps/web
 npm run dev
 ```
 
+The web app now auto-copies the browser FFmpeg assets before `dev`, `build`, and `start`, so running from
+`src/apps/web` remains the entrypoint after the workspace dependencies have been installed.
+
 ## How The Main Flows Fit Together
 
 Authentication:
@@ -139,7 +140,7 @@ YouTube ingestion:
 - If the hosted worker gets YouTube's bot-check error, configure `YOUTUBE_COOKIES_FILE` or `YOUTUBE_COOKIES_B64` in the worker deployment with exported YouTube `cookies.txt` content.
 - Recoverable YouTube failures expose a manual fallback in the web app so users can upload a downloaded audio or video file instead.
 - Manual fallback uploads currently accept `mp3`, `mp4`, and `m4a`, with a 50 MB storage upload limit.
-- In the web app, oversized manual media uploads are compressed in the browser to speech-oriented MP3 before the direct storage upload begins.
+- In the web app, manual media uploads above 20 MB are compressed in the browser to speech-oriented MP3 before the direct storage upload begins.
 - Files above the direct 25 MB transcription cap are preprocessed with FFmpeg in the worker before transcription.
 
 Chat:

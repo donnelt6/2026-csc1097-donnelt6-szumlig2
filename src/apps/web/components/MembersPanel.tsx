@@ -297,9 +297,7 @@ export function MembersPanel({ hubId, role }: Props) {
       });
     }
     if (roleFilter !== "all") {
-      members = members.filter((m) =>
-        roleFilter === "admin" ? m.role === "admin" || m.role === "owner" : m.role === roleFilter
-      );
+      members = members.filter((m) => m.role === roleFilter);
     }
     if (statusFilter !== "all") {
       members = members.filter((m) =>
@@ -314,7 +312,7 @@ export function MembersPanel({ hubId, role }: Props) {
     return {
       all: members.length,
       owner: members.filter((m) => m.role === "owner").length,
-      admin: members.filter((m) => m.role === "admin" || m.role === "owner").length,
+      admin: members.filter((m) => m.role === "admin").length,
       editor: members.filter((m) => m.role === "editor").length,
       viewer: members.filter((m) => m.role === "viewer").length,
     };

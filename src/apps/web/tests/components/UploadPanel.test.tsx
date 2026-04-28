@@ -14,11 +14,16 @@ import {
   failSource,
 } from "../../lib/api";
 import {
+  MEDIA_BROWSER_COMPRESSION_THRESHOLD_BYTES,
   MEDIA_COMPRESSION_INPUT_MAX_BYTES,
   prepareMediaFileForUpload,
 } from "../../lib/mediaCompression";
 import type { Source } from "@shared/index";
 import { renderWithQueryClient } from "../test-utils";
+
+vi.mock("../../components/SuggestedSourcesPanel", () => ({
+  SuggestedSourcesPanel: () => null,
+}));
 
 vi.mock("../../lib/api", () => ({
   createSource: vi.fn(),
@@ -36,8 +41,9 @@ vi.mock("../../lib/api", () => ({
 
 vi.mock("../../lib/mediaCompression", () => ({
   MEDIA_UPLOAD_MAX_BYTES: 50 * 1024 * 1024,
+  MEDIA_BROWSER_COMPRESSION_THRESHOLD_BYTES: 20 * 1024 * 1024,
   MEDIA_COMPRESSION_INPUT_MAX_BYTES: 200 * 1024 * 1024,
-  mediaUploadRequiresCompression: (file: File) => file.size > 50 * 1024 * 1024,
+  mediaUploadRequiresCompression: (file: File) => file.size > 20 * 1024 * 1024,
   prepareMediaFileForUpload: vi.fn(async (file: File) => file),
 }));
 
@@ -65,7 +71,7 @@ function mockXhr(status = 200) {
         status,
       };
       instance.send.mockImplementation(() => {
-        setTimeout(() => instance.onload?.(), 0);
+        queueMicrotask(() => instance.onload?.());
       });
       instances.push(instance);
       return instance;
@@ -431,6 +437,10 @@ describe("UploadPanel", () => {
     await user.dblClick(importButton);
 
     await waitFor(() => expect(createYouTubeSource).toHaveBeenCalledTimes(1));
+    expect(screen.getByPlaceholderText("https://youtube.com/watch?v=...")).toHaveValue(
+      ""
+    );
+    expect(onRefresh).toHaveBeenCalledTimes(1);
   });
 
   it("submits a standalone manual media upload from the YouTube tab", async () => {
@@ -460,7 +470,7 @@ describe("UploadPanel", () => {
 
     const input = document.querySelector(".add-source-modal__file-input") as HTMLInputElement;
     expect(input.accept).toBe(".mp3,.mp4,.m4a");
-    expect(screen.getByText(/mp3, mp4, or m4a files\. files above 50mb are compressed before upload\./i)).toBeInTheDocument();
+    expect(screen.getByText(/mp3, mp4, or m4a files\. files above 20mb are compressed before upload\./i)).toBeInTheDocument();
     const file = new File(["media"], "clip.mp4", { type: "video/mp4" });
     fireEvent.change(input, { target: { files: [file] } });
 
@@ -528,7 +538,7 @@ describe("UploadPanel", () => {
     expect(onRefresh).toHaveBeenCalled();
   });
 
-  it("compresses manual media uploads above 50 MB before enqueueing", async () => {
+  it("compresses manual media uploads above the browser threshold before enqueueing", async () => {
     renderWithQueryClient(<UploadPanel hubId="hub-1" sources={[]} onRefresh={() => undefined} />);
 
     const user = userEvent.setup();
@@ -538,7 +548,7 @@ describe("UploadPanel", () => {
 
     const input = document.querySelector(".add-source-modal__file-input") as HTMLInputElement;
     const file = new File(["media"], "lecture.mp4", { type: "video/mp4" });
-    Object.defineProperty(file, "size", { value: 60 * 1024 * 1024 });
+    Object.defineProperty(file, "size", { value: MEDIA_BROWSER_COMPRESSION_THRESHOLD_BYTES + 1 });
     const compressed = new File(["compressed"], "lecture-speech.mp3", { type: "audio/mpeg" });
     vi.mocked(prepareMediaFileForUpload).mockResolvedValueOnce(compressed);
     vi.mocked(createSource).mockResolvedValue({

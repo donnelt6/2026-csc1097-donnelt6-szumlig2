@@ -1,6 +1,7 @@
 """test_tasks.py: Exercises worker task flows plus helpers from their owning modules."""
 
 from worker import common, config, content, media, tasks, web, youtube
+from worker import ingestion, source_suggestions
 
 
 # Text cleanup helpers.
@@ -20,14 +21,14 @@ def test_trim_text_truncates_long_content() -> None:
 # Verifies that chunking blank text returns no output chunks.
 def test_chunk_text_returns_empty_for_blank_input() -> None:
     # Calls chunking on empty input; expect no chunks.
-    assert tasks._chunk_text("", chunk_size=4, overlap=2) == []
+    assert ingestion._chunk_text("", chunk_size=4, overlap=2) == []
 
 
 # Verifies that chunking uses an overlapping sliding window across words.
 def test_chunk_text_applies_overlap() -> None:
     # Splits words with overlap; expect sliding window chunks.
     text = " ".join(f"w{i}" for i in range(1, 11))
-    chunks = tasks._chunk_text(text, chunk_size=4, overlap=2)
+    chunks = ingestion._chunk_text(text, chunk_size=4, overlap=2)
     assert chunks == [
         "w1 w2 w3 w4",
         "w3 w4 w5 w6",
@@ -41,14 +42,14 @@ def test_chunk_text_applies_overlap() -> None:
 # Verifies that ingestion exits early when the source record has been deleted.
 def test_ingest_text_skips_when_source_deleted(monkeypatch) -> None:
     # If the source is gone, ingestion should skip without embedding or inserts.
-    monkeypatch.setattr(tasks._storage, "_source_exists", lambda *_args, **_kwargs: False)
+    monkeypatch.setattr(ingestion._storage, "_source_exists", lambda *_args, **_kwargs: False)
     monkeypatch.setattr(
-        tasks,
+        ingestion,
         "_embed_chunks",
         lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("Embeddings should not run")),
     )
 
-    result = tasks._ingest_text_for_source(
+    result = ingestion._ingest_text_for_source(
         client=object(),
         source_id="src-missing",
         hub_id="hub-1",
@@ -203,24 +204,24 @@ def test_ingest_youtube_source_success(monkeypatch) -> None:
     # Ingest should upload pseudo doc and update source on success.
     updates: list[dict] = []
 
-    monkeypatch.setattr(tasks._common, "_get_supabase_client", lambda: object())
-    monkeypatch.setattr(tasks._storage, "_upload_pseudo_doc", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(tasks._storage, "_get_source_metadata", lambda *_args, **_kwargs: {})
+    monkeypatch.setattr(ingestion._common, "_get_supabase_client", lambda: object())
+    monkeypatch.setattr(ingestion._storage, "_upload_pseudo_doc", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(ingestion._storage, "_get_source_metadata", lambda *_args, **_kwargs: {})
 
     # Simulate the inner ingestion step completing and marking the source as done.
     def fake_ingest(_client, source_id, hub_id, text, extra_metadata=None):
         _ = (hub_id, text, extra_metadata)
-        tasks._update_source(_client, source_id, status="complete")
+        ingestion._update_source(_client, source_id, status="complete")
         return 3
 
-    monkeypatch.setattr(tasks, "_ingest_text_for_source", fake_ingest)
+    monkeypatch.setattr(ingestion, "_ingest_text_for_source", fake_ingest)
 
     def fake_update(_client, _source_id, status, **kwargs):
         updates.append({"status": status, **kwargs})
 
-    monkeypatch.setattr(tasks, "_update_source", fake_update)
+    monkeypatch.setattr(ingestion, "_update_source", fake_update)
     monkeypatch.setattr(
-        tasks._youtube,
+        ingestion._youtube,
         "_fetch_youtube_transcript",
         lambda *_args, **_kwargs: (
             "hello world",
@@ -253,17 +254,17 @@ def test_ingest_youtube_source_success(monkeypatch) -> None:
 def test_ingest_youtube_source_timeout_marks_failed(monkeypatch) -> None:
     updates: list[dict] = []
 
-    monkeypatch.setattr(tasks._common, "_get_supabase_client", lambda: object())
-    monkeypatch.setattr(tasks._storage, "_get_source_metadata", lambda *_args, **_kwargs: {})
+    monkeypatch.setattr(ingestion._common, "_get_supabase_client", lambda: object())
+    monkeypatch.setattr(ingestion._storage, "_get_source_metadata", lambda *_args, **_kwargs: {})
 
     def fake_fetch(*_args, **_kwargs):
-        raise tasks.SoftTimeLimitExceeded()
+        raise ingestion.SoftTimeLimitExceeded()
 
     def fake_update(_client, _source_id, status, **kwargs):
         updates.append({"status": status, **kwargs})
 
-    monkeypatch.setattr(tasks._youtube, "_fetch_youtube_transcript", fake_fetch)
-    monkeypatch.setattr(tasks, "_update_source", fake_update)
+    monkeypatch.setattr(ingestion._youtube, "_fetch_youtube_transcript", fake_fetch)
+    monkeypatch.setattr(ingestion, "_update_source", fake_update)
 
     try:
         tasks.ingest_youtube_source.run(
@@ -272,7 +273,7 @@ def test_ingest_youtube_source_timeout_marks_failed(monkeypatch) -> None:
             url="https://www.youtube.com/watch?v=abc123def45",
             storage_path="hub-1/src-yt-timeout/youtube.md",
         )
-    except tasks.SoftTimeLimitExceeded:
+    except ingestion.SoftTimeLimitExceeded:
         pass
     else:
         raise AssertionError("Expected SoftTimeLimitExceeded")
@@ -284,11 +285,11 @@ def test_ingest_youtube_source_timeout_marks_failed(monkeypatch) -> None:
 
 # Verifies that YouTube failures are classified into stable fallback codes.
 def test_classify_youtube_failure_marks_recoverable_cases() -> None:
-    code, allowed, _message = tasks._classify_youtube_failure("No captions available for this YouTube video")
+    code, allowed, _message = ingestion._classify_youtube_failure("No captions available for this YouTube video")
     assert code == "youtube_no_captions"
     assert allowed is True
 
-    code, allowed, _message = tasks._classify_youtube_failure("yt-dlp is required for YouTube ingestion")
+    code, allowed, _message = ingestion._classify_youtube_failure("yt-dlp is required for YouTube ingestion")
     assert code == "youtube_dependency_error"
     assert allowed is False
 
@@ -297,13 +298,13 @@ def test_classify_youtube_failure_marks_recoverable_cases() -> None:
 def test_ingest_source_transcribes_media_fallback(monkeypatch) -> None:
     updates: list[dict] = []
 
-    monkeypatch.setattr(tasks._common, "_get_supabase_client", lambda: object())
-    monkeypatch.setattr(tasks._storage, "_get_source_metadata", lambda *_args, **_kwargs: {})
-    monkeypatch.setattr(tasks._storage, "_download_from_storage", lambda _path: b"media-bytes")
-    monkeypatch.setattr(tasks._storage, "_get_source_metadata", lambda *_args, **_kwargs: {"file_kind": "media", "source_origin": "youtube_fallback"})
-    monkeypatch.setattr(tasks._media, "_transcribe_media_bytes", lambda raw, path: ("hello from media", {"media_extension": "mp4"}))
-    monkeypatch.setattr(tasks, "_ingest_text_for_source", lambda *_args, **kwargs: 2)
-    monkeypatch.setattr(tasks, "_update_source", lambda _client, _source_id, status, **kwargs: updates.append({"status": status, **kwargs}))
+    monkeypatch.setattr(ingestion._common, "_get_supabase_client", lambda: object())
+    monkeypatch.setattr(ingestion._storage, "_get_source_metadata", lambda *_args, **_kwargs: {})
+    monkeypatch.setattr(ingestion._storage, "_download_from_storage", lambda _path: b"media-bytes")
+    monkeypatch.setattr(ingestion._storage, "_get_source_metadata", lambda *_args, **_kwargs: {"file_kind": "media", "source_origin": "youtube_fallback"})
+    monkeypatch.setattr(ingestion._media, "_transcribe_media_bytes", lambda raw, path: ("hello from media", {"media_extension": "mp4"}))
+    monkeypatch.setattr(ingestion, "_ingest_text_for_source", lambda *_args, **kwargs: 2)
+    monkeypatch.setattr(ingestion, "_update_source", lambda _client, _source_id, status, **kwargs: updates.append({"status": status, **kwargs}))
 
     result = tasks.ingest_source.run("src-media-1", "hub-1", "hub-1/src-media-1/clip.mp4")
 
@@ -389,18 +390,18 @@ def test_transcribe_media_bytes_rejects_media_above_upload_limit(monkeypatch) ->
 def test_ingest_source_persists_media_failure_metadata(monkeypatch) -> None:
     updates: list[dict] = []
 
-    monkeypatch.setattr(tasks._common, "_get_supabase_client", lambda: object())
-    monkeypatch.setattr(tasks._storage, "_download_from_storage", lambda _path: b"media-bytes")
-    monkeypatch.setattr(tasks._storage, "_get_source_metadata", lambda *_args, **_kwargs: {"file_kind": "media"})
+    monkeypatch.setattr(ingestion._common, "_get_supabase_client", lambda: object())
+    monkeypatch.setattr(ingestion._storage, "_download_from_storage", lambda _path: b"media-bytes")
+    monkeypatch.setattr(ingestion._storage, "_get_source_metadata", lambda *_args, **_kwargs: {"file_kind": "media"})
     monkeypatch.setattr(
-        tasks._media,
+        ingestion._media,
         "_transcribe_media_bytes",
         lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("bad transcription model")),
     )
-    monkeypatch.setattr(tasks.socket, "gethostname", lambda: "worker-a")
-    monkeypatch.setattr(tasks.os, "getpid", lambda: 4242)
-    monkeypatch.setattr(tasks.settings, "transcription_model", "gpt-4o-mini")
-    monkeypatch.setattr(tasks, "_update_source", lambda _client, _source_id, status, **kwargs: updates.append({"status": status, **kwargs}))
+    monkeypatch.setattr(ingestion.socket, "gethostname", lambda: "worker-a")
+    monkeypatch.setattr(ingestion.os, "getpid", lambda: 4242)
+    monkeypatch.setattr(ingestion.settings, "transcription_model", "gpt-4o-mini")
+    monkeypatch.setattr(ingestion, "_update_source", lambda _client, _source_id, status, **kwargs: updates.append({"status": status, **kwargs}))
 
     try:
         tasks.ingest_source.run("src-media-2", "hub-1", "hub-1/src-media-2/clip.mp4")
@@ -445,10 +446,10 @@ def test_update_source_mirrors_youtube_fallback_status(monkeypatch) -> None:
     def fake_storage_update(_client, source_id, status, **kwargs):
         updates.append((source_id, {"status": status, **kwargs}))
 
-    monkeypatch.setattr(tasks._storage, "_get_source_metadata", fake_get_metadata)
-    monkeypatch.setattr(tasks._storage, "_update_source", fake_storage_update)
+    monkeypatch.setattr(ingestion._storage, "_get_source_metadata", fake_get_metadata)
+    monkeypatch.setattr(ingestion._storage, "_update_source", fake_storage_update)
 
-    tasks._update_source(object(), "src-child-1", status="processing", source_might_be_youtube_fallback=True)
+    ingestion._update_source(object(), "src-child-1", status="processing", source_might_be_youtube_fallback=True)
 
     assert updates[0][0] == "src-child-1"
     assert updates[1][0] == "src-parent-1"
@@ -466,10 +467,10 @@ def test_update_source_skips_metadata_fetch_for_non_fallback_sources(monkeypatch
     def fake_storage_update(_client, source_id, status, **kwargs):
         updates.append((source_id, {"status": status, **kwargs}))
 
-    monkeypatch.setattr(tasks._storage, "_get_source_metadata", fail_get_metadata)
-    monkeypatch.setattr(tasks._storage, "_update_source", fake_storage_update)
+    monkeypatch.setattr(ingestion._storage, "_get_source_metadata", fail_get_metadata)
+    monkeypatch.setattr(ingestion._storage, "_update_source", fake_storage_update)
 
-    tasks._update_source(object(), "src-web-1", status="processing")
+    ingestion._update_source(object(), "src-web-1", status="processing")
 
     assert updates == [("src-web-1", {"status": "processing", "failure_reason": None, "ingestion_metadata": None, "clear_failure_reason": False})]
 
@@ -478,9 +479,9 @@ def test_update_source_skips_metadata_fetch_for_non_fallback_sources(monkeypatch
 
 # Verifies that hub eligibility excludes pending, inactive, cooling-down, and underpopulated hubs.
 def test_filter_eligible_source_suggestion_hubs_applies_pending_activity_and_cooldown(monkeypatch) -> None:
-    monkeypatch.setattr(tasks.settings, "suggested_sources_hub_cooldown_minutes", 60)
-    monkeypatch.setattr(tasks.settings, "suggested_sources_min_complete_sources", 2)
-    now = tasks.datetime(2026, 3, 17, 12, 0, tzinfo=tasks.timezone.utc)
+    monkeypatch.setattr(source_suggestions.settings, "suggested_sources_hub_cooldown_minutes", 60)
+    monkeypatch.setattr(source_suggestions.settings, "suggested_sources_min_complete_sources", 2)
+    now = source_suggestions.datetime(2026, 3, 17, 12, 0, tzinfo=source_suggestions.timezone.utc)
     hubs = [
         {"id": "hub-active", "last_source_suggestion_scan_at": None},
         {"id": "hub-pending", "last_source_suggestion_scan_at": None},
@@ -489,7 +490,7 @@ def test_filter_eligible_source_suggestion_hubs_applies_pending_activity_and_coo
         {"id": "hub-few-sources", "last_source_suggestion_scan_at": None},
     ]
 
-    eligible = tasks._filter_eligible_source_suggestion_hubs(
+    eligible = source_suggestions._filter_eligible_source_suggestion_hubs(
         hubs,
         complete_source_counts={
             "hub-active": 3,
@@ -516,7 +517,7 @@ def test_filter_new_source_suggestions_dedupes_and_caps_batch() -> None:
         {"type": "youtube", "video_id": "zyx987uvw65"},
     ]
 
-    accepted = tasks._filter_new_source_suggestions(
+    accepted = source_suggestions._filter_new_source_suggestions(
         candidates,
         existing_source_targets={("web", "https://example.com/b")},
         existing_suggestion_targets={("youtube", "abc123def45")},
@@ -538,7 +539,7 @@ def test_filter_new_source_suggestions_reserves_one_youtube_slot() -> None:
         {"type": "youtube", "video_id": "abc123def45"},
     ]
 
-    accepted = tasks._filter_new_source_suggestions(
+    accepted = source_suggestions._filter_new_source_suggestions(
         candidates,
         existing_source_targets=set(),
         existing_suggestion_targets=set(),
@@ -554,9 +555,9 @@ def test_filter_new_source_suggestions_reserves_one_youtube_slot() -> None:
 
 # Verifies that normalization converts YouTube URLs to video suggestions and canonicalizes web URLs.
 def test_normalize_source_suggestion_candidate_coerces_youtube_and_web(monkeypatch) -> None:
-    monkeypatch.setattr(tasks._web, "_validate_public_url", lambda url: url)
+    monkeypatch.setattr(source_suggestions._web, "_validate_public_url", lambda url: url)
 
-    youtube = tasks._normalize_source_suggestion_candidate(
+    youtube = source_suggestions._normalize_source_suggestion_candidate(
         {
             "type": "web",
             "url": "https://www.youtube.com/watch?v=abc123def45",
@@ -567,7 +568,7 @@ def test_normalize_source_suggestion_candidate_coerces_youtube_and_web(monkeypat
         seed_source_ids=["src-1"],
         search_metadata={"model": "test"},
     )
-    web = tasks._normalize_source_suggestion_candidate(
+    web = source_suggestions._normalize_source_suggestion_candidate(
         {
             "type": "web",
             "url": "https://www.example.com/docs/?utm_source=test",
@@ -584,14 +585,14 @@ def test_normalize_source_suggestion_candidate_coerces_youtube_and_web(monkeypat
     assert youtube["video_id"] == "abc123def45"
     assert web is not None
     assert web["canonical_url"] == "https://example.com/docs"
-    assert web["canonical_url"] == tasks._web.canonicalize_web_url("https://www.example.com/docs/?utm_source=test")
+    assert web["canonical_url"] == source_suggestions._web.canonicalize_web_url("https://www.example.com/docs/?utm_source=test")
 
 
 # OpenAI discovery helpers.
 
 # Verifies that discovery failures return an empty result set with the captured error metadata.
 def test_discover_source_suggestions_returns_empty_on_failure(monkeypatch) -> None:
-    monkeypatch.setattr(tasks.settings, "openai_api_key", "test-key")
+    monkeypatch.setattr(source_suggestions.settings, "openai_api_key", "test-key")
 
     class FakeResponses:
         def create(self, **_kwargs):
@@ -601,16 +602,16 @@ def test_discover_source_suggestions_returns_empty_on_failure(monkeypatch) -> No
         def __init__(self, api_key: str):
             self.responses = FakeResponses()
 
-    monkeypatch.setattr(tasks, "OpenAI", FakeOpenAI)
+    monkeypatch.setattr(source_suggestions, "OpenAI", FakeOpenAI)
 
-    candidates, metadata = tasks._discover_source_suggestions("Hub context")
+    candidates, metadata = source_suggestions._discover_source_suggestions("Hub context")
     assert candidates == []
     assert metadata["error"] == "boom"
 
 
 # Verifies that the discovery prompt explicitly asks for a YouTube result when generating suggestions.
 def test_discover_source_suggestions_requests_youtube_when_relevant(monkeypatch) -> None:
-    monkeypatch.setattr(tasks.settings, "openai_api_key", "test-key")
+    monkeypatch.setattr(source_suggestions.settings, "openai_api_key", "test-key")
     captured: dict[str, object] = {}
 
     class FakeResponses:
@@ -622,15 +623,15 @@ def test_discover_source_suggestions_requests_youtube_when_relevant(monkeypatch)
         def __init__(self, api_key: str):
             self.responses = FakeResponses()
 
-    monkeypatch.setattr(tasks, "OpenAI", FakeOpenAI)
-    monkeypatch.setattr(tasks._response_utils, "_extract_response_text", lambda _response: "[]")
-    monkeypatch.setattr(tasks, "_parse_source_suggestion_candidates", lambda _raw: [])
-    monkeypatch.setattr(tasks._response_utils, "_extract_web_search_results", lambda _response: [])
+    monkeypatch.setattr(source_suggestions, "OpenAI", FakeOpenAI)
+    monkeypatch.setattr(source_suggestions._response_utils, "_extract_response_text", lambda _response: "[]")
+    monkeypatch.setattr(source_suggestions, "_parse_source_suggestion_candidates", lambda _raw: [])
+    monkeypatch.setattr(source_suggestions._response_utils, "_extract_web_search_results", lambda _response: [])
 
-    candidates, metadata = tasks._discover_source_suggestions("Hub context")
+    candidates, metadata = source_suggestions._discover_source_suggestions("Hub context")
 
     assert candidates == []
-    assert metadata["model"] == tasks.settings.suggested_sources_model
+    assert metadata["model"] == source_suggestions.settings.suggested_sources_model
     messages = captured["input"]
     system_prompt = messages[0]["content"]
     assert "include at least 1 YouTube video" in system_prompt
@@ -647,11 +648,11 @@ def test_get_redis_client_normalizes_rediss_ssl_flags(monkeypatch) -> None:
         captured["kwargs"] = kwargs
         return object()
 
-    monkeypatch.setattr(tasks.settings, "redis_url", "rediss://user:pass@example.upstash.io:6379/0?ssl_cert_reqs=CERT_NONE")
-    monkeypatch.setattr(tasks.redis.Redis, "from_url", fake_from_url)
+    monkeypatch.setattr(source_suggestions.settings, "redis_url", "rediss://user:pass@example.upstash.io:6379/0?ssl_cert_reqs=CERT_NONE")
+    monkeypatch.setattr(source_suggestions.redis.Redis, "from_url", fake_from_url)
 
-    tasks._get_redis_client()
+    source_suggestions._get_redis_client()
 
     assert captured["url"] == "rediss://user:pass@example.upstash.io:6379/0"
-    assert captured["kwargs"]["ssl_cert_reqs"] == tasks.ssl.CERT_NONE
+    assert captured["kwargs"]["ssl_cert_reqs"] == source_suggestions.ssl.CERT_NONE
     assert captured["kwargs"]["ssl_check_hostname"] is False
