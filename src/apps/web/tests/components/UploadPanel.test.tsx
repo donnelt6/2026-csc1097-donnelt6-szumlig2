@@ -21,6 +21,10 @@ import {
 import type { Source } from "@shared/index";
 import { renderWithQueryClient } from "../test-utils";
 
+vi.mock("../../components/SuggestedSourcesPanel", () => ({
+  SuggestedSourcesPanel: () => null,
+}));
+
 vi.mock("../../lib/api", () => ({
   createSource: vi.fn(),
   createYouTubeFallbackSource: vi.fn(),
