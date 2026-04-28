@@ -2,6 +2,7 @@
 
 // useSourceUploadQueue.ts: Queue state machine and upload strategies for source ingestion flows.
 
+import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   createSource,
@@ -16,6 +17,7 @@ import {
   mediaUploadRequiresCompression,
   prepareMediaFileForUpload,
 } from "../../lib/mediaCompression";
+import type { Source } from "@shared/index";
 
 export type UploadStatus = "pending" | "preparing" | "uploading" | "creating" | "enqueuing" | "complete" | "error";
 
@@ -159,6 +161,7 @@ export function useSourceUploadQueue({
   onRefresh,
   youtubeFallbackSourceId,
 }: UseSourceUploadQueueArgs) {
+  const queryClient = useQueryClient();
   const [queue, setQueue] = useState<QueueItem[]>([]);
   const [statusMessage, setStatusMessage] = useState<StatusMessage | null>(null);
   const isProcessingRef = useRef(false);
@@ -222,10 +225,24 @@ export function useSourceUploadQueue({
     );
   }, [setQueueIfMounted]);
 
+  const upsertSourceCache = useCallback((source: Source) => {
+    queryClient.setQueryData<Source[]>(["sources", hubId], (current) => {
+      const existing = current ?? [];
+      const index = existing.findIndex((entry) => entry.id === source.id);
+      if (index === -1) {
+        return [source, ...existing];
+      }
+      const next = [...existing];
+      next[index] = source;
+      return next;
+    });
+  }, [hubId, queryClient]);
+
   const processQueueItem = useCallback(async (nextItem: QueueItem) => {
     isProcessingRef.current = true;
     const itemId = nextItem.id;
     let createdSourceId: string | undefined;
+    let createdSource: Source | undefined;
 
     try {
       if (nextItem.kind === "file") {
@@ -251,7 +268,9 @@ export function useSourceUploadQueue({
                 ? { hub_id: hubId, original_name: file.name, file_kind: "media" }
                 : { hub_id: hubId, original_name: file.name },
             );
+        createdSource = enqueueResult.source;
         createdSourceId = enqueueResult.source.id;
+        upsertSourceCache(enqueueResult.source);
         const contentType = resolveContentType(file);
 
         updateQueueItem(itemId, (item) =>
@@ -288,25 +307,28 @@ export function useSourceUploadQueue({
 
         updateQueueItem(itemId, (item) => ({ ...item, status: "enqueuing" as UploadStatus, progress: 100 }));
         await enqueueSource(enqueueResult.source.id);
+        upsertSourceCache({ ...enqueueResult.source, status: "complete", failure_reason: undefined });
       } else if (nextItem.kind === "webpage") {
         updateQueueItem(itemId, (item) => ({ ...item, status: "creating" as UploadStatus, progress: 0 }));
         let finalUrl = nextItem.url;
         if (!/^https?:\/\//i.test(finalUrl)) {
           finalUrl = `https://${finalUrl}`;
         }
-        await createWebSource({ hub_id: hubId, url: finalUrl });
+        const source = await createWebSource({ hub_id: hubId, url: finalUrl });
+        upsertSourceCache(source);
       } else if (nextItem.kind === "youtube") {
         updateQueueItem(itemId, (item) => ({ ...item, status: "creating" as UploadStatus, progress: 0 }));
         let finalUrl = nextItem.url;
         if (!/^https?:\/\//i.test(finalUrl)) {
           finalUrl = `https://${finalUrl}`;
         }
-        await createYouTubeSource({
+        const source = await createYouTubeSource({
           hub_id: hubId,
           url: finalUrl,
           language: nextItem.language.trim() || undefined,
           allow_auto_captions: nextItem.allowAutoCaptions,
         });
+        upsertSourceCache(source);
       }
 
       updateQueueItem(itemId, (item) => ({ ...item, status: "complete" as UploadStatus, progress: 100 }));
@@ -319,6 +341,9 @@ export function useSourceUploadQueue({
 
       if (nextItem.kind === "file") {
         if (createdSourceId) {
+          if (createdSource) {
+            upsertSourceCache({ ...createdSource, status: "failed", failure_reason: reason });
+          }
           try {
             await failSource(createdSourceId, reason);
             if (isMountedRef.current) {
@@ -336,7 +361,7 @@ export function useSourceUploadQueue({
     } finally {
       isProcessingRef.current = false;
     }
-  }, [hubId, onRefresh, setStatusMessageIfMounted, updateQueueItem]);
+  }, [hubId, onRefresh, setStatusMessageIfMounted, updateQueueItem, upsertSourceCache]);
 
   useEffect(() => {
     if (isProcessingRef.current) {
