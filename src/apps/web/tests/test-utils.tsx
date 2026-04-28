@@ -4,6 +4,17 @@ import type { ReactElement, ReactNode } from "react";
 import { HubDashboardTabProvider } from "../lib/HubDashboardTabContext";
 import { HubTabProvider } from "../lib/HubTabContext";
 
+const testQueryClients = new Set<QueryClient>();
+
+export function cleanupTestQueryClients() {
+  for (const queryClient of testQueryClients) {
+    // Cancel in-flight work so polling queries cannot outlive the test that created them.
+    void queryClient.cancelQueries(undefined, { silent: true });
+    queryClient.clear();
+  }
+  testQueryClients.clear();
+}
+
 export function renderWithQueryClient(ui: ReactElement) {
   const queryClient = new QueryClient({
     defaultOptions: {
@@ -12,6 +23,7 @@ export function renderWithQueryClient(ui: ReactElement) {
       mutations: { retry: false, gcTime: Infinity },
     },
   });
+  testQueryClients.add(queryClient);
 
   function Wrapper({ children }: { children: ReactNode }) {
     return (
