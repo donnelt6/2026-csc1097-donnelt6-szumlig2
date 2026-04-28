@@ -510,6 +510,8 @@ export function useChatSession({ hubId, sources, onSourceSelectionChange }: UseC
       return false;
     }
 
+    const loadToken = activeLoadTokenRef.current;
+    const isStale = () => loadToken !== activeLoadTokenRef.current;
     const currentSessionId = activeSessionId;
     const requestScope = scope;
     const requestSourceIds = normalizeSelectedSourceIds(selectedSourceIds, completeSourceIds);
@@ -553,6 +555,9 @@ export function useChatSession({ hubId, sources, onSourceSelectionChange }: UseC
 
     try {
       const response = await askQuestion(requestBody);
+      if (isStale()) {
+        return false;
+      }
       const updatedPair: MessagePair = {
         ...pendingPair,
         response,
@@ -589,6 +594,9 @@ export function useChatSession({ hubId, sources, onSourceSelectionChange }: UseC
       }
       return true;
     } catch (error) {
+      if (isStale()) {
+        return false;
+      }
       queryClient.setQueryData(sessionQueryKey, previousSessions);
       const message = error instanceof Error ? error.message : String(error);
       setMessages((current) =>
@@ -600,7 +608,9 @@ export function useChatSession({ hubId, sources, onSourceSelectionChange }: UseC
       );
       return false;
     } finally {
-      setIsSending(false);
+      if (!isStale()) {
+        setIsSending(false);
+      }
     }
   }
 

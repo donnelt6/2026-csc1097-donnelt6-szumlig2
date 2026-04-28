@@ -2,7 +2,7 @@
 
 // useChatComposer.ts: Isolates composer input, prompt suggestion, and dashboard-launch prompt behavior.
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { ChangeEvent, FormEvent, KeyboardEvent } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { getChatPromptSuggestion } from "../../lib/api";
@@ -12,7 +12,7 @@ interface UseChatComposerArgs {
   activeSessionId: string | null;
   canAsk: boolean;
   canSuggestPrompt: boolean;
-  completeSourceIds: string[];
+  selectedSourceIds: string[];
   isBootstrapping: boolean;
   messagesLength: number;
   sourcesLoading?: boolean;
@@ -24,7 +24,7 @@ export function useChatComposer({
   activeSessionId,
   canAsk,
   canSuggestPrompt,
-  completeSourceIds,
+  selectedSourceIds,
   isBootstrapping,
   messagesLength,
   sourcesLoading,
@@ -49,11 +49,11 @@ export function useChatComposer({
     hasAutoSent.current = false;
   }, [hubId, initialPromptParam, initialPromptAction, initialSessionParam]);
 
-  function resetTextareaHeight() {
+  const resetTextareaHeight = useCallback(() => {
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto";
     }
-  }
+  }, []);
 
   function handleTextareaChange(event: ChangeEvent<HTMLTextAreaElement>) {
     setQuestion(event.target.value);
@@ -70,7 +70,7 @@ export function useChatComposer({
     setIsSuggestingPrompt(true);
     setPromptSuggestionError(null);
     try {
-      const response = await getChatPromptSuggestion(hubId, completeSourceIds);
+      const response = await getChatPromptSuggestion(hubId, selectedSourceIds);
       setQuestion(response.prompt);
       textareaRef.current?.focus();
     } catch (error) {
@@ -80,7 +80,7 @@ export function useChatComposer({
     }
   }
 
-  async function handleSubmit(event?: FormEvent, overrideQuestion?: string) {
+  const handleSubmit = useCallback(async (event?: FormEvent, overrideQuestion?: string) => {
     event?.preventDefault();
     const nextQuestion = (overrideQuestion ?? question).trim();
     if (!nextQuestion) {
@@ -91,7 +91,7 @@ export function useChatComposer({
       setQuestion("");
       resetTextareaHeight();
     }
-  }
+  }, [question, resetTextareaHeight, submitQuestion]);
 
   function handleComposerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
     if (event.key === "Enter" && !event.shiftKey) {
@@ -125,6 +125,7 @@ export function useChatComposer({
   }, [
     activeSessionId,
     canAsk,
+    handleSubmit,
     initialPromptParam,
     isBootstrapping,
     messagesLength,

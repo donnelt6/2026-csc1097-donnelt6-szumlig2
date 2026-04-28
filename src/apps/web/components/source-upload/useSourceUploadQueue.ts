@@ -362,10 +362,12 @@ export function useSourceUploadQueue({
       setStatusMessage({ text: "That URL is already in the queue.", type: "error" });
       return false;
     }
+    let queued = false;
     setQueue((prev) => {
       if (prev.some((item) => "url" in item && item.url === trimmed && item.status !== "error" && item.status !== "complete")) {
         return prev;
       }
+      queued = true;
       return [...prev, {
         kind: "webpage" as const,
         id: `web-${++queueIdCounter}`,
@@ -375,7 +377,10 @@ export function useSourceUploadQueue({
         progress: 0,
       }];
     });
-    return true;
+    if (!queued) {
+      setStatusMessage({ text: "That URL is already in the queue.", type: "error" });
+    }
+    return queued;
   }, [queue]);
 
   const addYouTubeUrl = useCallback(({
@@ -398,10 +403,12 @@ export function useSourceUploadQueue({
       setStatusMessage({ text: "That URL is already in the queue.", type: "error" });
       return false;
     }
+    let queued = false;
     setQueue((prev) => {
       if (prev.some((item) => "url" in item && item.url === trimmed && item.status !== "error" && item.status !== "complete")) {
         return prev;
       }
+      queued = true;
       return [...prev, {
         kind: "youtube" as const,
         id: `yt-${++queueIdCounter}`,
@@ -413,7 +420,10 @@ export function useSourceUploadQueue({
         progress: 0,
       }];
     });
-    return true;
+    if (!queued) {
+      setStatusMessage({ text: "That URL is already in the queue.", type: "error" });
+    }
+    return queued;
   }, [queue]);
 
   const removeFromQueue = useCallback((itemId: string) => {

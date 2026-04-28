@@ -433,6 +433,10 @@ describe("UploadPanel", () => {
     await user.dblClick(importButton);
 
     await waitFor(() => expect(createYouTubeSource).toHaveBeenCalledTimes(1));
+    expect(screen.getByText("That URL is already in the queue.")).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("https://youtube.com/watch?v=...")).toHaveValue(
+      "https://www.youtube.com/watch?v=abc123def45"
+    );
   });
 
   it("submits a standalone manual media upload from the YouTube tab", async () => {

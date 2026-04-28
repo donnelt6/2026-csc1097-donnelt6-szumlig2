@@ -96,7 +96,7 @@ export const ChatPanel = forwardRef<ChatPanelHandle, Props>(function ChatPanel(
     activeSessionId,
     canAsk,
     canSuggestPrompt,
-    completeSourceIds: normalizedSelectedSourceIds,
+    selectedSourceIds: normalizedSelectedSourceIds,
     isBootstrapping,
     messagesLength: messages.length,
     sourcesLoading,
