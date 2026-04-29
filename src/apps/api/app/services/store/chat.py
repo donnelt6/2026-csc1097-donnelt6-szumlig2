@@ -62,6 +62,9 @@ from .common_helpers import (
 )
 
 
+_HUB_ABSTAIN_ANSWER = "I don't have enough information from this hub's sources to answer that."
+
+
 class ChatStoreMixin:
     # -------------------------------------------------------------------------
     # Session and message lookup helpers
@@ -1088,7 +1091,7 @@ class ChatStoreMixin:
 
         # If no hub context is available, abstain instead of hallucinating an answer.
         if not context_blocks:
-            answer = "I don't have enough information from this hub's sources to answer that."
+            answer = _HUB_ABSTAIN_ANSWER
             usage = None
             if trace:
                 with trace.step("answer_generation", scope=scope.value, context_block_count=0) as step:
@@ -1126,8 +1129,21 @@ class ChatStoreMixin:
                 answer = repaired_text
                 final_citations = repaired_citations
                 usage = repair_usage
+
+        # Last-resort fallback for grounded answers that lost their citations; the length floor avoids citing greetings.
+        used_top1_safety_net = False
+        if (
+            context_blocks
+            and citations
+            and not final_citations
+            and _looks_like_grounded_answer(answer)
+            and len(answer) >= 100
+        ):
+            final_citations = [citations[0].model_copy(deep=True)]
+            used_top1_safety_net = True
         generation_metadata["answer_has_citations"] = bool(final_citations)
         generation_metadata["retried_for_citations"] = retried_for_citations
+        generation_metadata["used_top1_safety_net"] = used_top1_safety_net
         return answer, final_citations, usage, generation_metadata
 
     # Extract verified citations from the model's answer-plus-QUOTES payload.
@@ -1138,6 +1154,7 @@ class ChatStoreMixin:
     ) -> tuple[str, List[Citation]]:
         answer, quotes = _extract_quotes(raw_answer)
         hydrated_citations = [citation.model_copy(deep=True) for citation in citations]
+        verified_quote_indices: List[int] = []
         for idx_str, pairs in quotes.items():
             try:
                 citation_idx = int(str(idx_str).strip()) - 1
@@ -1149,7 +1166,12 @@ class ChatStoreMixin:
                 if verified:
                     hydrated_citations[citation_idx].relevant_quotes = [v[0] for v in verified]
                     hydrated_citations[citation_idx].paraphrased_quotes = [v[1] for v in verified]
+                    verified_quote_indices.append(citation_idx + 1)
         referenced_indices = _referenced_citation_indices(answer, len(hydrated_citations))
+        # Fall back to QUOTES indices when inline [n] markers are missing; gated on verified quotes to avoid hallucinated pills.
+        if not referenced_indices and verified_quote_indices:
+            seen: set[int] = set()
+            referenced_indices = [idx for idx in verified_quote_indices if not (idx in seen or seen.add(idx))]
         final_citations = [hydrated_citations[idx - 1] for idx in referenced_indices]
         return answer, final_citations
 
@@ -1187,7 +1209,16 @@ class ChatStoreMixin:
                 ],
                 temperature=0.2,
             )
-        return completion.choices[0].message.content or "", (completion.usage.model_dump() if completion.usage else None)
+        usage_payload = completion.usage.model_dump() if completion.usage else None
+        content = completion.choices[0].message.content
+        if not content:
+            logger.warning(
+                "chat.empty_completion model=%s total_tokens=%s",
+                self.chat_model,
+                _total_tokens_from_usage(usage_payload),
+            )
+            return _HUB_ABSTAIN_ANSWER, usage_payload
+        return content, usage_payload
 
     # -------------------------------------------------------------------------
     # Main chat execution and feedback flows

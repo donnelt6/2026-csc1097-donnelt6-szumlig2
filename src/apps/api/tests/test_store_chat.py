@@ -1675,3 +1675,112 @@ def test_hub_analytics_summary_uses_total_citations_shown_for_open_rate(monkeypa
     assert summary.citation_flag_rate == 0.0
     assert summary.top_sources[0].source_id == "src-2"
     assert summary.top_sources[0].citation_returns == 2
+
+
+def _citation_fixtures() -> list[Citation]:
+    return [
+        Citation(
+            source_id="src-handbook",
+            snippet="VPN access is granted to new engineers via the IT helpdesk after onboarding.",
+            chunk_index=0,
+        ),
+        Citation(
+            source_id="src-policies",
+            snippet="Mandatory security training must be completed within the first thirty days of employment.",
+            chunk_index=1,
+        ),
+    ]
+
+
+# Inline [n] markers continue to surface their citation as before.
+def test_extract_grounded_chat_citations_inline_marker_only() -> None:
+    raw = (
+        "VPN access is granted via the IT helpdesk. [1]\n"
+        "QUOTES: {\"1\": [{\"paraphrase\": \"VPN goes through helpdesk\", "
+        "\"quote\": \"VPN access is granted to new engineers via the IT helpdesk\"}]}"
+    )
+    answer, citations = store._extract_grounded_chat_citations(raw, _citation_fixtures())
+    assert "[1]" in answer
+    assert [c.source_id for c in citations] == ["src-handbook"]
+
+
+# When inline markers are missing, fall back to QUOTES keys whose quotes verify against the snippet.
+def test_extract_grounded_chat_citations_quotes_fallback_with_verified_quotes() -> None:
+    raw = (
+        "VPN access is granted via the IT helpdesk after onboarding.\n"
+        "QUOTES: {\"1\": [{\"paraphrase\": \"VPN goes through helpdesk\", "
+        "\"quote\": \"VPN access is granted to new engineers via the IT helpdesk\"}]}"
+    )
+    answer, citations = store._extract_grounded_chat_citations(raw, _citation_fixtures())
+    assert "VPN access is granted" in answer
+    assert [c.source_id for c in citations] == ["src-handbook"]
+    assert citations[0].relevant_quotes
+
+
+# Without verified quotes the QUOTES fallback must not surface a citation, to avoid hallucinated pills.
+def test_extract_grounded_chat_citations_quotes_fallback_skips_unverified_quotes() -> None:
+    raw = (
+        "VPN access is granted via the IT helpdesk after onboarding.\n"
+        "QUOTES: {\"1\": [{\"paraphrase\": \"unrelated\", "
+        "\"quote\": \"blue dragons fly through outer space at midnight\"}]}"
+    )
+    _, citations = store._extract_grounded_chat_citations(raw, _citation_fixtures())
+    assert citations == []
+
+
+# When inline markers AND QUOTES both reference the same index, a single citation surfaces.
+def test_extract_grounded_chat_citations_inline_and_quotes_do_not_duplicate() -> None:
+    raw = (
+        "VPN access is granted via the IT helpdesk. [1]\n"
+        "QUOTES: {\"1\": [{\"paraphrase\": \"VPN goes through helpdesk\", "
+        "\"quote\": \"VPN access is granted to new engineers via the IT helpdesk\"}]}"
+    )
+    _, citations = store._extract_grounded_chat_citations(raw, _citation_fixtures())
+    assert len(citations) == 1
+    assert citations[0].source_id == "src-handbook"
+
+
+# With neither inline markers nor QUOTES JSON, no citations surface.
+def test_extract_grounded_chat_citations_no_inline_and_no_quotes() -> None:
+    raw = "VPN access is granted via the IT helpdesk after onboarding."
+    _, citations = store._extract_grounded_chat_citations(raw, _citation_fixtures())
+    assert citations == []
+
+
+# Malformed QUOTES JSON falls back to no-quotes (existing behaviour) and surfaces nothing.
+def test_extract_grounded_chat_citations_malformed_quotes_payload() -> None:
+    raw = (
+        "VPN access is granted via the IT helpdesk after onboarding.\n"
+        "QUOTES: {this is not valid json"
+    )
+    _, citations = store._extract_grounded_chat_citations(raw, _citation_fixtures())
+    assert citations == []
+
+
+# Empty completion content from the LLM falls back to the abstain text and logs a warning.
+def test_complete_chat_answer_empty_content_falls_back_to_abstain(monkeypatch, caplog) -> None:
+
+    class _EmptyCompletions:
+        def create(self, **kwargs):
+            return SimpleNamespace(
+                choices=[SimpleNamespace(message=SimpleNamespace(content=None))],
+                usage=None,
+            )
+
+    llm = SimpleNamespace(chat=SimpleNamespace(completions=_EmptyCompletions()))
+    monkeypatch.setattr(store, "llm_client", llm)
+
+    with caplog.at_level("WARNING"):
+        answer, usage = store._complete_chat_answer(
+            system_prompt="sys",
+            user_prompt="user",
+            history_messages=[],
+            scope=HubScope.hub,
+            context_block_count=1,
+            trace=None,
+            step_name="answer_generation",
+        )
+
+    assert answer == "I don't have enough information from this hub's sources to answer that."
+    assert usage is None
+    assert any("chat.empty_completion" in record.message for record in caplog.records)
