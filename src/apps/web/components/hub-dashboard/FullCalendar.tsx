@@ -3,8 +3,10 @@
 // FullCalendar.tsx: Full-size calendar view for browsing reminders by month.
 
 import { useMemo } from 'react';
+import type { CSSProperties } from 'react';
 import { ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/24/outline';
 import type { Reminder, ReminderCandidate } from '@shared/index';
+import { getHubColorOption } from '../../lib/hubAppearance';
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MONTH_NAMES = [
@@ -27,6 +29,13 @@ interface FullCalendarProps {
 type CalendarEvent =
   | { type: 'reminder'; data: Reminder }
   | { type: 'candidate'; data: ReminderCandidate };
+
+function getReminderEventStyle(reminder: Reminder): CSSProperties {
+  const color = getHubColorOption(reminder.color_key).value;
+  return {
+    '--reminder-accent-color': color,
+  } as CSSProperties;
+}
 
 export function FullCalendar({
   month,
@@ -141,6 +150,7 @@ export function FullCalendar({
                       <div
                         key={`r-${evt.data.id}`}
                         className={`hdash__cal-event hdash__cal-event--${evt.data.status}`}
+                        style={getReminderEventStyle(evt.data)}
                         title={evt.data.title || evt.data.message || 'Reminder'}
                       >
                         {evt.data.title || evt.data.message || 'Reminder'}

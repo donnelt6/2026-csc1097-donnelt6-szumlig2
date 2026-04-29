@@ -779,6 +779,7 @@ export async function listReminders(params: {
 export async function createReminder(data: {
   hub_id: string;
   source_id?: string;
+  color_key?: string;
   due_at: string;
   timezone: string;
   title?: string;
@@ -797,6 +798,7 @@ export async function updateReminder(
   reminderId: string,
   data: {
     due_at?: string;
+    color_key?: string | null;
     timezone?: string;
     title?: string;
     message?: string;

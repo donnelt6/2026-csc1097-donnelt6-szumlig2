@@ -813,6 +813,7 @@ class Reminder(BaseModel):
     user_id: str
     hub_id: str
     source_id: Optional[str] = None
+    color_key: Optional[str] = None
     due_at: datetime
     timezone: str
     title: Optional[str] = None
@@ -827,11 +828,22 @@ class Reminder(BaseModel):
 class ReminderCreate(StrictModel):
     hub_id: UUID
     source_id: Optional[UUID] = None
+    color_key: Optional[str] = Field(default=None)
     due_at: datetime
     timezone: str = Field(..., min_length=1, max_length=64)
     title: Optional[str] = Field(default=None, max_length=100)
     message: Optional[str] = Field(default=None, max_length=500)
     notify_before: Optional[int] = Field(default=None, ge=0, le=60 * 24 * 7)
+
+    # Keep reminder colours aligned with the shared hub colour palette.
+    @field_validator("color_key")
+    @classmethod
+    def validate_color_key(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        if value not in HUB_COLOR_KEYS:
+            raise ValueError("Unsupported reminder color.")
+        return value
 
 
 class ReminderUpdateAction(str, Enum):
@@ -843,12 +855,23 @@ class ReminderUpdateAction(str, Enum):
 
 class ReminderUpdate(StrictModel):
     due_at: Optional[datetime] = None
+    color_key: Optional[str] = Field(default=None)
     timezone: Optional[str] = Field(default=None, min_length=1, max_length=64)
     title: Optional[str] = Field(default=None, max_length=100)
     message: Optional[str] = Field(default=None, max_length=500)
     notify_before: Optional[int] = Field(default=None, ge=0, le=60 * 24 * 7)
     action: Optional[ReminderUpdateAction] = None
     snooze_minutes: Optional[int] = Field(default=None, ge=1, le=60 * 24 * 30)
+
+    # Reuse the hub colour palette for reminder colour edits.
+    @field_validator("color_key")
+    @classmethod
+    def validate_color_key(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        if value not in HUB_COLOR_KEYS:
+            raise ValueError("Unsupported reminder color.")
+        return value
 
 
 class ReminderCandidate(BaseModel):
@@ -893,6 +916,7 @@ class ReminderSummary(BaseModel):
     hub_id: str
     hub_name: Optional[str] = None
     source_id: Optional[str] = None
+    color_key: Optional[str] = None
     due_at: datetime
     message: Optional[str] = None
     status: ReminderStatus

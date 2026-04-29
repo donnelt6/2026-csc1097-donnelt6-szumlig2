@@ -56,6 +56,42 @@ def test_create_reminder_rejects_past_due(client) -> None:
     assert resp.status_code == 400
 
 
+# Verifies that create reminder accepts and returns a reminder colour.
+def test_create_reminder_accepts_color_key(client, monkeypatch) -> None:
+    due_at = datetime.now(timezone.utc) + timedelta(days=1)
+
+    def fake_create(_client, user_id, payload) -> Reminder:
+        assert payload.color_key == "rose"
+        return Reminder(
+            id="rem-color-1",
+            user_id=user_id,
+            hub_id="11111111-1111-1111-1111-111111111111",
+            source_id=None,
+            color_key="rose",
+            due_at=due_at,
+            timezone="UTC",
+            title="Colour reminder",
+            status=ReminderStatus.scheduled,
+        )
+
+    monkeypatch.setattr(store_module.store, "create_reminder", fake_create)
+    monkeypatch.setattr(store_module.store, "log_activity", lambda *_args, **_kwargs: None)
+
+    resp = client.post(
+        "/reminders",
+        json={
+            "hub_id": "11111111-1111-1111-1111-111111111111",
+            "due_at": due_at.isoformat(),
+            "timezone": "UTC",
+            "title": "Colour reminder",
+            "color_key": "rose",
+        },
+    )
+
+    assert resp.status_code == 201
+    assert resp.json()["color_key"] == "rose"
+
+
 # Verifies that update reminder requires snooze minutes.
 def test_update_reminder_requires_snooze_minutes(client) -> None:
     resp = client.patch(

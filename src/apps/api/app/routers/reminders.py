@@ -128,6 +128,8 @@ def update_reminder(
         updates["due_at"] = due_at.isoformat()
     if payload.timezone is not None:
         updates["timezone"] = payload.timezone
+    if "color_key" in payload.model_fields_set:
+        updates["color_key"] = payload.color_key
     if payload.title is not None:
         updates["title"] = payload.title
     if payload.message is not None:

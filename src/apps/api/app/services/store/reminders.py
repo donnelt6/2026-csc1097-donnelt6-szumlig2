@@ -51,6 +51,7 @@ class ReminderStoreMixin:
                     "user_id": user_id,
                     "hub_id": str(payload.hub_id),
                     "source_id": str(payload.source_id) if payload.source_id else None,
+                    "color_key": payload.color_key or "slate",
                     "due_at": payload.due_at.isoformat(),
                     "timezone": payload.timezone,
                     "title": payload.title,
@@ -135,7 +136,7 @@ class ReminderStoreMixin:
 
     # Return active in-app reminder notifications and hydrate the embedded reminder summary.
     def list_notifications(self, client: Client, user_id: str, reminder_id: Optional[str] = None) -> List[NotificationEvent]:
-        select = "id, reminder_id, channel, status, scheduled_for, sent_at, dismissed_at, reminders (id, hub_id, source_id, due_at, message, status, hubs (name))"
+        select = "id, reminder_id, channel, status, scheduled_for, sent_at, dismissed_at, reminders (id, hub_id, source_id, color_key, due_at, message, status, hubs (name))"
         query = (
             client.table("notifications")
             .select(select)
@@ -185,7 +186,7 @@ class ReminderStoreMixin:
             raise KeyError("Notification not found")
         reminder_response = (
             client.table("notifications")
-            .select("id, reminder_id, channel, status, scheduled_for, sent_at, dismissed_at, reminders (id, hub_id, source_id, due_at, message, status, hubs (name))")
+            .select("id, reminder_id, channel, status, scheduled_for, sent_at, dismissed_at, reminders (id, hub_id, source_id, color_key, due_at, message, status, hubs (name))")
             .eq("id", notification_id)
             .eq("user_id", user_id)
             .limit(1)

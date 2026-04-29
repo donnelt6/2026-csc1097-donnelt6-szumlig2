@@ -405,6 +405,7 @@ export interface Reminder {
   user_id: string;
   hub_id: string;
   source_id?: string | null;
+  color_key?: string | null;
   due_at: string;
   timezone: string;
   title?: string | null;
@@ -434,6 +435,7 @@ export interface ReminderSummary {
   hub_id: string;
   hub_name?: string | null;
   source_id?: string | null;
+  color_key?: string | null;
   due_at: string;
   message?: string | null;
   status: ReminderStatus;

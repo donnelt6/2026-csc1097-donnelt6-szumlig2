@@ -3,11 +3,13 @@
 // RemindersSidebar.tsx: Sidebar panel listing reminders for the selected calendar date.
 
 import { useEffect, useMemo, useState } from 'react';
+import type { CSSProperties } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { PlusIcon } from '@heroicons/react/24/outline';
 import { decideReminderCandidate } from '../../lib/api';
 import { formatLocal, toLocalInputValue, toIsoFromLocalInput } from '../../lib/dateUtils';
 import type { Reminder, ReminderCandidate } from '@shared/index';
+import { getHubColorOption } from '../../lib/hubAppearance';
 
 interface RemindersSidebarProps {
   hubId: string;
@@ -16,6 +18,21 @@ interface RemindersSidebarProps {
 }
 
 const INSIGHTS_PER_PAGE = 3;
+
+function getConfidenceTier(confidence: number): 'high' | 'medium' | 'low' {
+  const pct = Math.round(confidence * 100);
+  if (pct >= 80) return 'high';
+  if (pct >= 60) return 'medium';
+  return 'low';
+}
+
+function getConfidenceLabel(confidence: number): string {
+  return `${Math.round(confidence * 100)}% confident`;
+}
+
+function getReminderDotStyle(colorKey?: string | null): CSSProperties {
+  return { backgroundColor: getHubColorOption(colorKey).value };
+}
 
 export function RemindersSidebar({
   hubId,
@@ -83,8 +100,8 @@ function InsightsSection({ hubId, candidates }: { hubId: string; candidates: Rem
   };
 
   return (
-    <div className="hdash__sidebar-section">
-      <h4 className="hdash__sidebar-title">AI Insights</h4>
+    <div className="hdash__sidebar-section hdash__sidebar-section--insights">
+      <h4 className="hdash__sidebar-title">Suggested reminders</h4>
       {candidates.length === 0 ? (
         <p className="hdash__sidebar-empty">No pending suggestions.</p>
       ) : (
@@ -96,11 +113,10 @@ function InsightsSection({ hubId, candidates }: { hubId: string; candidates: Rem
               </div>
               <div className="hdash__insights-card-meta">
                 <span>{formatLocal(c.due_at)}</span>
-                <span className="hdash__confidence">{Math.round(c.confidence * 100)}%</span>
               </div>
-              {c.snippet && (
-                <div className="hdash__insights-card-snippet">{c.snippet}</div>
-              )}
+              <div className={`hdash__confidence hdash__confidence--${getConfidenceTier(c.confidence)}`}>
+                {getConfidenceLabel(c.confidence)}
+              </div>
 
               {expandedId === c.id && (
                 <div className="hdash__insights-edit">
@@ -135,6 +151,14 @@ function InsightsSection({ hubId, candidates }: { hubId: string; candidates: Rem
               </div>
             </div>
           ))}
+          <div className="hdash__confidence-key" aria-label="Confidence key">
+            <div className="hdash__confidence-key-title">Confidence key</div>
+            <div className="hdash__confidence-key-list">
+              <span className="hdash__confidence-key-item hdash__confidence-key-item--high">80%+ = high confidence</span>
+              <span className="hdash__confidence-key-item hdash__confidence-key-item--medium">60-79% = medium</span>
+              <span className="hdash__confidence-key-item hdash__confidence-key-item--low">below 60% = low</span>
+            </div>
+          </div>
           {totalPages > 1 && (
             <div className="hdash__insights-pagination" aria-label="AI insights pagination">
               <button
@@ -192,7 +216,7 @@ export function ManualSection({
               className={`hdash__manual-item${layout === 'calendar' ? ' hdash__manual-item--calendar' : ''}`}
               onClick={() => onReminderClick(r)}
             >
-              <div className={`hdash__manual-dot hdash__manual-dot--${r.status}`} />
+              <div className={`hdash__manual-dot hdash__manual-dot--${r.status}`} style={getReminderDotStyle(r.color_key)} />
               <div className="hdash__manual-info">
                 <div className="hdash__manual-msg">{r.title || r.message || 'Reminder'}</div>
                 <div className="hdash__manual-due">{formatLocal(r.due_at)}</div>

@@ -297,13 +297,13 @@
 }
 
 .hdash__cal-cell--empty {
-  background: var(--bg-secondary);
+  background: var(--card);
   cursor: default;
-  opacity: 0.5;
+  opacity: 1;
 }
 
 .hdash__cal-cell--empty:hover {
-  background: var(--bg-secondary);
+  background: var(--card);
 }
 
 .hdash__cal-cell--today .hdash__cal-date {
@@ -359,31 +359,31 @@
 }
 
 .hdash__cal-event--scheduled {
-  background: var(--accent-glow);
-  color: var(--accent);
-  border-left-color: var(--accent);
+  background: color-mix(in srgb, var(--reminder-accent-color, var(--accent)) 14%, transparent);
+  color: var(--reminder-accent-color, var(--accent));
+  border-left-color: var(--reminder-accent-color, var(--accent));
 }
 
 .hdash__cal-event--sent {
-  background: var(--status-sent-bg);
-  color: var(--status-sent);
-  border-left-color: var(--status-sent);
+  background: color-mix(in srgb, var(--reminder-accent-color, var(--status-sent)) 14%, transparent);
+  color: var(--reminder-accent-color, var(--status-sent));
+  border-left-color: var(--reminder-accent-color, var(--status-sent));
 }
 
 .hdash__cal-event--completed {
-  background: color-mix(in srgb, var(--status-complete) 15%, transparent);
-  color: var(--status-complete);
-  border-left-color: var(--status-complete);
+  background: color-mix(in srgb, var(--reminder-accent-color, var(--status-complete)) 14%, transparent);
+  color: var(--reminder-accent-color, var(--status-complete));
+  border-left-color: var(--reminder-accent-color, var(--status-complete));
   text-decoration: line-through;
   opacity: 0.7;
 }
 
 .hdash__cal-event--cancelled {
-  background: color-mix(in srgb, var(--status-failed) 10%, transparent);
-  color: var(--muted);
-  border-left-color: var(--muted);
+  background: color-mix(in srgb, var(--reminder-accent-color, var(--muted)) 12%, transparent);
+  color: var(--reminder-accent-color, var(--muted));
+  border-left-color: var(--reminder-accent-color, var(--muted));
   text-decoration: line-through;
-  opacity: 0.5;
+  opacity: 0.6;
 }
 
 .hdash__cal-event--candidate {
@@ -407,9 +407,16 @@
 /* ---------- Sidebar ---------- */
 .hdash__sidebar-section {
   background: var(--card);
-  border: 1px solid var(--border);
+  border: none;
   border-radius: 14px;
   padding: 20px;
+}
+
+.hdash__sidebar-section--insights {
+  background: transparent;
+  border-radius: 0;
+  padding: 0;
+  box-shadow: none;
 }
 
 .hdash__sidebar-title {
@@ -429,14 +436,15 @@
   padding: 16px 0;
 }
 
-/* AI Insights cards */
+/* Suggested reminder cards */
 .hdash__insights-card {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
-  border-radius: 10px;
+  background: var(--card);
+  border: none;
+  border-radius: 12px;
   padding: 14px;
   margin-bottom: 10px;
-  transition: border-color var(--transition-fast, 0.15s ease);
+  box-shadow: var(--shadow-sm);
+  transition: box-shadow var(--transition-fast, 0.15s ease), transform var(--transition-fast, 0.15s ease);
 }
 
 .hdash__insights-card:last-child {
@@ -444,20 +452,22 @@
 }
 
 .hdash__insights-card:hover {
-  border-color: var(--border-hover);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
 }
 
 .hdash__insights-card-title {
-  font-size: 0.875rem;
+  font-size: 0.95rem;
   font-weight: 600;
   color: var(--text);
-  margin-bottom: 4px;
+  margin-bottom: 8px;
+  line-height: 1.4;
 }
 
 .hdash__insights-card-meta {
   font-size: 0.75rem;
   color: var(--text-secondary);
-  margin-bottom: 8px;
+  margin-bottom: 10px;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -475,12 +485,13 @@
 .hdash__insights-actions {
   display: flex;
   gap: 8px;
+  margin-top: 12px;
 }
 
 .hdash__insights-btn {
-  padding: 6px 16px;
+  padding: 7px 14px;
   border-radius: 8px;
-  font-size: 0.8125rem;
+  font-size: 0.75rem;
   font-weight: 600;
   cursor: pointer;
   transition: all var(--transition-fast, 0.15s ease);
@@ -488,17 +499,17 @@
 }
 
 .hdash__insights-btn--accept {
-  background: var(--accent);
+  background: var(--status-complete);
   color: #fff;
-  border-color: var(--accent);
+  border-color: var(--status-complete);
 }
 
 .hdash__insights-btn--accept:hover {
-  opacity: 0.9;
+  opacity: 0.92;
 }
 
 .hdash__insights-btn--reject {
-  background: transparent;
+  background: var(--bg-secondary);
   color: var(--text-secondary);
   border-color: var(--border);
 }
@@ -570,6 +581,78 @@
   font-size: 0.75rem;
   color: var(--text-secondary);
   text-align: center;
+}
+
+.hdash__confidence {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  width: fit-content;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  padding: 4px 8px;
+  border-radius: 999px;
+}
+
+.hdash__confidence--high {
+  background: color-mix(in srgb, var(--status-complete) 16%, transparent);
+  color: var(--status-complete);
+}
+
+.hdash__confidence--medium {
+  background: color-mix(in srgb, var(--brand-warning) 16%, transparent);
+  color: var(--brand-warning);
+}
+
+.hdash__confidence--low {
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  color: var(--danger);
+}
+
+.hdash__confidence-key {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.hdash__confidence-key-title {
+  font-size: 0.7rem;
+  font-weight: var(--font-semibold);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.hdash__confidence-key-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.hdash__confidence-key-item {
+  display: inline-flex;
+  align-items: center;
+  width: 100%;
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-size: 0.6875rem;
+  font-weight: 600;
+}
+
+.hdash__confidence-key-item--high {
+  background: color-mix(in srgb, var(--status-complete) 16%, transparent);
+  color: var(--status-complete);
+}
+
+.hdash__confidence-key-item--medium {
+  background: color-mix(in srgb, var(--brand-warning) 16%, transparent);
+  color: var(--brand-warning);
+}
+
+.hdash__confidence-key-item--low {
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  color: var(--danger);
 }
 
 /* Manual reminders list */
@@ -668,8 +751,8 @@
   width: 100%;
   padding: 12px;
   border-radius: 10px;
-  border: 2px dashed var(--border);
-  background: transparent;
+  border: 2px dashed color-mix(in srgb, var(--text-secondary) 34%, transparent);
+  background: color-mix(in srgb, var(--card) 94%, white 6%);
   color: var(--text-secondary);
   font-size: 0.875rem;
   font-weight: 600;
@@ -688,6 +771,11 @@
   height: 18px;
 }
 
+.hdash__reminder-color-grid {
+  width: fit-content;
+  max-width: 100%;
+}
+
 /* ---------- Status pills ---------- */
 .hdash__status {
   display: inline-flex;
@@ -703,19 +791,6 @@
 .hdash__status--sent { color: var(--status-sent); }
 .hdash__status--completed { color: var(--status-complete); }
 .hdash__status--cancelled { color: var(--muted); }
-
-/* ---------- Confidence badge ---------- */
-.hdash__confidence {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  font-size: 0.6875rem;
-  font-weight: 600;
-  padding: 2px 6px;
-  border-radius: 4px;
-  background: var(--accent-glow);
-  color: var(--accent);
-}
 
 /* ---------- Modal ---------- */
 .hdash__modal {
@@ -808,6 +883,20 @@
   gap: 2px;
   min-width: 0;
   flex: 1;
+}
+
+.hdash__modal-reminder-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.hdash__modal-reminder-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  flex-shrink: 0;
 }
 
 .hdash__modal-reminder-msg {
