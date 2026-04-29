@@ -3,6 +3,7 @@
 // DashboardHome.tsx: Dashboard home tab with recent hubs, reminders, activity, and prompts.
 
 import { useState, useMemo, useRef, useEffect } from 'react';
+import type { CSSProperties } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useQuery, useQueries } from '@tanstack/react-query';
@@ -268,7 +269,12 @@ export function DashboardHome() {
                   const memberCount = memberProfiles.length || memberEmails.length;
 
                   return (
-                    <Link key={hub.id} href={`/hubs/${hub.id}`} className="hub-card hub-card--dashboard-compact">
+                    <Link
+                      key={hub.id}
+                      href={`/hubs/${hub.id}`}
+                      className="hub-card hub-card--dashboard-compact hub-card--with-accent"
+                      style={{ "--hub-card-accent": appearance.color.value } as CSSProperties}
+                    >
                       <div className="hub-card-top">
                         <div
                           className="hub-card-icon"

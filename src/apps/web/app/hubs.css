@@ -263,6 +263,7 @@
   flex-direction: column;
   min-width: 0;
   height: 300px;
+  position: relative;
   text-decoration: none;
   color: inherit;
   box-shadow: 0 16px 32px rgba(15, 23, 42, 0.05);
@@ -272,6 +273,55 @@
 .hub-card:hover {
   border-color: var(--hub-card-border-hover);
   box-shadow: 0 18px 36px rgba(15, 23, 42, 0.08);
+}
+
+.hub-card--with-accent::before,
+.hub-card--with-accent::after {
+  content: "";
+  position: absolute;
+  pointer-events: none;
+}
+
+.hub-card--with-accent::before {
+  left: -1px;
+  right: -1px;
+  top: -1px;
+  height: 6px;
+  border-style: solid;
+  border-color: var(--hub-card-accent, var(--accent));
+  border-width: 4px 2px 0;
+  border-radius: 14px 14px 0 0;
+  opacity: 0.95;
+  transition: opacity var(--transition-fast);
+}
+
+.hub-card--with-accent::after {
+  left: 10px;
+  right: 10px;
+  top: -1px;
+  height: 4px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--hub-card-accent, var(--accent)) 72%, white 10%), var(--hub-card-accent, var(--accent)));
+  opacity: 0.92;
+  transition: opacity var(--transition-fast), left var(--transition-fast), right var(--transition-fast);
+}
+
+.hub-card--with-accent:hover::before,
+.hub-card--with-accent:hover::after {
+  opacity: 1;
+}
+
+.hub-card--with-accent:hover::after {
+  left: 8px;
+  right: 8px;
+}
+
+.hub-card--with-accent .hub-card-footer-bottom {
+  padding-bottom: 0;
+}
+
+.hub-card--with-accent .hub-card-top {
+  padding-top: 4px;
 }
 
 /* Create New Hub card */

@@ -3,6 +3,7 @@
 // HubsList.tsx: Hub card grid with search filtering, sorting, and pagination.
 
 import { useEffect, useState } from "react";
+import type { CSSProperties } from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -333,7 +334,12 @@ export function HubsList({ searchQuery, filters, onHubCountChange, onPaginationV
           const memberCount = memberProfiles.length || memberEmails.length;
 
           return (
-          <Link key={hub.id} href={`/hubs/${hub.id}`} className="hub-card">
+          <Link
+            key={hub.id}
+            href={`/hubs/${hub.id}`}
+            className="hub-card hub-card--with-accent"
+            style={{ "--hub-card-accent": appearance.color.value } as CSSProperties}
+          >
             <div className="hub-card-top">
               <div
                 className="hub-card-icon"
