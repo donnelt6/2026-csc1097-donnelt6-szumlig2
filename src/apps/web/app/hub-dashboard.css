@@ -2073,35 +2073,40 @@
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: flex-start;
   gap: 12px;
-  margin-bottom: 6px;
+  margin-bottom: 10px;
 }
 
 .guide-card__title {
   font-size: 1.48rem;
   margin-top: 0;
-  margin-bottom: 6px;
-  flex: 1 1 auto;
+  margin-bottom: 0;
   min-width: 0;
-  white-space: normal;
-  overflow: hidden;
-  text-overflow: unset;
+  line-height: 1.18;
   display: -webkit-box;
-  -webkit-line-clamp: 3;
-  line-clamp: 3;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow-wrap: anywhere;
   word-break: break-word;
   hyphens: auto;
+  min-height: calc(1.18em * 2);
 }
 
 .guide-card .hub-card-actions {
+  position: static;
   flex: 0 0 auto;
+  justify-self: end;
+  align-self: start;
+  padding-left: 8px;
 }
 
 .guide-card .hub-card-description {
-  -webkit-line-clamp: 4;
-  line-clamp: 4;
+  font-size: 0.875rem;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
   margin-top: 0;
+  margin-bottom: 0;
+  min-height: calc(1.625em * 2);
 }
 
 .guide-card__footer {
@@ -2282,7 +2287,7 @@
 
 .gmodal__title {
   font-family: var(--font-headline, 'Manrope', sans-serif);
-  font-size: 1.5rem;
+  font-size: 1.82rem;
   font-weight: var(--font-bold);
   color: var(--text);
   margin: 0;
