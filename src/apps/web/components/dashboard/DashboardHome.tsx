@@ -79,33 +79,6 @@ function DashboardHomePromptSkeleton({ index }: { index: number }) {
   );
 }
 
-function splitHubCardTitle(title: string, firstLineLimit = 24, secondLineLimit = 22) {
-  const normalized = title.trim().replace(/\s+/g, ' ');
-  if (!normalized) {
-    return { primary: '', secondary: '' };
-  }
-
-  const words = normalized.split(' ');
-  let primary = '';
-  let index = 0;
-
-  while (index < words.length) {
-    const candidate = primary ? `${primary} ${words[index]}` : words[index];
-    if (candidate.length > firstLineLimit && primary) {
-      break;
-    }
-    primary = candidate;
-    index += 1;
-    if (candidate.length >= firstLineLimit) {
-      break;
-    }
-  }
-
-  const remainder = words.slice(index).join(' ');
-  const secondary = remainder.length > secondLineLimit ? `${remainder.slice(0, secondLineLimit - 1).trimEnd()}…` : remainder;
-  return { primary, secondary };
-}
-
 export function DashboardHome() {
   const { user } = useAuth();
   const router = useRouter();

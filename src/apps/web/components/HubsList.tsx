@@ -40,32 +40,6 @@ interface HubsListProps {
   onCreateHub?: () => void;
 }
 
-function splitHubCardTitle(title: string, firstLineLimit = 18) {
-  const normalized = title.trim().replace(/\s+/g, " ");
-  if (!normalized) {
-    return { primary: "", secondary: "" };
-  }
-
-  const words = normalized.split(" ");
-  let primary = "";
-  let index = 0;
-
-  while (index < words.length) {
-    const candidate = primary ? `${primary} ${words[index]}` : words[index];
-    if (candidate.length > firstLineLimit && primary) {
-      break;
-    }
-    primary = candidate;
-    index += 1;
-    if (candidate.length >= firstLineLimit) {
-      break;
-    }
-  }
-
-  // Let the second row use the full card width under the action icons.
-  return { primary, secondary: words.slice(index).join(" ") };
-}
-
 export function HubsList({ searchQuery, filters, onHubCountChange, onPaginationVisibleChange, onCreateHub }: HubsListProps) {
   const queryClient = useQueryClient();
   const { user } = useAuth();
