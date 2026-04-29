@@ -280,6 +280,10 @@
   margin-bottom: 8px;
 }
 
+.dash-recent-hubs .hub-card--dashboard-compact .hub-card-heading-flow {
+  padding-right: 0;
+}
+
 .dash-recent-hubs .hub-card--dashboard-compact .hub-card-icon {
   width: 48px;
   height: 48px;
@@ -293,16 +297,21 @@
 }
 
 .dash-recent-hubs .hub-card--dashboard-compact .hub-card-title {
-  font-size: 1.3rem;
+  font-size: 1.42rem;
   line-height: 1.25;
 }
 
 .dash-recent-hubs .hub-card--dashboard-compact .hub-card-title--dashboard-compact {
+  display: flex;
+  align-items: center;
+  min-height: calc(1.25em * 2);
+}
+
+.dash-recent-hubs .hub-card--dashboard-compact .hub-card-title-text--dashboard-compact {
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
   line-clamp: 2;
-  min-height: calc(1.25em * 2);
   overflow: hidden;
   word-break: break-word;
   overflow-wrap: break-word;
@@ -310,7 +319,7 @@
 
 .dash-recent-hubs .hub-card--dashboard-compact .hub-card-description {
   margin: 0 0 10px;
-  font-size: 0.92rem;
+  font-size: 0.98rem;
   line-height: 1.45;
   -webkit-line-clamp: 2;
   line-clamp: 2;
@@ -323,7 +332,7 @@
 .dash-recent-hubs .hub-card--dashboard-compact .hub-card-stats {
   gap: 10px;
   transform: none;
-  font-size: 0.6rem;
+  font-size: 0.64rem;
   letter-spacing: 0.12em;
 }
 
@@ -349,7 +358,7 @@
 }
 
 .dash-recent-hubs .hub-card--dashboard-compact .hub-card-time {
-  font-size: 0.56rem;
+  font-size: 0.6rem;
   letter-spacing: 0.12em;
   min-width: 0;
   overflow: hidden;

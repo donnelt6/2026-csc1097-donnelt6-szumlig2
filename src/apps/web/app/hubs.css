@@ -523,26 +523,20 @@
   min-width: 0;
 }
 
-.hub-card-title-line {
-  display: block;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-
-.hub-card-title-line--primary {
-  min-height: 64px;
+.hub-card-title--hubs {
   display: flex;
   align-items: center;
+  min-height: 64px;
 }
 
-.hub-card-title--secondary-row {
-  margin: 6px 0 0;
-}
-
-.hub-card-title-line--secondary {
-  margin-top: 2px;
-  max-height: 1.22em;
+.hub-card-title-text--hubs {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  word-break: break-word;
+  overflow-wrap: break-word;
 }
 
 .hub-card:hover .hub-card-title {

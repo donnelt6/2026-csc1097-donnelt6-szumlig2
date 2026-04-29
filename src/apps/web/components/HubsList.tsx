@@ -358,8 +358,6 @@ export function HubsList({ searchQuery, filters, onHubCountChange, onPaginationV
           const memberProfiles = hub.member_profiles ?? [];
           const memberEmails = hub.member_emails ?? [];
           const memberCount = memberProfiles.length || memberEmails.length;
-          const titleLines = splitHubCardTitle(hub.name);
-
           return (
           <Link
             key={hub.id}
@@ -378,8 +376,8 @@ export function HubsList({ searchQuery, filters, onHubCountChange, onPaginationV
                 >
                   <HubIcon />
                 </div>
-                <h3 className="hub-card-title">
-                  <span className="hub-card-title-line hub-card-title-line--primary">{titleLines.primary}</span>
+                <h3 className="hub-card-title hub-card-title--hubs">
+                  <span className="hub-card-title-text hub-card-title-text--hubs">{hub.name}</span>
                 </h3>
               </div>
               <div className="hub-card-actions">
@@ -459,11 +457,6 @@ export function HubsList({ searchQuery, filters, onHubCountChange, onPaginationV
                   </div>
                 )}
               </div>
-              {titleLines.secondary && (
-                <h3 className="hub-card-title hub-card-title--secondary-row">
-                  <span className="hub-card-title-line hub-card-title-line--secondary">{titleLines.secondary}</span>
-                </h3>
-              )}
             </div>
             <p className="hub-card-description">{hub.description || "No description"}</p>
 

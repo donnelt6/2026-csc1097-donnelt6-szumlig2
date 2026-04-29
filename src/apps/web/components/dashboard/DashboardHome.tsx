@@ -313,7 +313,9 @@ export function DashboardHome() {
                           >
                             <HubIcon />
                           </div>
-                          <h3 className="hub-card-title hub-card-title--dashboard-compact">{hub.name}</h3>
+                          <h3 className="hub-card-title hub-card-title--dashboard-compact">
+                            <span className="hub-card-title-text hub-card-title-text--dashboard-compact">{hub.name}</span>
+                          </h3>
                         </div>
                       </div>
                       <p className="hub-card-description">{hub.description || 'No description'}</p>
