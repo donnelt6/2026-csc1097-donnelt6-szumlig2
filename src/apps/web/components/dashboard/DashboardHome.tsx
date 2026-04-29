@@ -79,6 +79,33 @@ function DashboardHomePromptSkeleton({ index }: { index: number }) {
   );
 }
 
+function splitHubCardTitle(title: string, firstLineLimit = 24, secondLineLimit = 22) {
+  const normalized = title.trim().replace(/\s+/g, ' ');
+  if (!normalized) {
+    return { primary: '', secondary: '' };
+  }
+
+  const words = normalized.split(' ');
+  let primary = '';
+  let index = 0;
+
+  while (index < words.length) {
+    const candidate = primary ? `${primary} ${words[index]}` : words[index];
+    if (candidate.length > firstLineLimit && primary) {
+      break;
+    }
+    primary = candidate;
+    index += 1;
+    if (candidate.length >= firstLineLimit) {
+      break;
+    }
+  }
+
+  const remainder = words.slice(index).join(' ');
+  const secondary = remainder.length > secondLineLimit ? `${remainder.slice(0, secondLineLimit - 1).trimEnd()}…` : remainder;
+  return { primary, secondary };
+}
+
 export function DashboardHome() {
   const { user } = useAuth();
   const router = useRouter();
@@ -276,17 +303,19 @@ export function DashboardHome() {
                       style={{ "--hub-card-accent": appearance.color.value } as CSSProperties}
                     >
                       <div className="hub-card-top">
-                        <div
-                          className="hub-card-icon"
-                          style={appearance.badgeStyle}
-                          data-testid={`dashboard-hub-icon-${hub.id}`}
-                          data-icon-key={appearance.icon.key}
-                          data-color-key={appearance.color.key}
-                        >
-                          <HubIcon />
+                        <div className="hub-card-heading-flow">
+                          <div
+                            className="hub-card-icon"
+                            style={appearance.badgeStyle}
+                            data-testid={`dashboard-hub-icon-${hub.id}`}
+                            data-icon-key={appearance.icon.key}
+                            data-color-key={appearance.color.key}
+                          >
+                            <HubIcon />
+                          </div>
+                          <h3 className="hub-card-title hub-card-title--dashboard-compact">{hub.name}</h3>
                         </div>
                       </div>
-                      <h3 className="hub-card-title">{hub.name}</h3>
                       <p className="hub-card-description">{hub.description || 'No description'}</p>
                       <div className="hub-card-footer">
                         <div className="hub-card-stats">
@@ -346,7 +375,7 @@ export function DashboardHome() {
           </div>
 
           {/* Recent Activity Feed */}
-          <div className="dash-section">
+          <div className="dash-section dash-section--activity">
             <div className="dash-section-header">
               <h2 className="dash-section-title">Recent Activity Feed</h2>
               {activityItems.length > 0 && <Link href="/?tab=activity" className="dash-section-link">View all activity</Link>}
@@ -356,7 +385,7 @@ export function DashboardHome() {
                 {activityLoading ? (
                   Array.from({ length: 5 }, (_, index) => <DashboardHomeActivitySkeleton key={index} index={index} />)
                 ) : activityItems.length > 0 ? (
-                  activityItems.slice(0, 5).map((event) => {
+                  activityItems.map((event) => {
                     const Icon = getEventIcon(event);
                     const tone = getEventTone(event);
                     const tabMap: Record<string, string> = {

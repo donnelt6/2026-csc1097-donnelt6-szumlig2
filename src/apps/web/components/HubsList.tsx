@@ -40,6 +40,32 @@ interface HubsListProps {
   onCreateHub?: () => void;
 }
 
+function splitHubCardTitle(title: string, firstLineLimit = 18) {
+  const normalized = title.trim().replace(/\s+/g, " ");
+  if (!normalized) {
+    return { primary: "", secondary: "" };
+  }
+
+  const words = normalized.split(" ");
+  let primary = "";
+  let index = 0;
+
+  while (index < words.length) {
+    const candidate = primary ? `${primary} ${words[index]}` : words[index];
+    if (candidate.length > firstLineLimit && primary) {
+      break;
+    }
+    primary = candidate;
+    index += 1;
+    if (candidate.length >= firstLineLimit) {
+      break;
+    }
+  }
+
+  // Let the second row use the full card width under the action icons.
+  return { primary, secondary: words.slice(index).join(" ") };
+}
+
 export function HubsList({ searchQuery, filters, onHubCountChange, onPaginationVisibleChange, onCreateHub }: HubsListProps) {
   const queryClient = useQueryClient();
   const { user } = useAuth();
@@ -332,6 +358,7 @@ export function HubsList({ searchQuery, filters, onHubCountChange, onPaginationV
           const memberProfiles = hub.member_profiles ?? [];
           const memberEmails = hub.member_emails ?? [];
           const memberCount = memberProfiles.length || memberEmails.length;
+          const titleLines = splitHubCardTitle(hub.name);
 
           return (
           <Link
@@ -341,14 +368,19 @@ export function HubsList({ searchQuery, filters, onHubCountChange, onPaginationV
             style={{ "--hub-card-accent": appearance.color.value } as CSSProperties}
           >
             <div className="hub-card-top">
-              <div
-                className="hub-card-icon"
-                style={appearance.badgeStyle}
-                data-testid={`hub-icon-${hub.id}`}
-                data-icon-key={appearance.icon.key}
-                data-color-key={appearance.color.key}
-              >
-                <HubIcon />
+              <div className="hub-card-heading-flow">
+                <div
+                  className="hub-card-icon"
+                  style={appearance.badgeStyle}
+                  data-testid={`hub-icon-${hub.id}`}
+                  data-icon-key={appearance.icon.key}
+                  data-color-key={appearance.color.key}
+                >
+                  <HubIcon />
+                </div>
+                <h3 className="hub-card-title">
+                  <span className="hub-card-title-line hub-card-title-line--primary">{titleLines.primary}</span>
+                </h3>
               </div>
               <div className="hub-card-actions">
                 <button
@@ -427,9 +459,12 @@ export function HubsList({ searchQuery, filters, onHubCountChange, onPaginationV
                   </div>
                 )}
               </div>
+              {titleLines.secondary && (
+                <h3 className="hub-card-title hub-card-title--secondary-row">
+                  <span className="hub-card-title-line hub-card-title-line--secondary">{titleLines.secondary}</span>
+                </h3>
+              )}
             </div>
-
-            <h3 className="hub-card-title">{hub.name}</h3>
             <p className="hub-card-description">{hub.description || "No description"}</p>
 
             <div className="hub-card-footer">
@@ -543,3 +578,4 @@ export function HubsList({ searchQuery, filters, onHubCountChange, onPaginationV
     </>
   );
 }
+

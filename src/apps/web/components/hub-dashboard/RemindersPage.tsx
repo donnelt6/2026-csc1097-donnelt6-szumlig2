@@ -7,7 +7,7 @@ import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { listReminders, listReminderCandidates } from '../../lib/api';
 import { FullCalendar } from './FullCalendar';
 import { ReminderModal } from './ReminderModal';
-import { RemindersSidebar } from './RemindersSidebar';
+import { ManualSection, RemindersSidebar } from './RemindersSidebar';
 import type { Reminder } from '@shared/index';
 
 type ModalState =
@@ -74,20 +74,25 @@ export function RemindersPage({ hubId }: { hubId: string }) {
 
   return (
     <div className="hdash__layout">
-      <FullCalendar
-        month={month}
-        year={year}
-        onMonthChange={handleMonthChange}
-        reminders={reminders}
-        candidates={candidates}
-        selectedDate={selectedDate}
-        onDateClick={handleDateClick}
-      />
+      <div className="hdash__calendar-col">
+        <FullCalendar
+          month={month}
+          year={year}
+          onMonthChange={handleMonthChange}
+          reminders={reminders}
+          candidates={candidates}
+          selectedDate={selectedDate}
+          onDateClick={handleDateClick}
+        />
+        <ManualSection
+          reminders={reminders}
+          onReminderClick={handleReminderClick}
+          layout="calendar"
+        />
+      </div>
       <RemindersSidebar
         hubId={hubId}
         candidates={candidates}
-        reminders={reminders}
-        onReminderClick={handleReminderClick}
         onCreateClick={() => setModal({ mode: 'create' })}
       />
 

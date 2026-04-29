@@ -2,7 +2,7 @@
 
 // RemindersSidebar.tsx: Sidebar panel listing reminders for the selected calendar date.
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { PlusIcon } from '@heroicons/react/24/outline';
 import { decideReminderCandidate } from '../../lib/api';
@@ -12,22 +12,19 @@ import type { Reminder, ReminderCandidate } from '@shared/index';
 interface RemindersSidebarProps {
   hubId: string;
   candidates: ReminderCandidate[];
-  reminders: Reminder[];
-  onReminderClick: (reminder: Reminder) => void;
   onCreateClick: () => void;
 }
+
+const INSIGHTS_PER_PAGE = 3;
 
 export function RemindersSidebar({
   hubId,
   candidates,
-  reminders,
-  onReminderClick,
   onCreateClick,
 }: RemindersSidebarProps) {
   return (
     <div className="hdash__sidebar-col">
       <InsightsSection hubId={hubId} candidates={candidates} />
-      <ManualSection reminders={reminders} onReminderClick={onReminderClick} />
       <button className="hdash__create-btn" onClick={onCreateClick}>
         <PlusIcon />
         Create Manual Reminder
@@ -41,6 +38,18 @@ function InsightsSection({ hubId, candidates }: { hubId: string; candidates: Rem
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [editDueAt, setEditDueAt] = useState('');
   const [editMessage, setEditMessage] = useState('');
+  const [page, setPage] = useState(1);
+
+  const totalPages = Math.max(1, Math.ceil(candidates.length / INSIGHTS_PER_PAGE));
+  const safePage = Math.min(page, totalPages);
+  const visibleCandidates = candidates.slice((safePage - 1) * INSIGHTS_PER_PAGE, safePage * INSIGHTS_PER_PAGE);
+
+  useEffect(() => {
+    setPage((current) => Math.min(current, Math.max(1, Math.ceil(candidates.length / INSIGHTS_PER_PAGE))));
+    if (expandedId && !candidates.some((candidate) => candidate.id === expandedId)) {
+      setExpandedId(null);
+    }
+  }, [candidates, expandedId]);
 
   const decideMut = useMutation({
     mutationFn: (params: Parameters<typeof decideReminderCandidate>) =>
@@ -79,63 +88,88 @@ function InsightsSection({ hubId, candidates }: { hubId: string; candidates: Rem
       {candidates.length === 0 ? (
         <p className="hdash__sidebar-empty">No pending suggestions.</p>
       ) : (
-        candidates.map((c) => (
-          <div key={c.id} className="hdash__insights-card">
-            <div className="hdash__insights-card-title">
-              {c.title_suggestion || 'Suggested Reminder'}
-            </div>
-            <div className="hdash__insights-card-meta">
-              <span>{formatLocal(c.due_at)}</span>
-              <span className="hdash__confidence">{Math.round(c.confidence * 100)}%</span>
-            </div>
-            {c.snippet && (
-              <div className="hdash__insights-card-snippet">{c.snippet}</div>
-            )}
-
-            {expandedId === c.id && (
-              <div className="hdash__insights-edit">
-                <input
-                  type="datetime-local"
-                  value={editDueAt}
-                  onChange={(e) => setEditDueAt(e.target.value)}
-                />
-                <textarea
-                  value={editMessage}
-                  onChange={(e) => setEditMessage(e.target.value)}
-                  rows={2}
-                />
+        <>
+          {visibleCandidates.map((c) => (
+            <div key={c.id} className="hdash__insights-card">
+              <div className="hdash__insights-card-title">
+                {c.title_suggestion || 'Suggested Reminder'}
               </div>
-            )}
+              <div className="hdash__insights-card-meta">
+                <span>{formatLocal(c.due_at)}</span>
+                <span className="hdash__confidence">{Math.round(c.confidence * 100)}%</span>
+              </div>
+              {c.snippet && (
+                <div className="hdash__insights-card-snippet">{c.snippet}</div>
+              )}
 
-            <div className="hdash__insights-actions">
+              {expandedId === c.id && (
+                <div className="hdash__insights-edit">
+                  <input
+                    type="datetime-local"
+                    value={editDueAt}
+                    onChange={(e) => setEditDueAt(e.target.value)}
+                  />
+                  <textarea
+                    value={editMessage}
+                    onChange={(e) => setEditMessage(e.target.value)}
+                    rows={2}
+                  />
+                </div>
+              )}
+
+              <div className="hdash__insights-actions">
+                <button
+                  className="hdash__insights-btn hdash__insights-btn--accept"
+                  onClick={() => handleAcceptClick(c)}
+                  disabled={decideMut.isPending}
+                >
+                  {expandedId === c.id ? 'Confirm' : 'Accept'}
+                </button>
+                <button
+                  className="hdash__insights-btn hdash__insights-btn--reject"
+                  onClick={() => handleDecline(c)}
+                  disabled={decideMut.isPending}
+                >
+                  Reject
+                </button>
+              </div>
+            </div>
+          ))}
+          {totalPages > 1 && (
+            <div className="hdash__insights-pagination" aria-label="AI insights pagination">
               <button
-                className="hdash__insights-btn hdash__insights-btn--accept"
-                onClick={() => handleAcceptClick(c)}
-                disabled={decideMut.isPending}
+                type="button"
+                className="hdash__insights-page-btn"
+                onClick={() => setPage((current) => Math.max(1, current - 1))}
+                disabled={safePage <= 1}
               >
-                {expandedId === c.id ? 'Confirm' : 'Accept'}
+                Prev
               </button>
+              <span className="hdash__insights-page-info">Page {safePage} of {totalPages}</span>
               <button
-                className="hdash__insights-btn hdash__insights-btn--reject"
-                onClick={() => handleDecline(c)}
-                disabled={decideMut.isPending}
+                type="button"
+                className="hdash__insights-page-btn"
+                onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+                disabled={safePage >= totalPages}
               >
-                Reject
+                Next
               </button>
             </div>
-          </div>
-        ))
+          )}
+        </>
       )}
     </div>
   );
 }
 
-function ManualSection({
+export function ManualSection({
   reminders,
   onReminderClick,
+  layout = 'sidebar',
 }: {
   reminders: Reminder[];
   onReminderClick: (r: Reminder) => void;
+  layout?: 'sidebar' | 'calendar';
 }) {
   const sorted = useMemo(
     () =>
@@ -146,16 +180,16 @@ function ManualSection({
   );
 
   return (
-    <div className="hdash__sidebar-section">
+    <div className={`hdash__sidebar-section${layout === 'calendar' ? ' hdash__sidebar-section--calendar' : ''}`}>
       <h4 className="hdash__sidebar-title">Reminders</h4>
       {sorted.length === 0 ? (
         <p className="hdash__sidebar-empty">No reminders yet.</p>
       ) : (
-        <div className="hdash__manual-list">
+        <div className={`hdash__manual-list${layout === 'calendar' ? ' hdash__manual-list--calendar' : ''}`}>
           {sorted.map((r) => (
             <div
               key={r.id}
-              className="hdash__manual-item"
+              className={`hdash__manual-item${layout === 'calendar' ? ' hdash__manual-item--calendar' : ''}`}
               onClick={() => onReminderClick(r)}
             >
               <div className={`hdash__manual-dot hdash__manual-dot--${r.status}`} />

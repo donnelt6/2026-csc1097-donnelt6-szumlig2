@@ -167,6 +167,9 @@
 }
 
 .hdash__calendar-col {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
   min-width: 0;
 }
 
@@ -533,6 +536,42 @@
   border-color: var(--accent);
 }
 
+.hdash__insights-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.hdash__insights-page-btn {
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--text);
+  font-size: 0.75rem;
+  font-weight: var(--font-semibold);
+  cursor: pointer;
+  transition: border-color var(--transition-fast), background var(--transition-fast), color var(--transition-fast);
+}
+
+.hdash__insights-page-btn:hover:not(:disabled) {
+  border-color: var(--border-hover);
+  background: var(--bg-secondary);
+}
+
+.hdash__insights-page-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.hdash__insights-page-info {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
 /* Manual reminders list */
 .hdash__manual-list {
   display: flex;
@@ -540,6 +579,18 @@
   gap: 6px;
   max-height: 320px;
   overflow-y: auto;
+}
+
+.hdash__sidebar-section--calendar {
+  padding: 24px;
+}
+
+.hdash__manual-list--calendar {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+  max-height: none;
+  overflow: visible;
 }
 
 .hdash__manual-item {
@@ -557,6 +608,11 @@
 .hdash__manual-item:hover {
   border-color: var(--border-hover);
   box-shadow: var(--shadow-sm);
+}
+
+.hdash__manual-item--calendar {
+  min-width: 0;
+  padding: 16px 18px;
 }
 
 .hdash__manual-dot {

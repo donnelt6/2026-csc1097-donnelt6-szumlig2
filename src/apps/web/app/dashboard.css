@@ -204,7 +204,7 @@
   display: grid;
   grid-template-columns: 1fr minmax(0, 300px);
   gap: 32px;
-  align-items: start;
+  align-items: stretch;
 }
 
 .dash-col-main,
@@ -214,6 +214,13 @@
   gap: 20px;
   min-width: 0;
   overflow: hidden;
+}
+
+.dash-section--activity {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 /* Sections */
@@ -270,7 +277,7 @@
 }
 
 .dash-recent-hubs .hub-card--dashboard-compact .hub-card-top {
-  margin-bottom: 12px;
+  margin-bottom: 8px;
 }
 
 .dash-recent-hubs .hub-card--dashboard-compact .hub-card-icon {
@@ -286,14 +293,24 @@
 }
 
 .dash-recent-hubs .hub-card--dashboard-compact .hub-card-title {
-  margin: 0 0 8px;
-  font-size: 1.02rem;
+  font-size: 1.3rem;
   line-height: 1.25;
+}
+
+.dash-recent-hubs .hub-card--dashboard-compact .hub-card-title--dashboard-compact {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  min-height: calc(1.25em * 2);
+  overflow: hidden;
+  word-break: break-word;
+  overflow-wrap: break-word;
 }
 
 .dash-recent-hubs .hub-card--dashboard-compact .hub-card-description {
   margin: 0 0 10px;
-  font-size: 0.78rem;
+  font-size: 0.92rem;
   line-height: 1.45;
   -webkit-line-clamp: 2;
   line-clamp: 2;
@@ -464,6 +481,9 @@
   border: 1px solid var(--border);
   border-radius: 14px;
   padding: 8px 4px;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
 }
 
 .dash-filter-btn {
@@ -489,6 +509,7 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
+  flex: 1 1 auto;
 }
 
 .dash-activity-item {

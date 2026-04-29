@@ -386,10 +386,19 @@
 /* Hub Card Top Row (icon + actions) */
 
 .hub-card-top {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 18px;
+  position: relative;
+  margin-bottom: 12px;
+}
+
+.hub-card-heading-flow {
+  min-width: 0;
+  padding-right: 68px;
+}
+
+.hub-card-heading-flow::after {
+  content: "";
+  display: block;
+  clear: both;
 }
 
 .hub-card-icon {
@@ -400,7 +409,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  flex-shrink: 0;
+  float: left;
+  margin: 0 12px 0 0;
   transition: background-color var(--transition-fast), color var(--transition-fast);
 }
 
@@ -413,7 +423,9 @@
   display: flex;
   align-items: center;
   gap: 4px;
-  position: relative;
+  position: absolute;
+  top: 0;
+  right: 0;
 }
 
 .hub-card-menu {
@@ -502,15 +514,35 @@
 
 .hub-card-title {
   font-family: var(--font-headline);
-  font-size: 1.32rem;
+  font-size: 1.58rem;
   font-weight: var(--font-bold);
   color: var(--text);
-  margin: 4px 0 10px;
-  line-height: 1.3;
+  margin: 0;
+  line-height: 1.22;
   transition: color 0.15s ease;
+  min-width: 0;
+}
+
+.hub-card-title-line {
+  display: block;
   overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.hub-card-title-line--primary {
+  min-height: 64px;
+  display: flex;
+  align-items: center;
+}
+
+.hub-card-title--secondary-row {
+  margin: 6px 0 0;
+}
+
+.hub-card-title-line--secondary {
+  margin-top: 2px;
+  max-height: 1.22em;
 }
 
 .hub-card:hover .hub-card-title {
@@ -522,11 +554,11 @@
 }
 
 .hub-card-description {
-  font-size: 0.875rem;
+  font-size: 1.05rem;
   font-weight: var(--font-medium);
   color: var(--muted);
   line-height: 1.625;
-  margin: 8px 0 14px;
+  margin: 0 0 14px;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   line-clamp: 2;
