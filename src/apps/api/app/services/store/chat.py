@@ -48,6 +48,7 @@ from .chat_helpers import (
     _most_recent_informative_user_turn,
     _normalize_chat_session_title,
     _normalize_retrieval_query,
+    _preview_text,
     _referenced_citation_indices,
 )
 from .common_helpers import (
@@ -626,6 +627,21 @@ class ChatStoreMixin:
         fallback_mode: str,
         question_text: str = "",
     ) -> List[Dict[str, Any]]:
+        question_preview = _preview_text(question_text)
+        top_raw_similarity = max((float(match.get("similarity") or 0) for match in raw_matches), default=0.0)
+
+        def _log(path: str, count: int) -> None:
+            logger.info(
+                "chat.select_matches mode=%s path=%s top_sim=%.3f raw=%d kept=%d threshold=%.2f q=%r",
+                fallback_mode,
+                path,
+                top_raw_similarity,
+                len(raw_matches),
+                count,
+                min_similarity,
+                question_preview,
+            )
+
         if fallback_mode == "chat":
             exploratory_query = _is_exploratory_chat_question(question_text) or _is_vague_follow_up(question_text)
             reranked_matches = self._rerank_matches(
@@ -667,19 +683,27 @@ class ChatStoreMixin:
                             if secondary_match and len(selected_matches) < max_citations:
                                 selected_matches.append(secondary_match)
                             filtered_matches = selected_matches
-                    return self._strip_rerank_metadata(filtered_matches[:max_citations])
-                return self._strip_rerank_metadata(reranked_matches[:1])
+                    selected = self._strip_rerank_metadata(filtered_matches[:max_citations])
+                    _log("filtered", len(selected))
+                    return selected
+                selected = self._strip_rerank_metadata(reranked_matches[:1])
+                _log("top1_reranked", len(selected))
+                return selected
             if raw_matches:
+                _log("top1_raw", 1)
                 return raw_matches[:1]
+            _log("none", 0)
             return []
 
         filtered_matches = [match for match in raw_matches if float(match.get("similarity") or 0) >= min_similarity]
         if filtered_matches:
-            return self._strip_rerank_metadata(self._rerank_matches(filtered_matches, query_embedding, max_citations))
-        if fallback_mode == "chat" and raw_matches:
-            return raw_matches[:1]
+            selected = self._strip_rerank_metadata(self._rerank_matches(filtered_matches, query_embedding, max_citations))
+            _log("filtered", len(selected))
+            return selected
         if fallback_mode == "guide" and raw_matches:
+            _log("topN_raw", len(raw_matches[:max_citations]))
             return raw_matches[:max_citations]
+        _log("none", 0)
         return []
 
     # Rerank retrieval matches with similarity and diversity-aware scoring.
@@ -1167,12 +1191,23 @@ class ChatStoreMixin:
                     hydrated_citations[citation_idx].relevant_quotes = [v[0] for v in verified]
                     hydrated_citations[citation_idx].paraphrased_quotes = [v[1] for v in verified]
                     verified_quote_indices.append(citation_idx + 1)
-        referenced_indices = _referenced_citation_indices(answer, len(hydrated_citations))
+        inline_indices = _referenced_citation_indices(answer, len(hydrated_citations))
+        referenced_indices = inline_indices
         # Fall back to QUOTES indices when inline [n] markers are missing; gated on verified quotes to avoid hallucinated pills.
+        used_quotes_fallback = False
         if not referenced_indices and verified_quote_indices:
             seen: set[int] = set()
             referenced_indices = [idx for idx in verified_quote_indices if not (idx in seen or seen.add(idx))]
+            used_quotes_fallback = True
         final_citations = [hydrated_citations[idx - 1] for idx in referenced_indices]
+        logger.info(
+            "chat.citation_extract inline=%d quotes_keys=%d verified=%d final=%d quotes_fallback=%s",
+            len(inline_indices),
+            len(quotes),
+            len(verified_quote_indices),
+            len(final_citations),
+            used_quotes_fallback,
+        )
         return answer, final_citations
 
     # Call the chat model with the provided prompts and optional trace instrumentation.

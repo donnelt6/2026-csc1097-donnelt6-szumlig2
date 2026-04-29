@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     embedding_model: str = "text-embedding-3-small"
     chat_model: str = "gpt-4o-mini"
     top_k: int = 6
-    min_similarity: float = 0.50
+    min_similarity: float = 0.40
     max_citations: int = 3
     chat_rewrite_enabled: bool = True
     chat_rewrite_history_messages: int = 5

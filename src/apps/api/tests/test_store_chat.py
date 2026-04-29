@@ -633,9 +633,9 @@ def test_chat_reranks_before_relative_cutoff_for_low_similarity_fact_query(monke
         store,
         "_match_chunks",
         lambda client, hub_id, embedding, top_k, source_ids=None: [
-            _match("src-a", snippet="A1", similarity=0.49, embedding=[1.0, 0.0], chunk_index=0),
-            _match("src-a", snippet="A2", similarity=0.48, embedding=[0.91, 0.09], chunk_index=1),
-            _match("src-b", snippet="B1", similarity=0.47, embedding=[0.15, 0.85], chunk_index=2),
+            _match("src-a", snippet="A1", similarity=0.39, embedding=[1.0, 0.0], chunk_index=0),
+            _match("src-a", snippet="A2", similarity=0.38, embedding=[0.91, 0.09], chunk_index=1),
+            _match("src-b", snippet="B1", similarity=0.37, embedding=[0.15, 0.85], chunk_index=2),
         ],
     )
     monkeypatch.setattr(store, "llm_client", FakeLLMClient("Answer [1] [2]"))
