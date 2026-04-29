@@ -20,6 +20,13 @@
   flex-shrink: 0;
 }
 
+.dash-nav-tabs--home {
+  align-items: center;
+  margin-left: 18px;
+  margin-top: 6px;
+  gap: 36px;
+}
+
 .nav-search--dash {
   max-width: 280px;
   flex: 1;
@@ -37,6 +44,14 @@
   transition: color var(--transition-fast), border-color var(--transition-fast);
   text-transform: uppercase;
   letter-spacing: 0.06em;
+}
+
+.dash-nav-tabs--home .dash-nav-tab {
+  padding: 6px 0;
+  font-size: 0.9rem;
+  font-weight: var(--font-semibold);
+  letter-spacing: 0.04em;
+  line-height: 1;
 }
 
 .dash-nav-tab:hover {
@@ -297,7 +312,7 @@
 }
 
 .dash-recent-hubs .hub-card--dashboard-compact .hub-card-title {
-  font-size: 1.42rem;
+  font-size: 1.34rem;
   line-height: 1.25;
 }
 
@@ -319,7 +334,7 @@
 
 .dash-recent-hubs .hub-card--dashboard-compact .hub-card-description {
   margin: 0 0 10px;
-  font-size: 0.98rem;
+  font-size: 0.93rem;
   line-height: 1.45;
   -webkit-line-clamp: 2;
   line-clamp: 2;
@@ -664,6 +679,8 @@
 }
 
 .mini-cal-day {
+  appearance: none;
+  -webkit-appearance: none;
   position: relative;
   width: 30px;
   height: 30px;
@@ -685,7 +702,13 @@
 }
 
 .mini-cal-day--empty {
+  background: transparent;
+  color: transparent;
   cursor: default;
+}
+
+.mini-cal-day:disabled {
+  opacity: 1;
 }
 
 .mini-cal-day--today {

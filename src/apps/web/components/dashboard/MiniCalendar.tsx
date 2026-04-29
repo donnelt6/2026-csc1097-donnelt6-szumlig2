@@ -66,24 +66,26 @@ export function MiniCalendar({ month, year, onMonthChange, reminderDays, onDayCl
           <div key={i} className="mini-cal-weekday">{d}</div>
         ))}
         {cells.map((day, i) => (
-          <button
-            key={i}
-            className={[
-              'mini-cal-day',
-              day === null ? 'mini-cal-day--empty' : '',
-              day === todayDate ? 'mini-cal-day--today' : '',
-              day !== null && reminderDays.has(day) ? 'mini-cal-day--has-reminder' : '',
-              day === selectedDay ? 'mini-cal-day--selected' : '',
-            ].filter(Boolean).join(' ')}
-            onClick={() => day !== null && onDayClick?.(day)}
-            disabled={day === null}
-            type="button"
-          >
-            {day}
-            {day !== null && reminderDays.has(day) && (
-              <span className="mini-cal-dot" />
-            )}
-          </button>
+          day === null ? (
+            <div key={i} className="mini-cal-day mini-cal-day--empty" aria-hidden="true" />
+          ) : (
+            <button
+              key={i}
+              className={[
+                'mini-cal-day',
+                day === todayDate ? 'mini-cal-day--today' : '',
+                reminderDays.has(day) ? 'mini-cal-day--has-reminder' : '',
+                day === selectedDay ? 'mini-cal-day--selected' : '',
+              ].filter(Boolean).join(' ')}
+              onClick={() => onDayClick?.(day)}
+              type="button"
+            >
+              {day}
+              {reminderDays.has(day) && (
+                <span className="mini-cal-dot" />
+              )}
+            </button>
+          )
         ))}
       </div>
     </div>

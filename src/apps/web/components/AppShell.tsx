@@ -234,7 +234,7 @@ function AppShellChrome({ children }: AppShellProps) {
               </Link>
             </div>
             {isHome ? (
-              <div className="dash-nav-tabs">
+              <div className="dash-nav-tabs dash-nav-tabs--home">
                 {dashboardTabs.map((tab) => (
                   <button
                     key={tab.key}
