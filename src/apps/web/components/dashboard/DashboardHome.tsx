@@ -97,7 +97,7 @@ export function DashboardHome() {
     staleTime: 0,
   });
 
-  const recentHubs = hubs?.slice(0, 2) ?? [];
+  const recentHubs = hubs?.slice(0, 3) ?? [];
 
   const hubNameMap = buildHubNameMap(hubs);
 
@@ -258,7 +258,7 @@ export function DashboardHome() {
             </div>
             <div className="dash-recent-hubs">
               {hubsLoading ? (
-                Array.from({ length: 2 }, (_, index) => <DashboardHomeHubSkeleton key={index} index={index} />)
+                Array.from({ length: 3 }, (_, index) => <DashboardHomeHubSkeleton key={index} index={index} />)
               ) : recentHubs.length > 0 ? (
                 recentHubs.map((hub) => {
                   const appearance = resolveHubAppearance(hub.icon_key, hub.color_key);
@@ -268,7 +268,7 @@ export function DashboardHome() {
                   const memberCount = memberProfiles.length || memberEmails.length;
 
                   return (
-                    <Link key={hub.id} href={`/hubs/${hub.id}`} className="hub-card">
+                    <Link key={hub.id} href={`/hubs/${hub.id}`} className="hub-card hub-card--dashboard-compact">
                       <div className="hub-card-top">
                         <div
                           className="hub-card-icon"
