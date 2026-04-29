@@ -541,9 +541,6 @@ export function UploadPanel({
                       {metadata.source_origin === "youtube_fallback" && (
                         <span className="sources__recovery-badge">YouTube Recovery</span>
                       )}
-                      {metadata.source_origin === "manual_media" && (
-                        <span className="sources__recovery-badge">Manual Media</span>
-                      )}
                       {source.type === "youtube" && source.status === "failed" && recoveryStatus && (
                         <span className="sources__recovery-badge">{recoveryStatus}</span>
                       )}
