@@ -27,6 +27,15 @@
   gap: 36px;
 }
 
+.dash-nav-row--dashboard {
+  gap: 28px;
+}
+
+.dash-nav-tabs--hub-dashboard {
+  margin-left: 0;
+  margin-top: 0;
+}
+
 .nav-search--dash {
   max-width: 280px;
   flex: 1;

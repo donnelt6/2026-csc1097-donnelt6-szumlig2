@@ -279,8 +279,8 @@ function AppShellChrome({ children }: AppShellProps) {
                     </div>
                   </div>
                 ) : activeTab === 'dashboard' ? (
-                  <div className="dash-nav-row">
-                    <div className="dash-nav-tabs">
+                  <div className="dash-nav-row dash-nav-row--dashboard">
+                    <div className="dash-nav-tabs dash-nav-tabs--home dash-nav-tabs--hub-dashboard">
                       {hubDashboardTabs.map((tab) => (
                         <button
                           key={tab.key}
