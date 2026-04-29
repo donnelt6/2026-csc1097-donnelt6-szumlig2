@@ -161,8 +161,9 @@
   display: grid;
   grid-template-columns: 1fr 360px;
   gap: 24px;
-  min-height: 0;
-  flex: 1;
+  min-height: auto;
+  flex: none;
+  align-items: start;
   padding: 32px 48px;
 }
 

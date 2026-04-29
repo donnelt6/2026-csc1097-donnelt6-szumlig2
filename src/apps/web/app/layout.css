@@ -95,6 +95,12 @@
   margin-top: 0;
 }
 
+/* Hub dashboard tabs need an explicit scroll container inside the fixed shell. */
+.page-content--no-hero .content-inner:has(.hub-dashboard) .hub-tab-content {
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
 .content-inner {
   padding: 24px;
 }
@@ -120,16 +126,16 @@
 
 .page-content--dash {
   padding-top: var(--nav-height);
-  height: 100dvh;
+  min-height: 100dvh;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .page-content--dash .dash-page {
-  flex: 1;
+  flex: 1 0 auto;
   padding: 24px 48px 24px;
-  overflow-y: auto;
+  overflow-y: visible;
   scrollbar-width: none;
 }
 
@@ -185,6 +191,13 @@
   flex-direction: column;
   flex: 1;
   min-height: 0;
+  overflow: visible;
+}
+
+/* Let the reminders dashboard tab expand naturally so the hub shell can scroll it. */
+.hub-dashboard:has(.hdash__layout) {
+  flex: 0 0 auto;
+  min-height: auto;
 }
 
 .hub-dashboard__section-title {
