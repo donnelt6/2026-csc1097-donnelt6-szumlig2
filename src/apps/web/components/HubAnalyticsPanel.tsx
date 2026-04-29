@@ -150,14 +150,16 @@ function MetricCard({
   value,
   hint,
   hintClassName,
+  tone,
 }: {
   label: string;
   value: string;
   hint?: string;
   hintClassName?: string;
+  tone?: 'questions' | 'helpful' | 'opens' | 'flags' | 'latency' | 'rewrite';
 }) {
   return (
-    <div className="hub-analytics__metric card">
+    <div className={`hub-analytics__metric card${tone ? ` hub-analytics__metric--${tone}` : ""}`}>
       <span className="hub-analytics__metric-label">{label}</span>
       <strong className="hub-analytics__metric-value">{value}</strong>
       {hint && <span className={`hub-analytics__metric-hint${hintClassName ? ` ${hintClassName}` : ""}`}>{hint}</span>}
@@ -301,29 +303,32 @@ export function HubAnalyticsPanel({
   return (
     <div className="hub-analytics">
       <div className="hub-analytics__metrics">
-        <MetricCard label="Questions" value={String(summary.total_questions)} hint={`Last ${summary.window_days} days`} />
-        <MetricCard label="Helpful rate" value={formatPercent(summary.helpful_rate)} hint={`${summary.helpful_count} helpful`} />
+        <MetricCard label="Questions" value={String(summary.total_questions)} hint={`Last ${summary.window_days} days`} tone="questions" />
+        <MetricCard label="Helpful rate" value={formatPercent(summary.helpful_rate)} hint={`${summary.helpful_count} helpful`} tone="helpful" />
         <MetricCard
           label="Source opens"
           value={String(summary.citation_open_count)}
           hint={`Across ${summary.total_answers} answers`}
+          tone="opens"
         />
         <MetricCard
           label="Source flags"
           value={String(summary.citation_flag_count)}
           hint={`Across ${summary.total_answers} answers`}
+          tone="flags"
         />
         <MetricCard
           label="Avg latency"
           value={`${Math.round(summary.average_latency_ms)} ms`}
           hint={latencyStatus.label}
           hintClassName={latencyStatus.className}
+          tone="latency"
         />
-        <MetricCard label="Rewrite usage" value={formatPercent(summary.rewrite_usage_rate)} hint={`Zero-hit ${formatPercent(summary.zero_hit_rate)}`} />
+        <MetricCard label="Rewrite usage" value={formatPercent(summary.rewrite_usage_rate)} hint={`Zero-hit ${formatPercent(summary.zero_hit_rate)}`} tone="rewrite" />
       </div>
 
       <div className="hub-analytics__grid">
-        <section className="card hub-analytics__panel hub-analytics__panel--wide">
+        <section className="card hub-analytics__panel hub-analytics__panel--wide hub-analytics__panel--trend">
           <div className="hub-analytics__panel-header">
             <h4>Recent trend</h4>
             <span className="muted">{trends.window_days} days</span>
@@ -343,7 +348,7 @@ export function HubAnalyticsPanel({
           </div>
         </section>
 
-        <section className="card hub-analytics__panel hub-analytics__panel--span-2">
+        <section className="card hub-analytics__panel hub-analytics__panel--span-2 hub-analytics__panel--sources">
           <div className="hub-analytics__panel-header">
             <h4>Top used sources</h4>
             <div className="hub-analytics__source-filter" ref={topSourcesMenuRef}>
@@ -474,7 +479,7 @@ export function HubAnalyticsPanel({
           )}
         </section>
 
-        <section className="card hub-analytics__panel">
+        <section className="card hub-analytics__panel hub-analytics__panel--unused">
           <div className="hub-analytics__panel-header">
             <h4>Unused sources</h4>
             <span className="muted">
