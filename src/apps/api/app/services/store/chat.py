@@ -67,6 +67,18 @@ from .common_helpers import (
 
 
 _HUB_ABSTAIN_ANSWER = "I don't have enough information from this hub's sources to answer that."
+_SESSION_MESSAGE_ABSTAIN_MARKERS = (
+    "don't have enough information",
+    "do not have enough information",
+    "not enough information",
+    "insufficient information",
+    "cannot determine",
+    "can't determine",
+)
+_SESSION_MESSAGE_GREETING_RESPONSES = {
+    _smalltalk_response("greeting"),
+    _smalltalk_response("thanks"),
+}
 
 
 class ChatStoreMixin:
@@ -230,6 +242,29 @@ class ChatStoreMixin:
         except Exception:
             return []
 
+    # Reconstruct answer_status for hydrated assistant history until the value is
+    # stored alongside persisted session messages.
+    def _session_message_answer_status(
+        self,
+        role: str,
+        content: str,
+        citations: List[Citation],
+        persisted_status: Optional[str] = None,
+    ) -> Optional[str]:
+        if role != "assistant":
+            return None
+        if persisted_status:
+            return persisted_status
+        if citations:
+            return "answered"
+        normalized = (content or "").strip()
+        if normalized in _SESSION_MESSAGE_GREETING_RESPONSES:
+            return "greeting"
+        lowered = normalized.lower()
+        if any(marker in lowered for marker in _SESSION_MESSAGE_ABSTAIN_MARKERS):
+            return "abstained"
+        return "answered"
+
     # Convert a stored message row into the public session-message schema.
     def _serialize_session_message(
         self,
@@ -239,15 +274,22 @@ class ChatStoreMixin:
     ) -> SessionMessage:
         message_id = str(message["id"])
         metadata = (flag_metadata or {}).get(message_id, {})
+        citations = [Citation(**citation) for citation in (message.get("citations") or [])]
         return SessionMessage(
             id=message_id,
             role=message["role"],
             content=message["content"],
-            citations=[Citation(**citation) for citation in (message.get("citations") or [])],
+            citations=citations,
             created_at=message["created_at"],
             active_flag_id=metadata.get("active_flag_id"),
             flag_status=metadata.get("flag_status", MessageFlagStatus.none.value),
             feedback_rating=(feedback_metadata or {}).get(message_id),
+            answer_status=self._session_message_answer_status(
+                message["role"],
+                message["content"],
+                citations,
+                message.get("answer_status"),
+            ),
         )
 
     # Fetch a message row visible to the calling user through the request-scoped client.

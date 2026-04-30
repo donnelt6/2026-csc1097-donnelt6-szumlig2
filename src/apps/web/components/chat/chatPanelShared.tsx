@@ -21,10 +21,17 @@ const ABSTAIN_MARKERS = [
   "cannot determine",
   "can't determine",
 ];
+const GREETING_ANSWERS = new Set([
+  "Hi! How can I help you with this hub?",
+  "You're welcome! Let me know if there's anything else I can help with.",
+]);
 
 function inferAnswerStatus(content: string, citations: Citation[]): ChatAnswerStatus {
   if (citations.length > 0) {
     return "answered";
+  }
+  if (GREETING_ANSWERS.has(content.trim())) {
+    return "greeting";
   }
   const lowered = content.toLowerCase();
   return ABSTAIN_MARKERS.some((marker) => lowered.includes(marker)) ? "abstained" : "answered";
@@ -230,7 +237,7 @@ export function convertSessionMessagesToPairs(messages: SessionMessage[]): Messa
       active_flag_id: message.active_flag_id,
       flag_status: message.flag_status,
       feedback_rating: message.feedback_rating,
-      answer_status: inferAnswerStatus(message.content, message.citations),
+      answer_status: message.answer_status ?? inferAnswerStatus(message.content, message.citations),
     };
   }
   return pairs;

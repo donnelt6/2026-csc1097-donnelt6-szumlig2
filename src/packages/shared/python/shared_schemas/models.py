@@ -51,6 +51,12 @@ class MessageRevisionType(str, Enum):
     manual_edit = "manual_edit"
 
 
+class ChatAnswerStatus(str, Enum):
+    answered = "answered"
+    abstained = "abstained"
+    greeting = "greeting"
+
+
 class Citation(BaseModel):
     source_id: str
     snippet: str
@@ -73,6 +79,7 @@ class ChatResponse(BaseModel):
     session_title: str
     active_flag_id: Optional[str] = None
     flag_status: MessageFlagStatus = MessageFlagStatus.none
+    answer_status: Optional[ChatAnswerStatus] = None
 
 
 class ChatSessionSummary(BaseModel):
