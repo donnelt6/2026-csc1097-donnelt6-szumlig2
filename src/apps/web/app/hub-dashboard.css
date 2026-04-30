@@ -186,14 +186,14 @@
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: 14px;
-  padding: 24px;
+  padding: 0 24px 24px;
 }
 
 .hdash__cal-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 20px;
+  margin-bottom: 4px;
 }
 
 .hdash__cal-title {
@@ -666,7 +666,7 @@
 }
 
 .hdash__sidebar-section--calendar {
-  padding: 24px;
+  padding: 8px 24px 24px;
 }
 
 .hdash__manual-list--calendar {
@@ -1679,7 +1679,7 @@
 
 .hdash__guide-progress-fill {
   height: 100%;
-  background: var(--accent);
+  background: var(--guide-accent-color, var(--accent));
   border-radius: 3px;
   transition: width 0.3s ease;
 }
@@ -1749,8 +1749,8 @@
 }
 
 .hdash__guide-step-check input:checked + .hdash__guide-step-check-box {
-  background: var(--accent);
-  border-color: var(--accent);
+  background: var(--guide-accent-color, var(--accent));
+  border-color: var(--guide-accent-color, var(--accent));
 }
 
 .hdash__guide-step-num {
@@ -1761,7 +1761,7 @@
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  background: var(--accent);
+  background: var(--guide-accent-color, var(--accent));
   color: #fff;
   font-size: 0.6875rem;
   font-weight: var(--font-bold);
@@ -2425,7 +2425,7 @@
 .gmodal__progress-pct {
   font-size: 1.25rem;
   font-weight: var(--font-bold);
-  color: var(--accent);
+  color: var(--guide-accent-color, var(--accent));
 }
 
 .gmodal__progress-bar {
@@ -2438,7 +2438,7 @@
 .gmodal__progress-fill {
   height: 100%;
   border-radius: 4px;
-  background: var(--accent);
+  background: var(--guide-accent-color, var(--accent));
   transition: width 0.3s ease;
 }
 
@@ -2550,15 +2550,15 @@
 }
 
 .gmodal__step-check input:checked + .gmodal__step-check-box {
-  background: var(--accent);
-  border-color: var(--accent);
+  background: var(--guide-accent-color, var(--accent));
+  border-color: var(--guide-accent-color, var(--accent));
 }
 
 .gmodal__step-num {
   font-size: 0.6875rem;
   font-weight: var(--font-bold);
   color: #fff;
-  background: var(--accent);
+  background: var(--guide-accent-color, var(--accent));
   width: 24px;
   height: 24px;
   border-radius: 50%;
@@ -2844,15 +2844,10 @@
 }
 
 .hdash__faqs .hubs-pagination {
-  position: fixed;
-  bottom: 0;
-  left: var(--sidebar-width, 220px);
-  right: 0;
-  margin: 0;
-  padding: 12px 48px;
-  background: transparent;
+  position: static;
+  margin-top: 8px;
+  background: var(--hubs-pagination-bg);
   border-top: 1px solid var(--border);
-  z-index: 5;
 }
 
 .faq-toolbar {

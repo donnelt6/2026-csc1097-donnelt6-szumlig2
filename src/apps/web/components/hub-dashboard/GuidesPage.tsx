@@ -51,7 +51,7 @@ import { formatRelativeTime } from "../../lib/utils";
 import { useSearch } from "../../lib/SearchContext";
 import { MobileSearchBar } from "./MobileSearchBar";
 import { buildTopicFilterOptions, matchesTopicFilter } from "./topicFilters";
-import { HUB_COLOR_OPTIONS } from "../../lib/hubAppearance";
+import { resolveGuideAccentColor } from "../../lib/hubAppearance";
 
 interface Props {
   hubId: string;
@@ -66,21 +66,11 @@ interface StepDraftValues {
 
 const GUIDES_PER_PAGE = 7;
 
-function hashGuideColorSeed(seed: string): number {
-  let hash = 0;
-  for (let index = 0; index < seed.length; index += 1) {
-    hash = (hash * 31 + seed.charCodeAt(index)) >>> 0;
-  }
-  return hash;
-}
-
 function getGuideAccentStyle(guide: GuideEntry): CSSProperties {
-  // Keep guide colours stable across renders while still spreading cards across the shared hub palette.
-  const seed = guide.id || guide.title;
-  const color = HUB_COLOR_OPTIONS[hashGuideColorSeed(seed) % HUB_COLOR_OPTIONS.length];
+  const color = resolveGuideAccentColor(guide.id, guide.title);
   return {
-    "--hub-card-accent": color.value,
-    "--guide-accent-color": color.value,
+    "--hub-card-accent": color,
+    "--guide-accent-color": color,
   } as CSSProperties;
 }
 
@@ -879,10 +869,11 @@ export function GuidesPage({ hubId, sources, canEdit }: Props) {
         const completed = guide.steps.filter((s) => s.is_complete).length;
         const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
         const isEditingTitle = editingTitleId === guide.id;
+        const accentStyle = getGuideAccentStyle(guide);
 
         return (
           <div className="modal-backdrop" onClick={() => setSelectedGuide(null)}>
-            <div className="gmodal" onClick={(e) => e.stopPropagation()}>
+            <div className="gmodal" style={accentStyle} onClick={(e) => e.stopPropagation()}>
               <div className="gmodal__header">
                 <span className="gmodal__badge">GUIDE</span>
                 <div className="gmodal__header-actions">

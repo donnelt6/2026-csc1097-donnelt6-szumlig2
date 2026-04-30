@@ -317,7 +317,7 @@ export function HubsList({ searchQuery, filters, onHubCountChange, onPaginationV
               <PlusCircleIcon />
             </div>
             <h3 className="hub-card-create-title">Create New Hub</h3>
-            <p className="hub-card-create-desc">Set up a new space for your docs, sources, and AI chat</p>
+            <p className="hub-card-create-desc">Set up a new space for your documentation.</p>
           </button>
         )}
 
@@ -362,8 +362,8 @@ export function HubsList({ searchQuery, filters, onHubCountChange, onPaginationV
                     isPendingHub
                       ? "Hub is still being created"
                       : hub.is_favourite
-                        ? "Remove from starred"
-                        : "Add to starred"
+                        ? "Remove from pinned"
+                        : "Add to pinned"
                   }
                   disabled={isPendingHub}
                 >

@@ -412,7 +412,10 @@ export function DashboardRemindersPanel({ variant }: DashboardRemindersPanelProp
   return (
     <div className="hdash__aside-card dash-reminders-card">
       <div className="hdash__aside-header">
-        <h3 className="hdash__aside-title">Reminders &amp; Milestones</h3>
+        <div className="dash-prompts-heading">
+          <BellIcon className="dash-sparkle-icon" />
+          <h3 className="dash-prompts-title">Reminders</h3>
+        </div>
         <Link href="/?tab=calendar" className="hdash__overview-link">
           View all <ArrowRightIcon className="hdash__overview-link-icon" />
         </Link>

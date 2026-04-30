@@ -9,6 +9,12 @@ from .base import logger
 
 
 class ActivityStoreMixin:
+    _HIDDEN_ACTIVITY_EVENTS = {
+        ("chat_event", "source_filter_changed"),
+        ("analytics_summary", "viewed"),
+        ("analytics_trends", "viewed"),
+    }
+
     # Write one activity event without failing the calling workflow if logging breaks.
     def log_activity(
         self,
@@ -58,10 +64,10 @@ class ActivityStoreMixin:
         rows = [
             dict(row)
             for row in (response.data or [])
-            if not (
-                str(row.get("resource_type") or "") == "chat_event"
-                and str(row.get("action") or "") == "source_filter_changed"
-            )
+            if (
+                str(row.get("resource_type") or ""),
+                str(row.get("action") or ""),
+            ) not in self._HIDDEN_ACTIVITY_EVENTS
         ]
 
         # Resolve user labels in one batch so the activity feed can show "You" or a friendly actor name.

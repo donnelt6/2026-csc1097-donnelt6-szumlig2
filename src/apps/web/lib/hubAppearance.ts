@@ -103,6 +103,23 @@ export function getHubColorOption(colorKey?: string | null): HubColorOption {
   return HUB_COLOR_OPTIONS.find((option) => option.key === colorKey) ?? HUB_COLOR_OPTIONS[0];
 }
 
+function hashAppearanceSeed(seed: string): number {
+  let hash = 0;
+  for (let index = 0; index < seed.length; index += 1) {
+    hash = (hash * 31 + seed.charCodeAt(index)) >>> 0;
+  }
+  return hash;
+}
+
+export function resolveSeededHubColor(seed: string): HubColorOption {
+  return HUB_COLOR_OPTIONS[hashAppearanceSeed(seed) % HUB_COLOR_OPTIONS.length];
+}
+
+export function resolveGuideAccentColor(guideId?: string | null, guideTitle?: string | null): string {
+  const seed = guideId || guideTitle || DEFAULT_HUB_COLOR_KEY;
+  return resolveSeededHubColor(seed).value;
+}
+
 export function resolveHubAppearance(iconKey?: string | null, colorKey?: string | null) {
   const icon = getHubIconOption(iconKey);
   const color = getHubColorOption(colorKey);

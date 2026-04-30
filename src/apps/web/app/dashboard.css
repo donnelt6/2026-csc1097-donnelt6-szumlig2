@@ -545,6 +545,21 @@
   flex: 1 1 auto;
 }
 
+.dash-home .dash-section--activity {
+  flex: 0 0 auto;
+}
+
+.dash-home .dash-activity-card {
+  flex: 0 0 auto;
+  max-height: 440px;
+}
+
+.dash-home .dash-activity-list {
+  flex: 0 1 auto;
+  max-height: calc(440px - 16px);
+  overflow-y: auto;
+}
+
 .dash-activity-item {
   display: flex;
   align-items: center;
