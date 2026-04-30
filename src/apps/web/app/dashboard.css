@@ -20,6 +20,22 @@
   flex-shrink: 0;
 }
 
+.dash-nav-tabs--home {
+  align-items: center;
+  margin-left: 18px;
+  margin-top: 6px;
+  gap: 36px;
+}
+
+.dash-nav-row--dashboard {
+  gap: 28px;
+}
+
+.dash-nav-tabs--hub-dashboard {
+  margin-left: 0;
+  margin-top: 0;
+}
+
 .nav-search--dash {
   max-width: 280px;
   flex: 1;
@@ -37,6 +53,14 @@
   transition: color var(--transition-fast), border-color var(--transition-fast);
   text-transform: uppercase;
   letter-spacing: 0.06em;
+}
+
+.dash-nav-tabs--home .dash-nav-tab {
+  padding: 6px 0;
+  font-size: 0.9rem;
+  font-weight: var(--font-semibold);
+  letter-spacing: 0.04em;
+  line-height: 1;
 }
 
 .dash-nav-tab:hover {
@@ -204,7 +228,7 @@
   display: grid;
   grid-template-columns: 1fr minmax(0, 300px);
   gap: 32px;
-  align-items: start;
+  align-items: stretch;
 }
 
 .dash-col-main,
@@ -214,6 +238,13 @@
   gap: 20px;
   min-width: 0;
   overflow: hidden;
+}
+
+.dash-section--activity {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 /* Sections */
@@ -258,8 +289,117 @@
 /* Recent hub cards */
 .dash-recent-hubs {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 16px;
+}
+
+/* Home page recent hubs use a denser variant so three cards still fit cleanly. */
+.dash-recent-hubs .hub-card--dashboard-compact {
+  height: 244px;
+  padding: 14px;
+  border-radius: 12px;
+}
+
+.dash-recent-hubs .hub-card--dashboard-compact .hub-card-top {
+  margin-bottom: 8px;
+}
+
+.dash-recent-hubs .hub-card--dashboard-compact .hub-card-heading-flow {
+  padding-right: 0;
+}
+
+.dash-recent-hubs .hub-card--dashboard-compact .hub-card-icon {
+  width: 48px;
+  height: 48px;
+  min-width: 48px;
+  border-radius: 10px;
+}
+
+.dash-recent-hubs .hub-card--dashboard-compact .hub-card-icon svg {
+  width: 24px;
+  height: 24px;
+}
+
+.dash-recent-hubs .hub-card--dashboard-compact .hub-card-title {
+  font-size: 1.34rem;
+  line-height: 1.25;
+}
+
+.dash-recent-hubs .hub-card--dashboard-compact .hub-card-title--dashboard-compact {
+  display: flex;
+  align-items: center;
+  min-height: calc(1.25em * 2);
+}
+
+.dash-recent-hubs .hub-card--dashboard-compact .hub-card-title-text--dashboard-compact {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  word-break: break-word;
+  overflow-wrap: break-word;
+}
+
+.dash-recent-hubs .hub-card--dashboard-compact .hub-card-description {
+  margin: 0 0 10px;
+  font-size: 0.93rem;
+  line-height: 1.45;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+
+.dash-recent-hubs .hub-card--dashboard-compact .hub-card-footer {
+  gap: 8px;
+}
+
+.dash-recent-hubs .hub-card--dashboard-compact .hub-card-stats {
+  gap: 10px;
+  transform: none;
+  font-size: 0.64rem;
+  letter-spacing: 0.12em;
+}
+
+.dash-recent-hubs .hub-card--dashboard-compact .hub-stat {
+  gap: 4px;
+  min-width: 0;
+}
+
+.dash-recent-hubs .hub-card--dashboard-compact .hub-stat-icon {
+  width: 12px;
+  height: 12px;
+}
+
+.dash-recent-hubs .hub-card--dashboard-compact .hub-stat-value {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dash-recent-hubs .hub-card--dashboard-compact .hub-card-footer-bottom {
+  padding-top: 6px;
+  transform: none;
+}
+
+.dash-recent-hubs .hub-card--dashboard-compact .hub-card-time {
+  font-size: 0.6rem;
+  letter-spacing: 0.12em;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dash-recent-hubs .hub-card--dashboard-compact .hub-card-avatars > * + * {
+  margin-left: -6px;
+}
+
+.dash-recent-hubs .hub-card--dashboard-compact .hub-avatar {
+  width: 24px;
+  height: 24px;
+}
+
+.dash-recent-hubs .hub-card--dashboard-compact .hub-avatar--count {
+  font-size: 0.45rem;
 }
 
 .dash-hub-card {
@@ -374,6 +514,9 @@
   border: 1px solid var(--border);
   border-radius: 14px;
   padding: 8px 4px;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
 }
 
 .dash-filter-btn {
@@ -399,6 +542,22 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
+  flex: 1 1 auto;
+}
+
+.dash-home .dash-section--activity {
+  flex: 0 0 auto;
+}
+
+.dash-home .dash-activity-card {
+  flex: 0 0 auto;
+  max-height: 440px;
+}
+
+.dash-home .dash-activity-list {
+  flex: 0 1 auto;
+  max-height: calc(440px - 16px);
+  overflow-y: auto;
 }
 
 .dash-activity-item {
@@ -544,6 +703,8 @@
 }
 
 .mini-cal-day {
+  appearance: none;
+  -webkit-appearance: none;
   position: relative;
   width: 30px;
   height: 30px;
@@ -565,7 +726,13 @@
 }
 
 .mini-cal-day--empty {
+  background: transparent;
+  color: transparent;
   cursor: default;
+}
+
+.mini-cal-day:disabled {
+  opacity: 1;
 }
 
 .mini-cal-day--today {
@@ -1669,6 +1836,10 @@
     grid-template-columns: 1fr minmax(0, 260px);
     gap: 24px;
   }
+
+  .dash-recent-hubs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 900px) {
@@ -1677,10 +1848,6 @@
   }
 
   .dash-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .dash-recent-hubs {
     grid-template-columns: 1fr;
   }
 
@@ -1739,5 +1906,14 @@
     width: 34px;
     height: 34px;
     font-size: 0.75rem;
+  }
+
+  .dash-recent-hubs {
+    grid-template-columns: 1fr;
+  }
+
+  .dash-recent-hubs .hub-card--dashboard-compact {
+    height: auto;
+    min-height: 220px;
   }
 }

@@ -77,18 +77,18 @@ export const HUB_ICON_OPTIONS: HubIconOption[] = [
 ];
 
 export const HUB_COLOR_OPTIONS: HubColorOption[] = [
-  { key: "slate", label: "Slate", value: "#64748b" },
-  { key: "violet", label: "Violet", value: "#8b5cf6" },
-  { key: "cyan", label: "Cyan", value: "#06b6d4" },
-  { key: "blue", label: "Blue", value: "#3b82f6" },
-  { key: "emerald", label: "Emerald", value: "#10b981" },
-  { key: "amber", label: "Amber", value: "#f59e0b" },
-  { key: "rose", label: "Rose", value: "#f43f5e" },
-  { key: "orange", label: "Orange", value: "#f97316" },
-  { key: "pink", label: "Pink", value: "#ec4899" },
-  { key: "indigo", label: "Indigo", value: "#6366f1" },
-  { key: "teal", label: "Teal", value: "#14b8a6" },
-  { key: "red", label: "Red", value: "#ef4444" },
+  { key: "slate", label: "Slate", value: "#6f8096" },
+  { key: "violet", label: "Violet", value: "#9277db" },
+  { key: "cyan", label: "Cyan", value: "#46b1ca" },
+  { key: "blue", label: "Blue", value: "#4d8fe2" },
+  { key: "emerald", label: "Emerald", value: "#4ca988" },
+  { key: "amber", label: "Amber", value: "#d4a24a" },
+  { key: "rose", label: "Rose", value: "#d8708b" },
+  { key: "orange", label: "Orange", value: "#dc8553" },
+  { key: "pink", label: "Pink", value: "#d575ab" },
+  { key: "indigo", label: "Indigo", value: "#6f7fda" },
+  { key: "teal", label: "Teal", value: "#43a7a0" },
+  { key: "red", label: "Red", value: "#d56f6f" },
 ];
 
 function withAlpha(hex: string, alpha: string): string {
@@ -103,6 +103,23 @@ export function getHubColorOption(colorKey?: string | null): HubColorOption {
   return HUB_COLOR_OPTIONS.find((option) => option.key === colorKey) ?? HUB_COLOR_OPTIONS[0];
 }
 
+function hashAppearanceSeed(seed: string): number {
+  let hash = 0;
+  for (let index = 0; index < seed.length; index += 1) {
+    hash = (hash * 31 + seed.charCodeAt(index)) >>> 0;
+  }
+  return hash;
+}
+
+export function resolveSeededHubColor(seed: string): HubColorOption {
+  return HUB_COLOR_OPTIONS[hashAppearanceSeed(seed) % HUB_COLOR_OPTIONS.length];
+}
+
+export function resolveGuideAccentColor(guideId?: string | null, guideTitle?: string | null): string {
+  const seed = guideId || guideTitle || DEFAULT_HUB_COLOR_KEY;
+  return resolveSeededHubColor(seed).value;
+}
+
 export function resolveHubAppearance(iconKey?: string | null, colorKey?: string | null) {
   const icon = getHubIconOption(iconKey);
   const color = getHubColorOption(colorKey);
@@ -111,8 +128,8 @@ export function resolveHubAppearance(iconKey?: string | null, colorKey?: string 
     icon,
     color,
     badgeStyle: {
-      backgroundColor: withAlpha(color.value, "1A"),
-      color: color.value,
+      background: `linear-gradient(135deg, ${withAlpha(color.value, "F0")} 0%, ${color.value} 100%)`,
+      color: "#ffffff",
     },
     previewStyle: {
       background: `linear-gradient(135deg, ${withAlpha(color.value, "D9")} 0%, ${color.value} 100%)`,

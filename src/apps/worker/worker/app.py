@@ -13,6 +13,10 @@ settings = get_settings()
 # Keep one shared Celery app instance so `worker.tasks` and `worker.main`
 # both point at the same broker, backend, and beat schedule.
 celery_app = Celery("caddie-worker", broker=settings.redis_url, backend=settings.redis_url)
+# Force Celery internals onto UTC so mixed local/hosted workers do not drift by
+# local timezone or DST differences when scheduling and exchanging heartbeats.
+celery_app.conf.enable_utc = True
+celery_app.conf.timezone = "UTC"
 celery_app.conf.beat_schedule = {
     "dispatch-reminders": {
         "task": "dispatch_reminders",

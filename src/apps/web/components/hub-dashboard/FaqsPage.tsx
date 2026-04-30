@@ -285,9 +285,6 @@ export function FaqsPage({ hubId, sources, canEdit }: Props) {
   const truncate = (text: string, max: number) =>
     text.length > max ? `${text.slice(0, max)}...` : text;
 
-  const cardPreview = (answer: string) =>
-    answer.length > 280 ? answer.slice(0, 280).trimEnd() + '...' : answer;
-
   const favouriteCount = allEntries.filter((f) => f.is_pinned).length;
 
   return (
@@ -386,70 +383,69 @@ export function FaqsPage({ hubId, sources, canEdit }: Props) {
               <h3 className="faq-grid-card__question">{truncate(faq.question, 120)}</h3>
             </div>
             <div className="faq-grid-card__body">
-              <p className="faq-grid-card__answer">{cardPreview(faq.answer)}</p>
+              <p className="faq-grid-card__answer">{faq.answer}</p>
               <div className="faq-grid-card__footer" onClick={(e) => e.stopPropagation()}>
-                <span className="faq-grid-card__confidence">{Math.round((faq.confidence || 0) * 100)}%</span>
-              <div className="faq-grid-card__actions">
-                <button
-                  className="faq-grid-card__action-btn"
-                  type="button"
-                  title={faq.is_pinned ? 'Unpin' : 'Pin'}
-                  onClick={() => toggleFavourite(faq)}
-                >
-                  {faq.is_pinned ? <StarSolid className="faq-grid-card__action-icon faq-grid-card__action-icon--pinned" /> : <StarOutline className="faq-grid-card__action-icon" />}
-                </button>
-                {canEdit && (
-                  <div className="hub-card-menu">
-                    <button
-                      className="faq-grid-card__action-btn"
-                      type="button"
-                      aria-label="FAQ options"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setOpenMenuId(openMenuId === faq.id ? null : faq.id);
-                      }}
-                    >
-                      <EllipsisVerticalIcon className="faq-grid-card__action-icon" />
-                    </button>
-                    {openMenuId === faq.id && (
-                      <div className="hub-card-menu__dropdown">
-                        <button
-                          className="hub-card-menu__item"
-                          type="button"
-                          onClick={() => {
-                            openFaq(faq);
-                            startEditing(faq);
-                            setOpenMenuId(null);
-                          }}
-                        >
-                          Edit
-                          <PencilSquareIcon className="hub-card-menu__item-icon" />
-                        </button>
-                        <button
-                          className="hub-card-menu__item hub-card-menu__item--danger"
-                          type="button"
-                          onClick={() => handleArchive(faq)}
-                        >
-                          Archive
-                          <TrashIcon className="hub-card-menu__item-icon" />
-                        </button>
-                        <button
-                          className="hub-card-menu__item hub-card-menu__item--danger"
-                          type="button"
-                          onClick={() => {
-                            setFlagTargetId(faq.id);
-                            setOpenMenuId(null);
-                          }}
-                        >
-                          Flag
-                          <FlagIcon className="hub-card-menu__item-icon" />
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                )}
+                <div className="faq-grid-card__actions">
+                  <button
+                    className="faq-grid-card__action-btn"
+                    type="button"
+                    title={faq.is_pinned ? 'Unpin' : 'Pin'}
+                    onClick={() => toggleFavourite(faq)}
+                  >
+                    {faq.is_pinned ? <StarSolid className="faq-grid-card__action-icon faq-grid-card__action-icon--pinned" /> : <StarOutline className="faq-grid-card__action-icon" />}
+                  </button>
+                  {canEdit && (
+                    <div className="hub-card-menu">
+                      <button
+                        className="faq-grid-card__action-btn"
+                        type="button"
+                        aria-label="FAQ options"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setOpenMenuId(openMenuId === faq.id ? null : faq.id);
+                        }}
+                      >
+                        <EllipsisVerticalIcon className="faq-grid-card__action-icon" />
+                      </button>
+                      {openMenuId === faq.id && (
+                        <div className="hub-card-menu__dropdown">
+                          <button
+                            className="hub-card-menu__item"
+                            type="button"
+                            onClick={() => {
+                              openFaq(faq);
+                              startEditing(faq);
+                              setOpenMenuId(null);
+                            }}
+                          >
+                            Edit
+                            <PencilSquareIcon className="hub-card-menu__item-icon" />
+                          </button>
+                          <button
+                            className="hub-card-menu__item hub-card-menu__item--danger"
+                            type="button"
+                            onClick={() => handleArchive(faq)}
+                          >
+                            Archive
+                            <TrashIcon className="hub-card-menu__item-icon" />
+                          </button>
+                          <button
+                            className="hub-card-menu__item hub-card-menu__item--danger"
+                            type="button"
+                            onClick={() => {
+                              setFlagTargetId(faq.id);
+                              setOpenMenuId(null);
+                            }}
+                          >
+                            Flag
+                            <FlagIcon className="hub-card-menu__item-icon" />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
             </div>
           </div>
         ))}
@@ -702,8 +698,6 @@ export function FaqsPage({ hubId, sources, canEdit }: Props) {
         const faq = selectedFaq;
         const isEditing = editingId === faq.id;
         const draft = getDraft(faq);
-        const confidence = Math.round((faq.confidence || 0) * 100);
-
         return (
           <div className="modal-backdrop" onClick={() => setSelectedFaq(null)}>
             <div className="gmodal" onClick={(e) => e.stopPropagation()}>
@@ -772,10 +766,7 @@ export function FaqsPage({ hubId, sources, canEdit }: Props) {
               </div>
 
               <div className="faq-modal__answer-section">
-                <div className="faq-modal__answer-header">
-                  <span className="faq-modal__label">ANSWER</span>
-                  <span className="faq-modal__confidence">{confidence}% confidence</span>
-                </div>
+                <span className="faq-modal__label">ANSWER</span>
                 {!isEditing ? (
                   <p className="faq-modal__answer-text">{faq.answer}</p>
                 ) : (

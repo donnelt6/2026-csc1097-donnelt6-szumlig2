@@ -54,7 +54,7 @@ export function HubsToolbar({ filters, onFiltersChange }: HubsToolbarProps) {
               className={`hubs-tab ${typeTab === tab ? 'hubs-tab--active' : ''}`}
               onClick={() => onFiltersChange({ ...filters, typeTab: tab })}
             >
-              {tab === 'all' ? 'Recent' : tab === 'pinned' ? 'Starred' : 'Shared'}
+              {tab === 'all' ? 'Recent' : tab === 'pinned' ? 'Pinned' : 'Shared'}
             </button>
           ))}
         </div>

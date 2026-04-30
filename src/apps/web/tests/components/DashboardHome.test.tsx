@@ -49,6 +49,7 @@ describe("DashboardHome", () => {
 
     expect(screen.getByTestId("dashboard-hub-skeleton-0")).toBeInTheDocument();
     expect(screen.getByTestId("dashboard-hub-skeleton-1")).toBeInTheDocument();
+    expect(screen.getByTestId("dashboard-hub-skeleton-2")).toBeInTheDocument();
     expect(screen.getByTestId("dashboard-activity-skeleton-0")).toBeInTheDocument();
     expect(screen.getByTestId("dashboard-activity-skeleton-4")).toBeInTheDocument();
     expect(screen.getByTestId("dashboard-reminder-empty-skeleton")).toBeInTheDocument();
@@ -76,6 +77,15 @@ describe("DashboardHome", () => {
         color_key: "emerald",
         created_at: "2025-01-02T00:00:00Z",
       },
+      {
+        id: "hub-3",
+        owner_id: "user-1",
+        name: "Support Hub",
+        description: "Support scripts",
+        icon_key: "chat",
+        color_key: "orange",
+        created_at: "2025-01-03T00:00:00Z",
+      },
     ]);
     vi.mocked(listReminders).mockResolvedValue([]);
     vi.mocked(listActivity).mockResolvedValue([]);
@@ -90,6 +100,10 @@ describe("DashboardHome", () => {
     const secondIcon = await screen.findByTestId("dashboard-hub-icon-hub-2");
     expect(secondIcon).toHaveAttribute("data-icon-key", "beaker");
     expect(secondIcon).toHaveAttribute("data-color-key", "emerald");
+
+    const thirdIcon = await screen.findByTestId("dashboard-hub-icon-hub-3");
+    expect(thirdIcon).toHaveAttribute("data-icon-key", "chat");
+    expect(thirdIcon).toHaveAttribute("data-color-key", "orange");
   });
 
   it("shows actor attribution in recent activity entries", async () => {

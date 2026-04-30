@@ -3,6 +3,7 @@
 // DashboardHome.tsx: Dashboard home tab with recent hubs, reminders, activity, and prompts.
 
 import { useState, useMemo, useRef, useEffect } from 'react';
+import type { CSSProperties } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useQuery, useQueries } from '@tanstack/react-query';
@@ -97,7 +98,7 @@ export function DashboardHome() {
     staleTime: 0,
   });
 
-  const recentHubs = hubs?.slice(0, 2) ?? [];
+  const recentHubs = hubs?.slice(0, 3) ?? [];
 
   const hubNameMap = buildHubNameMap(hubs);
 
@@ -258,7 +259,7 @@ export function DashboardHome() {
             </div>
             <div className="dash-recent-hubs">
               {hubsLoading ? (
-                Array.from({ length: 2 }, (_, index) => <DashboardHomeHubSkeleton key={index} index={index} />)
+                Array.from({ length: 3 }, (_, index) => <DashboardHomeHubSkeleton key={index} index={index} />)
               ) : recentHubs.length > 0 ? (
                 recentHubs.map((hub) => {
                   const appearance = resolveHubAppearance(hub.icon_key, hub.color_key);
@@ -268,19 +269,28 @@ export function DashboardHome() {
                   const memberCount = memberProfiles.length || memberEmails.length;
 
                   return (
-                    <Link key={hub.id} href={`/hubs/${hub.id}`} className="hub-card">
+                    <Link
+                      key={hub.id}
+                      href={`/hubs/${hub.id}`}
+                      className="hub-card hub-card--dashboard-compact hub-card--with-accent"
+                      style={{ "--hub-card-accent": appearance.color.value } as CSSProperties}
+                    >
                       <div className="hub-card-top">
-                        <div
-                          className="hub-card-icon"
-                          style={appearance.badgeStyle}
-                          data-testid={`dashboard-hub-icon-${hub.id}`}
-                          data-icon-key={appearance.icon.key}
-                          data-color-key={appearance.color.key}
-                        >
-                          <HubIcon />
+                        <div className="hub-card-heading-flow">
+                          <div
+                            className="hub-card-icon"
+                            style={appearance.badgeStyle}
+                            data-testid={`dashboard-hub-icon-${hub.id}`}
+                            data-icon-key={appearance.icon.key}
+                            data-color-key={appearance.color.key}
+                          >
+                            <HubIcon />
+                          </div>
+                          <h3 className="hub-card-title hub-card-title--dashboard-compact">
+                            <span className="hub-card-title-text hub-card-title-text--dashboard-compact">{hub.name}</span>
+                          </h3>
                         </div>
                       </div>
-                      <h3 className="hub-card-title">{hub.name}</h3>
                       <p className="hub-card-description">{hub.description || 'No description'}</p>
                       <div className="hub-card-footer">
                         <div className="hub-card-stats">
@@ -340,7 +350,7 @@ export function DashboardHome() {
           </div>
 
           {/* Recent Activity Feed */}
-          <div className="dash-section">
+          <div className="dash-section dash-section--activity">
             <div className="dash-section-header">
               <h2 className="dash-section-title">Recent Activity Feed</h2>
               {activityItems.length > 0 && <Link href="/?tab=activity" className="dash-section-link">View all activity</Link>}
@@ -350,7 +360,7 @@ export function DashboardHome() {
                 {activityLoading ? (
                   Array.from({ length: 5 }, (_, index) => <DashboardHomeActivitySkeleton key={index} index={index} />)
                 ) : activityItems.length > 0 ? (
-                  activityItems.slice(0, 5).map((event) => {
+                  activityItems.map((event) => {
                     const Icon = getEventIcon(event);
                     const tone = getEventTone(event);
                     const tabMap: Record<string, string> = {

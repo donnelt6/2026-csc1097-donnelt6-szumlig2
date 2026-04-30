@@ -263,6 +263,7 @@
   flex-direction: column;
   min-width: 0;
   height: 300px;
+  position: relative;
   text-decoration: none;
   color: inherit;
   box-shadow: 0 16px 32px rgba(15, 23, 42, 0.05);
@@ -274,11 +275,60 @@
   box-shadow: 0 18px 36px rgba(15, 23, 42, 0.08);
 }
 
+.hub-card--with-accent::before,
+.hub-card--with-accent::after {
+  content: "";
+  position: absolute;
+  pointer-events: none;
+}
+
+.hub-card--with-accent::before {
+  left: -1px;
+  right: -1px;
+  top: -1px;
+  height: 6px;
+  border-style: solid;
+  border-color: var(--hub-card-accent, var(--accent));
+  border-width: 4px 2px 0;
+  border-radius: 14px 14px 0 0;
+  opacity: 0.95;
+  transition: opacity var(--transition-fast);
+}
+
+.hub-card--with-accent::after {
+  left: 10px;
+  right: 10px;
+  top: -1px;
+  height: 4px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--hub-card-accent, var(--accent)) 72%, white 10%), var(--hub-card-accent, var(--accent)));
+  opacity: 0.92;
+  transition: opacity var(--transition-fast), left var(--transition-fast), right var(--transition-fast);
+}
+
+.hub-card--with-accent:hover::before,
+.hub-card--with-accent:hover::after {
+  opacity: 1;
+}
+
+.hub-card--with-accent:hover::after {
+  left: 8px;
+  right: 8px;
+}
+
+.hub-card--with-accent .hub-card-footer-bottom {
+  padding-bottom: 0;
+}
+
+.hub-card--with-accent .hub-card-top {
+  padding-top: 4px;
+}
+
 /* Create New Hub card */
 
 .hub-card--create {
-  border: 2px dashed rgba(198, 198, 205, 0.3);
-  background: rgba(198, 198, 205, 0.08);
+  border: 2px dashed rgba(148, 163, 184, 0.52);
+  background: rgba(255, 255, 255, 0.72);
   cursor: pointer;
   align-items: center;
   justify-content: center;
@@ -291,6 +341,18 @@
 .hub-card--create:hover {
   border-color: var(--hub-create-border-hover);
   box-shadow: 0 14px 28px rgba(15, 23, 42, 0.08);
+}
+
+[data-theme="dark"] .hub-card--create {
+  border-color: rgba(148, 163, 184, 0.3);
+  background: linear-gradient(180deg, rgba(30, 41, 59, 0.92), rgba(15, 23, 42, 0.88));
+  color: var(--text-secondary);
+  box-shadow: 0 18px 36px rgba(2, 6, 23, 0.34);
+}
+
+[data-theme="dark"] .hub-card--create:hover {
+  border-color: rgba(148, 163, 184, 0.44);
+  box-shadow: 0 22px 42px rgba(2, 6, 23, 0.42);
 }
 
 .hub-card-create-icon {
@@ -309,6 +371,17 @@
 .hub-card--create:hover .hub-card-create-icon {
   background: var(--bg-secondary);
   color: var(--text-secondary);
+}
+
+[data-theme="dark"] .hub-card--create .hub-card-create-icon {
+  background: rgba(15, 23, 42, 0.92);
+  color: rgba(255, 255, 255, 0.92);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+[data-theme="dark"] .hub-card--create:hover .hub-card-create-icon {
+  background: rgba(15, 23, 42, 0.98);
+  color: rgba(255, 255, 255, 0.96);
 }
 
 .hub-card-create-icon svg {
@@ -333,37 +406,57 @@
   line-height: 1.5;
 }
 
+[data-theme="dark"] .hub-card--create .hub-card-create-title {
+  color: rgba(255, 255, 255, 0.96);
+}
+
+[data-theme="dark"] .hub-card--create .hub-card-create-desc {
+  color: rgba(191, 200, 214, 0.84);
+}
+
 /* Hub Card Top Row (icon + actions) */
 
 .hub-card-top {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 18px;
+  position: relative;
+  margin-bottom: 12px;
+}
+
+.hub-card-heading-flow {
+  min-width: 0;
+  padding-right: 68px;
+}
+
+.hub-card-heading-flow::after {
+  content: "";
+  display: block;
+  clear: both;
 }
 
 .hub-card-icon {
-  width: 64px;
-  height: 64px;
-  min-width: 64px;
-  border-radius: 12px;
+  width: 58px;
+  height: 58px;
+  min-width: 58px;
+  border-radius: 11px;
   display: flex;
   align-items: center;
   justify-content: center;
-  flex-shrink: 0;
+  float: left;
+  margin: 0 12px 0 0;
   transition: background-color var(--transition-fast), color var(--transition-fast);
 }
 
 .hub-card-icon svg {
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
 }
 
 .hub-card-actions {
   display: flex;
   align-items: center;
   gap: 4px;
-  position: relative;
+  position: absolute;
+  top: 0;
+  right: 0;
 }
 
 .hub-card-menu {
@@ -452,15 +545,29 @@
 
 .hub-card-title {
   font-family: var(--font-headline);
-  font-size: 1.32rem;
+  font-size: 1.48rem;
   font-weight: var(--font-bold);
   color: var(--text);
-  margin: 4px 0 10px;
-  line-height: 1.3;
+  margin: 0;
+  line-height: 1.22;
   transition: color 0.15s ease;
+  min-width: 0;
+}
+
+.hub-card-title--hubs {
+  display: flex;
+  align-items: center;
+  min-height: 64px;
+}
+
+.hub-card-title-text--hubs {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  word-break: break-word;
+  overflow-wrap: break-word;
 }
 
 .hub-card:hover .hub-card-title {
@@ -472,11 +579,11 @@
 }
 
 .hub-card-description {
-  font-size: 0.875rem;
+  font-size: 0.98rem;
   font-weight: var(--font-medium);
   color: var(--muted);
   line-height: 1.625;
-  margin: 8px 0 14px;
+  margin: 0 0 14px;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   line-clamp: 2;
@@ -502,7 +609,7 @@
   transform: translateY(-8px);
   font-size: 0.6875rem;
   font-weight: var(--font-semibold);
-  color: var(--muted);
+  color: var(--hub-card-accent, var(--accent));
   text-transform: uppercase;
   letter-spacing: 0.15em;
 }
@@ -516,13 +623,13 @@
 .hub-stat-icon {
   width: 14px;
   height: 14px;
-  color: var(--muted);
+  color: var(--hub-card-accent, var(--accent));
   opacity: 1;
 }
 
 .hub-stat-value {
   font-weight: var(--font-semibold);
-  color: var(--muted);
+  color: var(--hub-card-accent, var(--accent));
 }
 
 .hub-card-footer-bottom {

@@ -1,10 +1,15 @@
-"""Compatibility-first package facade for the split store implementation.
+"""We had to split the original store file because it had become too large to
+maintain safely in one place.
 
-Domain ownership:
+We kept this package as the main entry point so the rest of the backend could
+continue importing the store layer without a large rewrite all at once.
+
+The split is organised by domain:
 - `hubs`, `sources`, `memberships`, `chat`, `moderation`, `analytics`
-- `content` for FAQs and guides, `reminders`, `activity`, `users`
-- helper-only exports live in `chat_helpers`, `source_helpers`, and `common_helpers`
+- `content` for FAQs and guides, plus `reminders`, `activity`, and `users`
+- shared helpers live in `chat_helpers`, `source_helpers`, and `common_helpers`
 """
+
 
 import random
 import uuid

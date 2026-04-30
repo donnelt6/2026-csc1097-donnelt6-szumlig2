@@ -3,6 +3,7 @@
 // HubsList.tsx: Hub card grid with search filtering, sorting, and pagination.
 
 import { useEffect, useState } from "react";
+import type { CSSProperties } from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -316,7 +317,7 @@ export function HubsList({ searchQuery, filters, onHubCountChange, onPaginationV
               <PlusCircleIcon />
             </div>
             <h3 className="hub-card-create-title">Create New Hub</h3>
-            <p className="hub-card-create-desc">Set up a new space for your docs, sources, and AI chat</p>
+            <p className="hub-card-create-desc">Set up a new space for your documentation.</p>
           </button>
         )}
 
@@ -331,18 +332,27 @@ export function HubsList({ searchQuery, filters, onHubCountChange, onPaginationV
           const memberProfiles = hub.member_profiles ?? [];
           const memberEmails = hub.member_emails ?? [];
           const memberCount = memberProfiles.length || memberEmails.length;
-
           return (
-          <Link key={hub.id} href={`/hubs/${hub.id}`} className="hub-card">
+          <Link
+            key={hub.id}
+            href={`/hubs/${hub.id}`}
+            className="hub-card hub-card--with-accent"
+            style={{ "--hub-card-accent": appearance.color.value } as CSSProperties}
+          >
             <div className="hub-card-top">
-              <div
-                className="hub-card-icon"
-                style={appearance.badgeStyle}
-                data-testid={`hub-icon-${hub.id}`}
-                data-icon-key={appearance.icon.key}
-                data-color-key={appearance.color.key}
-              >
-                <HubIcon />
+              <div className="hub-card-heading-flow">
+                <div
+                  className="hub-card-icon"
+                  style={appearance.badgeStyle}
+                  data-testid={`hub-icon-${hub.id}`}
+                  data-icon-key={appearance.icon.key}
+                  data-color-key={appearance.color.key}
+                >
+                  <HubIcon />
+                </div>
+                <h3 className="hub-card-title hub-card-title--hubs">
+                  <span className="hub-card-title-text hub-card-title-text--hubs">{hub.name}</span>
+                </h3>
               </div>
               <div className="hub-card-actions">
                 <button
@@ -352,8 +362,8 @@ export function HubsList({ searchQuery, filters, onHubCountChange, onPaginationV
                     isPendingHub
                       ? "Hub is still being created"
                       : hub.is_favourite
-                        ? "Remove from starred"
-                        : "Add to starred"
+                        ? "Remove from pinned"
+                        : "Add to pinned"
                   }
                   disabled={isPendingHub}
                 >
@@ -422,8 +432,6 @@ export function HubsList({ searchQuery, filters, onHubCountChange, onPaginationV
                 )}
               </div>
             </div>
-
-            <h3 className="hub-card-title">{hub.name}</h3>
             <p className="hub-card-description">{hub.description || "No description"}</p>
 
             <div className="hub-card-footer">
@@ -537,3 +545,4 @@ export function HubsList({ searchQuery, filters, onHubCountChange, onPaginationV
     </>
   );
 }
+

@@ -2,6 +2,7 @@
 
 // GuidesPage.tsx: Hub dashboard guides page with search, filtering, and flag actions.
 
+import type { CSSProperties } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -28,7 +29,6 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
   XMarkIcon,
-  DocumentTextIcon,
   PencilSquareIcon,
   StarIcon as StarOutline,
 } from "@heroicons/react/24/outline";
@@ -51,6 +51,7 @@ import { formatRelativeTime } from "../../lib/utils";
 import { useSearch } from "../../lib/SearchContext";
 import { MobileSearchBar } from "./MobileSearchBar";
 import { buildTopicFilterOptions, matchesTopicFilter } from "./topicFilters";
+import { resolveGuideAccentColor } from "../../lib/hubAppearance";
 
 interface Props {
   hubId: string;
@@ -64,6 +65,14 @@ interface StepDraftValues {
 }
 
 const GUIDES_PER_PAGE = 7;
+
+function getGuideAccentStyle(guide: GuideEntry): CSSProperties {
+  const color = resolveGuideAccentColor(guide.id, guide.title);
+  return {
+    "--hub-card-accent": color,
+    "--guide-accent-color": color,
+  } as CSSProperties;
+}
 
 function SortableStepRow({
   step,
@@ -613,19 +622,19 @@ export function GuidesPage({ hubId, sources, canEdit }: Props) {
           const total = guide.steps.length;
           const completed = guide.steps.filter((s) => s.is_complete).length;
           const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
+          const accentStyle = getGuideAccentStyle(guide);
           return (
             <div
               key={guide.id}
               className="hub-card guide-card"
+              style={accentStyle}
               onClick={() => openGuide(guide)}
               role="button"
               tabIndex={0}
               onKeyDown={(e) => { if (e.key === 'Enter') openGuide(guide); }}
             >
-              <div className="hub-card-top">
-                <div className="guide-card__icon">
-                  <DocumentTextIcon />
-                </div>
+              <div className="guide-card__header">
+                <h3 className="hub-card-title guide-card__title">{guide.title}</h3>
                 <div className="hub-card-actions" onClick={(e) => e.stopPropagation()}>
                   <button
                     className="hub-favourite-button"
@@ -689,7 +698,6 @@ export function GuidesPage({ hubId, sources, canEdit }: Props) {
                   )}
                 </div>
               </div>
-              <h3 className="hub-card-title">{guide.title}</h3>
               <p className="hub-card-description">{getGuideDescription(guide)}</p>
               <div className="guide-card__footer">
                 <div className="guide-card__meta">
@@ -861,10 +869,11 @@ export function GuidesPage({ hubId, sources, canEdit }: Props) {
         const completed = guide.steps.filter((s) => s.is_complete).length;
         const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
         const isEditingTitle = editingTitleId === guide.id;
+        const accentStyle = getGuideAccentStyle(guide);
 
         return (
           <div className="modal-backdrop" onClick={() => setSelectedGuide(null)}>
-            <div className="gmodal" onClick={(e) => e.stopPropagation()}>
+            <div className="gmodal" style={accentStyle} onClick={(e) => e.stopPropagation()}>
               <div className="gmodal__header">
                 <span className="gmodal__badge">GUIDE</span>
                 <div className="gmodal__header-actions">

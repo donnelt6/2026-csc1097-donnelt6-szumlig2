@@ -13,6 +13,11 @@ export default defineConfig({
     trace: "on-first-retry",
     headless: true,
     navigationTimeout: process.env.CI ? 45_000 : 30_000,
+    // Chromium is the most common source of page-crash flakes in constrained
+    // Linux CI containers when /dev/shm is small.
+    launchOptions: {
+      args: process.env.CI ? ["--disable-dev-shm-usage"] : [],
+    },
   },
   webServer: {
     command: "npm run dev -- --hostname 127.0.0.1 --port 3000",

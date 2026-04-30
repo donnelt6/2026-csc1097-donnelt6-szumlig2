@@ -2,6 +2,7 @@
 
 // DashboardOverview.tsx: Per-hub dashboard overview with source stats and recent activity.
 
+import type { CSSProperties } from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -15,6 +16,7 @@ import { MiniCalendar } from '../dashboard/MiniCalendar';
 import { ReminderModal } from './ReminderModal';
 import { listFaqs, listGuides, listReminders, updateGuideStepProgress } from '../../lib/api';
 import { formatLocal } from '../../lib/dateUtils';
+import { resolveGuideAccentColor } from '../../lib/hubAppearance';
 import type { HubDashboardTab } from '../../lib/HubDashboardTabContext';
 import type { Citation, FaqEntry, GuideEntry, Reminder } from '@shared/index';
 
@@ -76,6 +78,14 @@ export function DashboardOverview({
   }, [activeGuides.length, guideIndex]);
 
   const currentGuide = activeGuides[guideIndex] as GuideEntry | undefined;
+  const currentGuideAccentStyle = useMemo<CSSProperties | undefined>(() => {
+    if (!currentGuide) return undefined;
+    const color = resolveGuideAccentColor(currentGuide.id, currentGuide.title);
+    return {
+      "--guide-accent-color": color,
+      "--hub-card-accent": color,
+    } as CSSProperties;
+  }, [currentGuide]);
 
   const progressMutation = useMutation({
     mutationFn: ({ stepId, isComplete }: { stepId: string; isComplete: boolean }) =>
@@ -196,7 +206,7 @@ export function DashboardOverview({
                   )}
                 </p>
               ) : currentGuide && (
-                <>
+                <div style={currentGuideAccentStyle}>
                   {/* Guide header */}
                   <div className="hdash__guide-header">
                     <div className="hdash__guide-header-left">
@@ -304,7 +314,7 @@ export function DashboardOverview({
                     ))}
                   </div>
 
-                </>
+                </div>
               )}
             </div>
           )}
@@ -357,7 +367,7 @@ export function DashboardOverview({
       <div className="hdash__overview-aside">
         <div className="hdash__aside-card">
           <div className="hdash__aside-header">
-            <h3 className="hdash__aside-title">REMINDERS &amp; MILESTONES</h3>
+            <h3 className="hdash__aside-title">REMINDERS</h3>
             <button
               className="hdash__overview-link"
               type="button"

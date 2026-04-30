@@ -220,6 +220,48 @@ def test_list_activity_filters_source_filter_changed_chat_events(monkeypatch) ->
     assert [event.id for event in events] == ["event-keep"]
 
 
+def test_list_activity_filters_analytics_view_events(monkeypatch) -> None:
+    rows = [
+        {
+            "id": "event-summary",
+            "hub_id": "hub-1",
+            "user_id": "user-1",
+            "action": "viewed",
+            "resource_type": "analytics_summary",
+            "metadata": {},
+            "created_at": "2026-01-01T00:02:00Z",
+        },
+        {
+            "id": "event-trends",
+            "hub_id": "hub-1",
+            "user_id": "user-1",
+            "action": "viewed",
+            "resource_type": "analytics_trends",
+            "metadata": {},
+            "created_at": "2026-01-01T00:01:00Z",
+        },
+        {
+            "id": "event-keep",
+            "hub_id": "hub-1",
+            "user_id": "user-1",
+            "action": "created",
+            "resource_type": "hub",
+            "metadata": {"name": "Launch Hub"},
+            "created_at": "2026-01-01T00:00:00Z",
+        },
+    ]
+    fake_admin = FakeAdmin(pages=[[]])
+    monkeypatch.setattr(
+        store_module.store,
+        "service_client",
+        SimpleNamespace(auth=SimpleNamespace(admin=fake_admin)),
+    )
+
+    events = store_module.store.list_activity(FakeClient(rows), "user-1", hub_ids=["hub-1"], limit=10)
+
+    assert [event.id for event in events] == ["event-keep"]
+
+
 def test_log_activity_skips_source_filter_changed_chat_events() -> None:
     client = FakeInsertClient()
 

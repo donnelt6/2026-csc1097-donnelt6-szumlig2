@@ -28,6 +28,7 @@
 }
 
 .nav-content {
+  position: relative;
   height: 100%;
   max-width: 100%;
   min-width: 0;
@@ -94,7 +95,12 @@
 }
 
 .nav-search--hubs {
-  margin-left: 14px;
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(480px, calc(100% - 420px));
+  max-width: 480px;
+  margin: 0;
 }
 
 .nav-chat-search {
@@ -896,7 +902,7 @@
 }
 
 .menu-item--theme {
-  display: none;
+  display: flex;
 }
 
 .menu-item:hover {

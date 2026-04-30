@@ -354,14 +354,6 @@
     gap: 6px;
   }
 
-  .theme-toggle {
-    display: none;
-  }
-
-  .menu-item--theme {
-    display: flex;
-  }
-
   .brand {
     font-size: 1rem;
   }

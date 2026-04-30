@@ -250,7 +250,7 @@ export default function HomePage() {
         <HubAppearanceModal
           mode="create"
           title="Create a new hub"
-          subtitle="Shape the look of your hub before you add docs, sources, and AI chat."
+          subtitle="Set up a new space for your documentation."
           submitLabel="Create hub"
           isSubmitting={createMutation.isPending}
           onClose={() => setCreateModalOpen(false)}

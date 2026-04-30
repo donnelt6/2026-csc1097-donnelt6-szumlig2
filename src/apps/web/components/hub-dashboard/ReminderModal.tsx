@@ -3,6 +3,7 @@
 // ReminderModal.tsx: Modal for creating and editing reminders with date and time pickers.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import type { CSSProperties } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { XMarkIcon, TrashIcon, CheckCircleIcon, ArrowPathIcon, ChevronDownIcon } from '@heroicons/react/24/outline';
 import { createReminder, updateReminder, deleteReminder } from '../../lib/api';
@@ -10,6 +11,7 @@ import { formatLocal, pad2 } from '../../lib/dateUtils';
 import { DatePicker } from './DatePicker';
 import { TimePicker } from './TimePicker';
 import type { Reminder } from '@shared/index';
+import { DEFAULT_HUB_COLOR_KEY, HUB_COLOR_OPTIONS, getHubColorOption, type HubColorKey } from '../../lib/hubAppearance';
 
 const NOTE_MAX = 500;
 
@@ -218,6 +220,48 @@ function defaultTime(d: Date): { hour: number; minute: number } {
   return { hour: h, minute: m };
 }
 
+function getReminderColorKey(colorKey?: string | null): HubColorKey {
+  return (HUB_COLOR_OPTIONS.find((option) => option.key === colorKey)?.key ?? DEFAULT_HUB_COLOR_KEY) as HubColorKey;
+}
+
+function getReminderDotStyle(colorKey?: string | null): CSSProperties {
+  return { backgroundColor: getHubColorOption(colorKey).value };
+}
+
+function ReminderColorPicker({
+  value,
+  onChange,
+}: {
+  value: HubColorKey;
+  onChange: (value: HubColorKey) => void;
+}) {
+  return (
+    <div className="hdash__form-label">
+      <span className="hdash__form-label-text">Colour</span>
+      <div className="hub-color-grid hub-color-grid--compact hdash__reminder-color-grid">
+        {HUB_COLOR_OPTIONS.map((option) => {
+          const active = option.key === value;
+          return (
+            <button
+              key={option.key}
+              type="button"
+              className={`hub-color-tile hub-color-tile--compact${active ? ' hub-color-tile--active' : ''}`}
+              onClick={() => onChange(option.key)}
+              aria-pressed={active}
+              aria-label={`Select ${option.label} reminder color`}
+              style={{ ['--hub-color-outline' as string]: option.value }}
+            >
+              <span className="hub-color-tile__swatch hub-color-tile__swatch--compact" style={{ backgroundColor: option.value }}>
+                {active ? <span className="hub-color-tile__check" aria-hidden="true" /> : null}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 interface DayModalProps {
   mode: 'day';
   hubId: string;
@@ -323,7 +367,10 @@ function DayRemindersList({ reminders, onEdit }: { reminders: Reminder[]; onEdit
       {sorted.map((r) => (
         <div key={r.id} className="hdash__modal-reminder" onClick={() => onEdit(r)}>
           <div className="hdash__modal-reminder-info">
-            <span className="hdash__modal-reminder-msg">{r.title || r.message || 'Reminder'}</span>
+            <span className="hdash__modal-reminder-title-row">
+              <span className="hdash__modal-reminder-dot" style={getReminderDotStyle(r.color_key)} />
+              <span className="hdash__modal-reminder-msg">{r.title || r.message || 'Reminder'}</span>
+            </span>
             {r.title && r.message && (
               <span className="hdash__modal-reminder-note">{r.message}</span>
             )}
@@ -347,6 +394,7 @@ function DayCreateForm({ hubId, date, onSaved }: { hubId: string; date: Date; on
   const [minute, setMinute] = useState(defaults.minute);
   const [title, setTitle] = useState('');
   const [message, setMessage] = useState('');
+  const [colorKey, setColorKey] = useState<HubColorKey>(DEFAULT_HUB_COLOR_KEY);
   const [notifyBefore, setNotifyBefore] = useState<number | null>(1440);
   const [notifyValid, setNotifyValid] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -357,6 +405,7 @@ function DayCreateForm({ hubId, date, onSaved }: { hubId: string; date: Date; on
       queryClient.invalidateQueries({ queryKey: ['reminders', hubId] });
       setTitle('');
       setMessage('');
+      setColorKey(DEFAULT_HUB_COLOR_KEY);
       setHour(9);
       setMinute(0);
       setNotifyBefore(1440);
@@ -373,6 +422,7 @@ function DayCreateForm({ hubId, date, onSaved }: { hubId: string; date: Date; on
     const iso = buildIso(toDateStr(date), hour, minute);
     createMut.mutate({
       hub_id: hubId,
+      color_key: colorKey,
       due_at: iso,
       timezone,
       title: title.trim() || undefined,
@@ -387,6 +437,7 @@ function DayCreateForm({ hubId, date, onSaved }: { hubId: string; date: Date; on
         <span className="hdash__form-label-text">Time</span>
         <TimePicker hour={hour} minute={minute} onHourChange={setHour} onMinuteChange={setMinute} selectedDate={toDateStr(date)} />
       </div>
+      <ReminderColorPicker value={colorKey} onChange={setColorKey} />
       <NotifyPicker value={notifyBefore} onChange={setNotifyBefore} onValidChange={setNotifyValid} deadlineDate={toDateStr(date)} deadlineHour={hour} deadlineMinute={minute} />
       <label className="hdash__form-label">
         <span className="hdash__form-label-text">Title</span>
@@ -432,6 +483,7 @@ function CreateModal({ hubId, onClose, onSaved }: CreateModalProps) {
   const [minute, setMinute] = useState(defaults.minute);
   const [title, setTitle] = useState('');
   const [message, setMessage] = useState('');
+  const [colorKey, setColorKey] = useState<HubColorKey>(DEFAULT_HUB_COLOR_KEY);
   const [notifyBefore, setNotifyBefore] = useState<number | null>(1440);
   const [notifyValid, setNotifyValid] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -452,6 +504,7 @@ function CreateModal({ hubId, onClose, onSaved }: CreateModalProps) {
     const iso = buildIso(date, hour, minute);
     createMut.mutate({
       hub_id: hubId,
+      color_key: colorKey,
       due_at: iso,
       timezone,
       title: title.trim() || undefined,
@@ -496,6 +549,7 @@ function CreateModal({ hubId, onClose, onSaved }: CreateModalProps) {
               maxLength={100}
             />
           </label>
+          <ReminderColorPicker value={colorKey} onChange={setColorKey} />
           <NotifyPicker value={notifyBefore} onChange={setNotifyBefore} onValidChange={setNotifyValid} deadlineDate={date} deadlineHour={hour} deadlineMinute={minute} />
           <label className="hdash__form-label">
             <span className="hdash__form-label-text">Note <span className="hdash__form-optional">(optional)</span></span>
@@ -532,6 +586,7 @@ function EditModal({ hubId, reminder, onClose, onSaved }: EditModalProps) {
   const [minute, setMinute] = useState(initial.minute);
   const [title, setTitle] = useState(reminder.title ?? '');
   const [message, setMessage] = useState(reminder.message ?? '');
+  const [colorKey, setColorKey] = useState<HubColorKey>(() => getReminderColorKey(reminder.color_key));
   const [notifyBefore, setNotifyBefore] = useState<number | null>(reminder.notify_before ?? null);
   const [notifyValid, setNotifyValid] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -568,7 +623,14 @@ function EditModal({ hubId, reminder, onClose, onSaved }: EditModalProps) {
     if (!date) { setError('Please select a date.'); return; }
     setError(null);
     const iso = buildIso(date, hour, minute);
-    updateMut.mutate({ due_at: iso, timezone, title: title.trim() || undefined, message: message.trim() || undefined, notify_before: notifyBefore });
+    updateMut.mutate({
+      due_at: iso,
+      color_key: colorKey,
+      timezone,
+      title: title.trim() || undefined,
+      message: message.trim() || undefined,
+      notify_before: notifyBefore,
+    });
   };
 
   const busy = updateMut.isPending || deleteMut.isPending;
@@ -609,6 +671,7 @@ function EditModal({ hubId, reminder, onClose, onSaved }: EditModalProps) {
               maxLength={100}
             />
           </label>
+          <ReminderColorPicker value={colorKey} onChange={setColorKey} />
           <NotifyPicker value={notifyBefore} onChange={setNotifyBefore} onValidChange={setNotifyValid} deadlineDate={date} deadlineHour={hour} deadlineMinute={minute} />
           <label className="hdash__form-label">
             <span className="hdash__form-label-text">Note <span className="hdash__form-optional">(optional)</span></span>
