@@ -116,6 +116,8 @@ export interface SourceSuggestion {
   accepted_source_id?: string | null;
 }
 
+export type ChatAnswerStatus = "answered" | "abstained" | "greeting";
+
 export interface ChatResponse {
   answer: string;
   citations: Citation[];
@@ -125,6 +127,7 @@ export interface ChatResponse {
   active_flag_id?: string | null;
   flag_status: MessageFlagStatus;
   feedback_rating?: ChatFeedbackRating | null;
+  answer_status?: ChatAnswerStatus;
 }
 
 export interface ChatPromptSuggestion {

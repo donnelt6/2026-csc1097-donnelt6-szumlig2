@@ -50,6 +50,9 @@ from .chat_helpers import (
     _normalize_retrieval_query,
     _preview_text,
     _referenced_citation_indices,
+    _score_answer_snippet_overlap,
+    _smalltalk_intent,
+    _smalltalk_response,
 )
 from .common_helpers import (
     _build_web_citations,
@@ -1108,6 +1111,7 @@ class ChatStoreMixin:
             if not _answer_has_citation(answer, len(all_citations)):
                 all_citations = []
             generation_metadata["answer_has_citations"] = bool(all_citations)
+            generation_metadata["answer_status"] = "answered"
             return answer, all_citations, usage, generation_metadata
 
         system_prompt = _hub_answer_system_prompt()
@@ -1121,6 +1125,7 @@ class ChatStoreMixin:
                 with trace.step("answer_generation", scope=scope.value, context_block_count=0) as step:
                     step.output = {"total_tokens": 0, "abstained": True}
             generation_metadata["answer_has_citations"] = False
+            generation_metadata["answer_status"] = "abstained"
             return answer, [], usage, generation_metadata
 
         raw_answer, usage = self._complete_chat_answer(
@@ -1154,8 +1159,11 @@ class ChatStoreMixin:
                 final_citations = repaired_citations
                 usage = repair_usage
 
-        # Last-resort fallback for grounded answers that lost their citations; the length floor avoids citing greetings.
-        used_top1_safety_net = False
+        # Last-resort fallback for grounded answers that lost their citations; pick the citation
+        # whose snippet has the strongest token overlap with the answer rather than always citations[0],
+        # and abstain from attributing anything if no snippet has meaningful overlap.
+        used_safety_net = False
+        safety_net_best_score = 0.0
         if (
             context_blocks
             and citations
@@ -1163,11 +1171,20 @@ class ChatStoreMixin:
             and _looks_like_grounded_answer(answer)
             and len(answer) >= 100
         ):
-            final_citations = [citations[0].model_copy(deep=True)]
-            used_top1_safety_net = True
+            scored = [(c, _score_answer_snippet_overlap(answer, c.snippet)) for c in citations]
+            best_citation, safety_net_best_score = max(scored, key=lambda pair: pair[1])
+            if safety_net_best_score >= self.chat_safety_net_min_overlap:
+                final_citations = [best_citation.model_copy(deep=True)]
+                used_safety_net = True
         generation_metadata["answer_has_citations"] = bool(final_citations)
         generation_metadata["retried_for_citations"] = retried_for_citations
-        generation_metadata["used_top1_safety_net"] = used_top1_safety_net
+        generation_metadata["used_safety_net"] = used_safety_net
+        generation_metadata["safety_net_best_score"] = round(safety_net_best_score, 3)
+        # Treat abstain-shaped answers with no citations as abstains so the frontend can show the right empty-state copy.
+        if not final_citations and not _looks_like_grounded_answer(answer):
+            generation_metadata["answer_status"] = "abstained"
+        else:
+            generation_metadata["answer_status"] = "answered"
         return answer, final_citations, usage, generation_metadata
 
     # Extract verified citations from the model's answer-plus-QUOTES payload.
@@ -1196,8 +1213,7 @@ class ChatStoreMixin:
         # Fall back to QUOTES indices when inline [n] markers are missing; gated on verified quotes to avoid hallucinated pills.
         used_quotes_fallback = False
         if not referenced_indices and verified_quote_indices:
-            seen: set[int] = set()
-            referenced_indices = [idx for idx in verified_quote_indices if not (idx in seen or seen.add(idx))]
+            referenced_indices = list(dict.fromkeys(verified_quote_indices))
             used_quotes_fallback = True
         final_citations = [hydrated_citations[idx - 1] for idx in referenced_indices]
         logger.info(
@@ -1270,6 +1286,9 @@ class ChatStoreMixin:
         )
         started_at = time.perf_counter()
 
+        # Detect greetings/thanks early so we can skip history loads and the LLM-generated title for them.
+        smalltalk = _smalltalk_intent(payload.question)
+
         existing_session_id: Optional[str] = None
         session_title: str
         user_message_id: Optional[str] = None
@@ -1279,14 +1298,21 @@ class ChatStoreMixin:
             if str(session_row["hub_id"]) != hub_id:
                 raise KeyError("Chat session not found")
             session_title = str(session_row.get("title") or "New Chat")
-            history_messages = self._recent_conversation(client, existing_session_id)
-            retrieval_history = self._recent_retrieval_context(client, existing_session_id)
+            if smalltalk:
+                history_messages = []
+                retrieval_history = []
+            else:
+                history_messages = self._recent_conversation(client, existing_session_id)
+                retrieval_history = self._recent_retrieval_context(client, existing_session_id)
             user_message_row = client.table("messages").insert(
                 {"session_id": existing_session_id, "role": "user", "content": payload.question}
             ).execute()
             user_message_id = str(user_message_row.data[0]["id"])
         else:
-            session_title = self._generate_chat_session_title(payload.question)
+            if smalltalk:
+                session_title = _fallback_chat_session_title(payload.question)
+            else:
+                session_title = self._generate_chat_session_title(payload.question)
             history_messages = []
             retrieval_history = []
         trace = ChatTraceRecorder(
@@ -1368,6 +1394,7 @@ class ChatStoreMixin:
                     session_title=str(persisted.get("session_title") or session_title or "New Chat"),
                     flag_status=MessageFlagStatus.none.value,
                     feedback_rating=None,
+                    answer_status=generation_metadata.get("answer_status", "answered"),
                 )
 
             assistant_row = (
@@ -1435,7 +1462,27 @@ class ChatStoreMixin:
                 session_title=session_title,
                 flag_status=MessageFlagStatus.none.value,
                 feedback_rating=None,
+                answer_status=generation_metadata.get("answer_status", "answered"),
             )
+
+        # Bypass retrieval for greetings and short small-talk so they don't pull a hub source into the prompt.
+        if smalltalk:
+            smalltalk_metadata = {
+                "retrieval_query": payload.question,
+                "rewrite_attempted": False,
+                "rewrite_used": False,
+                "anchored_fallback_used": False,
+                "raw_match_count": 0,
+                "selected_citation_count": 0,
+                "selected_source_ids": [],
+                "zero_hit": True,
+                "used_web_search": False,
+                "no_context_available": True,
+                "answer_has_citations": False,
+                "answer_status": "greeting",
+                "smalltalk_intent": smalltalk,
+            }
+            return finalize_response(_smalltalk_response(smalltalk), [], None, smalltalk_metadata)
 
         answer, citations, usage, generation_metadata = self._generate_chat_answer(
             client,

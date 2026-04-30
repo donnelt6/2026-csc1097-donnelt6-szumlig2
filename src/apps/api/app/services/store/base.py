@@ -42,6 +42,7 @@ class StoreBase:
         self.retrieval_same_source_penalty = settings.retrieval_same_source_penalty
         self.chat_rerank_relative_cutoff = settings.chat_rerank_relative_cutoff
         self.chat_diversity_confidence_gap = settings.chat_diversity_confidence_gap
+        self.chat_safety_net_min_overlap = settings.chat_safety_net_min_overlap
         self.faq_default_count = settings.faq_default_count
         self.faq_context_chunks_per_source = settings.faq_context_chunks_per_source
         self.faq_max_citations = settings.faq_max_citations

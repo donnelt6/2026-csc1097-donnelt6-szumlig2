@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     embedding_model: str = "text-embedding-3-small"
     chat_model: str = "gpt-4o-mini"
     top_k: int = 6
-    min_similarity: float = 0.40
+    min_similarity: float = 0.45
     max_citations: int = 3
     chat_rewrite_enabled: bool = True
     chat_rewrite_history_messages: int = 5
@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     retrieval_same_source_penalty: float = 0.10
     chat_rerank_relative_cutoff: float = 0.82
     chat_diversity_confidence_gap: float = 0.08
+    chat_safety_net_min_overlap: float = 0.08
     rate_limit_chat_per_minute: int = 20
     rate_limit_sources_per_minute: int = 30
     rate_limit_read_per_minute: int = 120

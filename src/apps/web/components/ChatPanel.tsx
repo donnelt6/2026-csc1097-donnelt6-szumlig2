@@ -315,7 +315,7 @@ export const ChatPanel = forwardRef<ChatPanelHandle, Props>(function ChatPanel(
                             return (
                               <>
                                 <MarkdownAnswer answer={message.response.answer} />
-                                {message.response.citations.length === 0 && (
+                                {message.response.citations.length === 0 && message.response.answer_status === "abstained" && (
                                   <p className="muted" style={{ marginTop: "8px", fontSize: "0.8rem" }}>
                                     No sources matched. Try rephrasing or select different sources.
                                   </p>
