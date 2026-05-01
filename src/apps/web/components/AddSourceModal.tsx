@@ -210,7 +210,7 @@ export function AddSourceModal({ hubId, open, onClose, onRefresh, youtubeFallbac
                 onClick={() => setActiveTab(key)}
               >
                 <Icon className="add-source-modal__tab-icon" />
-                {label}
+                <span className="add-source-modal__tab-label">{label}</span>
               </button>
             ))}
           </div>

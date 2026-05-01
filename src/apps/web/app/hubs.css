@@ -776,3 +776,121 @@
   font-size: 0.5rem;
 }
 
+@media (max-width: 480px) {
+  .hubs-grid .hub-card {
+    height: 260px;
+    padding: 14px;
+    border-radius: 12px;
+  }
+
+  .hubs-grid .hub-card--with-accent::before {
+    border-radius: 12px 12px 0 0;
+  }
+
+  .hubs-grid .hub-card--with-accent::after {
+    left: 8px;
+    right: 8px;
+  }
+
+  .hubs-grid .hub-card-top {
+    margin-bottom: 8px;
+  }
+
+  .hubs-grid .hub-card-icon {
+    width: 48px;
+    height: 48px;
+    min-width: 48px;
+    border-radius: 10px;
+    margin-right: 10px;
+  }
+
+  .hubs-grid .hub-card-icon svg {
+    width: 24px;
+    height: 24px;
+  }
+
+  .hubs-grid .hub-card-actions {
+    gap: 2px;
+    margin-left: 8px;
+  }
+
+  .hubs-grid .hub-favourite-button,
+  .hubs-grid .hub-menu-button {
+    padding: 3px;
+  }
+
+  .hubs-grid .hub-favourite-icon,
+  .hubs-grid .hub-menu-icon {
+    width: 20px;
+    height: 20px;
+  }
+
+  .hubs-grid .hub-card-title {
+    font-size: 1.34rem;
+    line-height: 1.25;
+  }
+
+  .hubs-grid .hub-card-title--hubs {
+    min-height: calc(1.25em * 2);
+  }
+
+  .hubs-grid .hub-card-description {
+    margin: 0 0 10px;
+    font-size: 0.93rem;
+    line-height: 1.45;
+  }
+
+  .hubs-grid .hub-card-footer {
+    gap: 8px;
+  }
+
+  .hubs-grid .hub-card-stats {
+    gap: 10px;
+    transform: none;
+    font-size: 0.64rem;
+    letter-spacing: 0.12em;
+  }
+
+  .hubs-grid .hub-stat {
+    gap: 4px;
+    min-width: 0;
+  }
+
+  .hubs-grid .hub-stat-icon {
+    width: 12px;
+    height: 12px;
+  }
+
+  .hubs-grid .hub-stat-value {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .hubs-grid .hub-card-footer-bottom {
+    padding-top: 6px;
+    transform: none;
+  }
+
+  .hubs-grid .hub-card-time {
+    font-size: 0.6rem;
+    letter-spacing: 0.12em;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .hubs-grid .hub-card-avatars > * + * {
+    margin-left: -6px;
+  }
+
+  .hubs-grid .hub-avatar {
+    width: 24px;
+    height: 24px;
+  }
+
+  .hubs-grid .hub-avatar--count {
+    font-size: 0.45rem;
+  }
+}
+

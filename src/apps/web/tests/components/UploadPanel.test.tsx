@@ -1,5 +1,5 @@
 // Tests UploadPanel interactions with mocked API calls.
-import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ComponentProps } from "react";
@@ -88,11 +88,13 @@ const buildSelectionProps = (overrides: Partial<ComponentProps<typeof UploadPane
   onClearSourceSelection: vi.fn(),
   ...overrides,
 });
+const originalMatchMedia = window.matchMedia;
 
 describe("UploadPanel", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     vi.clearAllMocks();
+    window.matchMedia = originalMatchMedia;
   });
 
   it("shows source skeleton rows while sources are loading", () => {
@@ -701,6 +703,67 @@ describe("UploadPanel", () => {
     renderWithQueryClient(<UploadPanel hubId="hub-1" sources={[webSource]} onRefresh={() => undefined} />);
 
     expect(screen.getByRole("button", { name: "Refresh" })).toBeInTheDocument();
+  });
+
+  it("shows compact status text for queued and processing sources at 1200px and below", () => {
+    window.matchMedia = vi.fn((query: string) => ({
+      matches: query === "(max-width: 1200px)",
+      media: query,
+      onchange: null,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+      addListener: () => undefined,
+      removeListener: () => undefined,
+      dispatchEvent: () => false,
+    }));
+
+    const source: Source = {
+      id: "src-processing-tablet",
+      hub_id: "hub-1",
+      type: "file",
+      original_name: "processing.pdf",
+      status: "processing",
+      created_at: "2025-01-01T00:00:00Z",
+    };
+    const queuedSource: Source = {
+      id: "src-queued-tablet",
+      hub_id: "hub-1",
+      type: "file",
+      original_name: "queued.pdf",
+      status: "queued",
+      created_at: "2025-01-01T00:00:00Z",
+    };
+
+    renderWithQueryClient(<UploadPanel hubId="hub-1" sources={[source, queuedSource]} onRefresh={() => undefined} />);
+
+    expect(within(screen.getByTestId("sources-compact-status-src-processing-tablet")).getByText("Indexing")).toBeInTheDocument();
+    expect(within(screen.getByTestId("sources-compact-status-src-queued-tablet")).getByText("Indexing")).toBeInTheDocument();
+  });
+
+  it("does not render compact status text above the 1200px breakpoint", () => {
+    window.matchMedia = vi.fn((query: string) => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+      addListener: () => undefined,
+      removeListener: () => undefined,
+      dispatchEvent: () => false,
+    }));
+
+    const source: Source = {
+      id: "src-processing-desktop",
+      hub_id: "hub-1",
+      type: "file",
+      original_name: "processing.pdf",
+      status: "processing",
+      created_at: "2025-01-01T00:00:00Z",
+    };
+
+    renderWithQueryClient(<UploadPanel hubId="hub-1" sources={[source]} onRefresh={() => undefined} />);
+
+    expect(screen.queryByTestId("sources-compact-status-src-processing-desktop")).not.toBeInTheDocument();
   });
 
   it("hides refresh for YouTube sources with active recovery", () => {

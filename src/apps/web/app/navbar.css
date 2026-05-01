@@ -904,7 +904,6 @@
 .menu-item--theme {
   display: flex;
 }
-
 .menu-item:hover {
   background: rgba(26, 115, 232, 0.08);
   transform: translateX(2px);

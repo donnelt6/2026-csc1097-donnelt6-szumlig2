@@ -26,6 +26,7 @@ import {
   refreshSource,
 } from "../lib/api";
 import { useSearch } from "../lib/SearchContext";
+import { useMediaQuery } from "../lib/useMediaQuery";
 import { AddSourceModal } from "./AddSourceModal";
 import { SuggestedSourcesPanel } from "./SuggestedSourcesPanel";
 import type { Source } from "@shared/index";
@@ -69,6 +70,7 @@ export function UploadPanel({
 }: Props) {
   const queryClient = useQueryClient();
   const { searchQuery } = useSearch();
+  const showCompactStatus = useMediaQuery("(max-width: 1200px)");
   const [statusMessage, setStatusMessage] = useState<{ text: string; type: "success" | "error" } | null>(null);
   const [deletingSourceIds, setDeletingSourceIds] = useState<Set<string>>(new Set());
   const [refreshingSourceIds, setRefreshingSourceIds] = useState<Set<string>>(new Set());
@@ -545,6 +547,21 @@ export function UploadPanel({
                         <span className="sources__recovery-badge">{recoveryStatus}</span>
                       )}
                     </span>
+                    {showCompactStatus && (
+                      <span
+                        className="sources__compact-status"
+                        data-testid={`sources-compact-status-${source.id}`}
+                      >
+                        {isDeleting ? (
+                          <span className="sources__status-indicator sources__status-indicator--processing">
+                            <span className="sources__status-spinner" />
+                            Deleting
+                          </span>
+                        ) : (
+                          <StatusIndicator status={source.status} />
+                        )}
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>

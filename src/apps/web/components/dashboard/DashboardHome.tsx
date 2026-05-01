@@ -26,6 +26,8 @@ import { selectDashboardPrompts } from './dashboardPromptRules';
 import { ProfileAvatar } from '../profile/ProfileAvatar';
 import { DashboardRemindersPanel } from './DashboardRemindersPanel';
 
+const TABLET_RECENT_HUBS_MEDIA_QUERY = '(max-width: 1100px) and (min-width: 481px)';
+
 function DashboardHomeHubSkeleton({ index }: { index: number }) {
   return (
     <div className="hub-card hub-card--skeleton" aria-hidden="true" data-testid={`dashboard-hub-skeleton-${index}`}>
@@ -84,6 +86,7 @@ export function DashboardHome() {
   const router = useRouter();
   const [heroSearch, setHeroSearch] = useState('');
   const [promptRefreshIndex, setPromptRefreshIndex] = useState(0);
+  const [showTabletRecentHubs, setShowTabletRecentHubs] = useState(false);
 
   const { data: hubs, isLoading: hubsLoading } = useQuery({
     queryKey: ['hubs'],
@@ -98,7 +101,21 @@ export function DashboardHome() {
     staleTime: 0,
   });
 
-  const recentHubs = hubs?.slice(0, 3) ?? [];
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+      return;
+    }
+
+    const mediaQuery = window.matchMedia(TABLET_RECENT_HUBS_MEDIA_QUERY);
+    const sync = () => setShowTabletRecentHubs(mediaQuery.matches);
+
+    sync();
+    mediaQuery.addEventListener('change', sync);
+    return () => mediaQuery.removeEventListener('change', sync);
+  }, []);
+
+  const recentHubLimit = showTabletRecentHubs ? 4 : 3;
+  const recentHubs = hubs?.slice(0, recentHubLimit) ?? [];
 
   const hubNameMap = buildHubNameMap(hubs);
 
@@ -259,7 +276,7 @@ export function DashboardHome() {
             </div>
             <div className="dash-recent-hubs">
               {hubsLoading ? (
-                Array.from({ length: 3 }, (_, index) => <DashboardHomeHubSkeleton key={index} index={index} />)
+                Array.from({ length: recentHubLimit }, (_, index) => <DashboardHomeHubSkeleton key={index} index={index} />)
               ) : recentHubs.length > 0 ? (
                 recentHubs.map((hub) => {
                   const appearance = resolveHubAppearance(hub.icon_key, hub.color_key);
