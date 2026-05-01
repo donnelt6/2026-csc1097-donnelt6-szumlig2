@@ -127,7 +127,7 @@ export interface ChatResponse {
   active_flag_id?: string | null;
   flag_status: MessageFlagStatus;
   feedback_rating?: ChatFeedbackRating | null;
-  answer_status?: ChatAnswerStatus;
+  answer_status: ChatAnswerStatus;
 }
 
 export interface ChatPromptSuggestion {

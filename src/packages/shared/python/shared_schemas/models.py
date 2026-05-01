@@ -79,7 +79,7 @@ class ChatResponse(BaseModel):
     session_title: str
     active_flag_id: Optional[str] = None
     flag_status: MessageFlagStatus = MessageFlagStatus.none
-    answer_status: Optional[ChatAnswerStatus] = None
+    answer_status: ChatAnswerStatus = ChatAnswerStatus.answered
 
 
 class ChatSessionSummary(BaseModel):

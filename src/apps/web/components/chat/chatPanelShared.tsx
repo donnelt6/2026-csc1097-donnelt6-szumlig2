@@ -5,37 +5,12 @@
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type {
-  ChatAnswerStatus,
   ChatResponse,
   ChatSessionSummary,
-  Citation,
   FlagReason,
   SessionMessage,
 } from "@shared/index";
-
-const ABSTAIN_MARKERS = [
-  "don't have enough information",
-  "do not have enough information",
-  "not enough information",
-  "insufficient information",
-  "cannot determine",
-  "can't determine",
-];
-const GREETING_ANSWERS = new Set([
-  "Hi! How can I help you with this hub?",
-  "You're welcome! Let me know if there's anything else I can help with.",
-]);
-
-function inferAnswerStatus(content: string, citations: Citation[]): ChatAnswerStatus {
-  if (citations.length > 0) {
-    return "answered";
-  }
-  if (GREETING_ANSWERS.has(content.trim())) {
-    return "greeting";
-  }
-  const lowered = content.toLowerCase();
-  return ABSTAIN_MARKERS.some((marker) => lowered.includes(marker)) ? "abstained" : "answered";
-}
+import { normalizeChatResponse } from "../../lib/chatResponse";
 
 export const SCOPE_OPTIONS = [
   { value: "hub" as const, label: "Hub only" },
@@ -229,15 +204,17 @@ export function convertSessionMessagesToPairs(messages: SessionMessage[]): Messa
       continue;
     }
     lastPair.response = {
-      answer: message.content,
-      citations: message.citations,
-      message_id: message.id,
-      session_id: "",
-      session_title: "",
-      active_flag_id: message.active_flag_id,
-      flag_status: message.flag_status,
-      feedback_rating: message.feedback_rating,
-      answer_status: message.answer_status ?? inferAnswerStatus(message.content, message.citations),
+      ...normalizeChatResponse({
+        answer: message.content,
+        citations: message.citations,
+        message_id: message.id,
+        session_id: "",
+        session_title: "",
+        active_flag_id: message.active_flag_id,
+        flag_status: message.flag_status,
+        feedback_rating: message.feedback_rating,
+        answer_status: message.answer_status,
+      }),
     };
   }
   return pairs;

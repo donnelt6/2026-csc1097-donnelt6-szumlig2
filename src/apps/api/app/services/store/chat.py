@@ -104,7 +104,7 @@ class ChatStoreMixin:
             return {}
         response = (
             self.service_client.table("messages")
-            .select("id,session_id,role,content,citations,created_at")
+            .select("id,session_id,role,content,citations,answer_status,created_at")
             .in_("id", message_ids)
             .execute()
         )
@@ -186,7 +186,7 @@ class ChatStoreMixin:
         self,
         client: Client,
         session_id: str,
-        fields: str = "id, role, content, citations, created_at",
+        fields: str = "id, role, content, citations, answer_status, created_at",
         limit: Optional[int] = None,
     ) -> List[Dict[str, Any]]:
         query = (
@@ -242,8 +242,8 @@ class ChatStoreMixin:
         except Exception:
             return []
 
-    # Reconstruct answer_status for hydrated assistant history until the value is
-    # stored alongside persisted session messages.
+    # Reconstruct answer_status for older assistant history rows that predate
+    # persisted answer_status support.
     def _session_message_answer_status(
         self,
         role: str,
@@ -264,6 +264,15 @@ class ChatStoreMixin:
         if any(marker in lowered for marker in _SESSION_MESSAGE_ABSTAIN_MARKERS):
             return "abstained"
         return "answered"
+
+    # Persist the derived assistant answer_status for rows created through the
+    # session-creation RPC until the database function is updated.
+    def _persist_message_answer_status(self, message_id: str, answer_status: Optional[str]) -> None:
+        if not answer_status:
+            return
+        self.service_client.table("messages").update(
+            {"answer_status": answer_status}
+        ).eq("id", str(message_id)).execute()
 
     # Convert a stored message row into the public session-message schema.
     def _serialize_session_message(
@@ -296,7 +305,7 @@ class ChatStoreMixin:
     def _visible_message_for_user(self, client: Client, message_id: str) -> Dict[str, Any]:
         response = (
             client.table("messages")
-            .select("id,session_id,role,content,citations,created_at")
+            .select("id,session_id,role,content,citations,answer_status,created_at")
             .eq("id", str(message_id))
             .limit(1)
             .execute()
@@ -309,7 +318,7 @@ class ChatStoreMixin:
     def _service_message_row(self, message_id: str) -> Dict[str, Any]:
         response = (
             self.service_client.table("messages")
-            .select("id,session_id,role,content,citations,created_at")
+            .select("id,session_id,role,content,citations,answer_status,created_at")
             .eq("id", str(message_id))
             .limit(1)
             .execute()
@@ -1393,6 +1402,8 @@ class ChatStoreMixin:
                 latency_ms = round((time.perf_counter() - started_at) * 1000, 2)
                 session_id = str(persisted["session_id"])
                 assistant_message_id = str(persisted["assistant_message_id"])
+                answer_status = generation_metadata.get("answer_status", "answered")
+                self._persist_message_answer_status(assistant_message_id, answer_status)
                 self._insert_chat_event_best_effort(
                     client,
                     hub_id=hub_id,
@@ -1436,7 +1447,7 @@ class ChatStoreMixin:
                     session_title=str(persisted.get("session_title") or session_title or "New Chat"),
                     flag_status=MessageFlagStatus.none.value,
                     feedback_rating=None,
-                    answer_status=generation_metadata.get("answer_status", "answered"),
+                    answer_status=answer_status,
                 )
 
             assistant_row = (
@@ -1447,6 +1458,7 @@ class ChatStoreMixin:
                         "role": "assistant",
                         "content": answer,
                         "citations": [citation.model_dump() for citation in response_citations],
+                        "answer_status": generation_metadata.get("answer_status", "answered"),
                         "token_usage": usage,
                     }
                 )
@@ -1517,9 +1529,9 @@ class ChatStoreMixin:
                 "raw_match_count": 0,
                 "selected_citation_count": 0,
                 "selected_source_ids": [],
-                "zero_hit": True,
+                "zero_hit": False,
                 "used_web_search": False,
-                "no_context_available": True,
+                "no_context_available": False,
                 "answer_has_citations": False,
                 "answer_status": "greeting",
                 "smalltalk_intent": smalltalk,

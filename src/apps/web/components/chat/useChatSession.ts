@@ -11,6 +11,7 @@ import {
   getChatSessionMessages,
   listChatSessions,
 } from "../../lib/api";
+import { normalizeChatResponse } from "../../lib/chatResponse";
 import type {
   ChatFeedbackRating,
   ChatSessionSummary,
@@ -558,7 +559,7 @@ export function useChatSession({ hubId, sources, onSourceSelectionChange }: UseC
     }
 
     try {
-      const response = await askQuestion(requestBody);
+      const response = normalizeChatResponse(await askQuestion(requestBody));
       if (isStale()) {
         return false;
       }

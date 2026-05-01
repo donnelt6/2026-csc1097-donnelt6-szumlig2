@@ -276,6 +276,7 @@ export async function installMockApi(page: Page, state: MockApiState) {
         active_flag_id: null,
         flag_status: "none",
         feedback_rating: null,
+        answer_status: "answered",
       });
     }
 

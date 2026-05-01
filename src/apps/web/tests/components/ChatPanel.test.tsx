@@ -124,6 +124,7 @@ describe("ChatPanel", () => {
       session_id: "session-1",
       session_title: "Assignment Help",
       flag_status: "none",
+      answer_status: "answered",
     });
 
     renderWithQueryClient(
@@ -150,6 +151,74 @@ describe("ChatPanel", () => {
     await waitFor(() => expect(screen.getByText("Assignment Help")).toBeInTheDocument());
     expect(screen.getByText("Use Moodle.")).toBeInTheDocument();
     expect(replaceMock).toHaveBeenLastCalledWith("/hubs/hub-1?session=session-1", { scroll: false });
+  });
+
+  it("shows the abstained empty-state copy for fresh responses even when answer_status is omitted", async () => {
+    vi.mocked(listChatSessions).mockResolvedValue([]);
+    const staleResponse = {
+      answer: "I don't have enough information from this hub's sources to answer that.",
+      citations: [],
+      message_id: "message-1",
+      session_id: "session-1",
+      session_title: "Assignment Help",
+      flag_status: "none",
+    } as Awaited<ReturnType<typeof askQuestion>>;
+    vi.mocked(askQuestion).mockResolvedValue(staleResponse);
+
+    renderWithQueryClient(
+      <ChatPanel hubId="hub-1" sources={sources} />
+    );
+
+    const user = userEvent.setup();
+    await waitFor(() => expect(screen.getByText("New Chat")).toBeInTheDocument());
+    await user.type(screen.getByLabelText("Ask a question"), "What is the deadline?");
+    await user.click(screen.getByRole("button", { name: "Send message" }));
+
+    await waitFor(() =>
+      expect(screen.getByText("No sources matched. Try rephrasing or select different sources.")).toBeInTheDocument()
+    );
+  });
+
+  it("clears the submitted text immediately and preserves a new draft typed while waiting", async () => {
+    vi.mocked(listChatSessions).mockResolvedValue([]);
+
+    let resolveAsk!: (value: Awaited<ReturnType<typeof askQuestion>>) => void;
+    vi.mocked(askQuestion).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveAsk = resolve;
+        })
+    );
+
+    renderWithQueryClient(
+      <ChatPanel hubId="hub-1" sources={sources} />
+    );
+
+    const user = userEvent.setup();
+    await waitFor(() => expect(screen.getByText("New Chat")).toBeInTheDocument());
+    const textarea = screen.getByLabelText("Ask a question");
+    await waitFor(() => expect(textarea).not.toBeDisabled());
+
+    await user.type(textarea, "How do I submit assignments?");
+    await user.click(screen.getByRole("button", { name: "Send message" }));
+
+    await waitFor(() => expect(textarea).toHaveValue(""));
+
+    await user.type(textarea, "What is the deadline?");
+    expect(textarea).toHaveValue("What is the deadline?");
+
+    resolveAsk({
+      answer: "Use Moodle.",
+      citations: [],
+      message_id: "message-1",
+      session_id: "session-1",
+      session_title: "Assignment Help",
+      flag_status: "none",
+      answer_status: "answered",
+    });
+
+    await waitFor(() => expect(screen.getByText("Use Moodle.")).toBeInTheDocument());
+    expect(textarea).toHaveValue("What is the deadline?");
   });
 
   it("keeps a failed first send in draft mode without creating a saved session", async () => {
@@ -182,6 +251,7 @@ describe("ChatPanel", () => {
       session_id: "session-3",
       session_title: "Global Help",
       flag_status: "none",
+      answer_status: "answered",
     });
 
     renderWithQueryClient(
@@ -308,6 +378,7 @@ describe("ChatPanel", () => {
       session_title: "Assignment Help",
       flag_status: "none",
       feedback_rating: null,
+      answer_status: "answered",
     });
     vi.mocked(submitChatFeedback).mockResolvedValue({
       message_id: "message-1",
@@ -341,6 +412,7 @@ describe("ChatPanel", () => {
       session_title: "Orientation",
       flag_status: "none",
       feedback_rating: null,
+      answer_status: "answered",
     });
     vi.mocked(submitCitationFeedback)
       .mockResolvedValueOnce({
@@ -521,6 +593,7 @@ describe("ChatPanel", () => {
       session_id: "session-9",
       session_title: "Action Items",
       flag_status: "none",
+      answer_status: "answered",
     });
 
     renderWithQueryClient(
@@ -628,6 +701,7 @@ describe("ChatPanel", () => {
       session_id: "session-1",
       session_title: "Assignments",
       flag_status: "none",
+      answer_status: "answered",
     });
     await askSettled;
 
@@ -703,6 +777,7 @@ describe("ChatPanel", () => {
       session_id: "session-1",
       session_title: "Assignments",
       flag_status: "none",
+      answer_status: "answered",
     });
     await askSettled;
 
@@ -720,6 +795,7 @@ describe("ChatPanel", () => {
       session_id: "session-1",
       session_title: "Assignment Help",
       flag_status: "none",
+      answer_status: "answered",
     });
     vi.mocked(flagMessage).mockResolvedValue({
       created: true,

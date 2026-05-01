@@ -132,6 +132,7 @@ def stub_session_helpers(monkeypatch) -> None:
         },
     )
     monkeypatch.setattr(store, "_update_chat_session_state", lambda session_id, **kwargs: None)
+    monkeypatch.setattr(store, "_persist_message_answer_status", lambda message_id, answer_status: None)
     monkeypatch.setattr(store, "_recent_conversation", lambda client, session_id: [])
     monkeypatch.setattr(store, "_recent_retrieval_context", lambda client, session_id: [])
     monkeypatch.setattr(store, "_generate_chat_session_title", lambda first_message: "Assignment Help")
@@ -789,9 +790,15 @@ def test_chat_draft_failure_does_not_persist_session(monkeypatch) -> None:
 def test_chat_persists_new_session_after_first_successful_send(monkeypatch) -> None:
     fake_client = FakeClient()
     persisted: dict[str, object] = {}
+    persisted_answer_status: dict[str, str] = {}
     monkeypatch.setattr(store, "_embed_query", lambda text: [1.0, 0.0])
     monkeypatch.setattr(store, "_match_chunks", lambda client, hub_id, embedding, top_k, source_ids=None: [])
     monkeypatch.setattr(store, "llm_client", FakeLLMClient("Hello! How can I help you today?"))
+    monkeypatch.setattr(
+        store,
+        "_persist_message_answer_status",
+        lambda message_id, answer_status: persisted_answer_status.update({"message_id": message_id, "answer_status": answer_status}),
+    )
 
     # Helper used by the surrounding test code.
     def fake_create_chat_session_with_messages(**kwargs):
@@ -814,7 +821,28 @@ def test_chat_persists_new_session_after_first_successful_send(monkeypatch) -> N
     assert persisted["user_content"] == "What is this?"
     assert persisted["assistant_content"] == "I don't have enough information from this hub's sources to answer that."
     assert persisted["source_ids"] == ["src-1", "src-2"]
+    assert persisted_answer_status == {"message_id": "message-42", "answer_status": "abstained"}
+    assert result.answer_status == "abstained"
     assert set(fake_client.inserted.keys()) == {"chat_events"}
+
+
+# Verifies that follow-up assistant inserts persist answer_status directly on the messages row.
+def test_chat_persists_answer_status_for_follow_up_assistant_messages(monkeypatch) -> None:
+    fake_client = FakeClient()
+    monkeypatch.setattr(store, "_embed_query", lambda text: [1.0, 0.0])
+    monkeypatch.setattr(store, "_match_chunks", lambda client, hub_id, embedding, top_k, source_ids=None: [])
+    monkeypatch.setattr(store, "llm_client", FakeLLMClient("This must not be used."))
+
+    payload = ChatRequest(
+        hub_id="11111111-1111-1111-1111-111111111111",
+        session_id="22222222-2222-2222-2222-222222222222",
+        question="What is this?",
+    )
+    result = store.chat(fake_client, "user-1", payload)
+
+    assert len(fake_client.inserted["messages"]) == 2
+    assert fake_client.inserted["messages"][1]["answer_status"] == "abstained"
+    assert result.answer_status == "abstained"
 
 
 # Verifies that anchor selection skips context dependent turns.
@@ -1677,6 +1705,38 @@ def test_hub_analytics_summary_uses_total_citations_shown_for_open_rate(monkeypa
     assert summary.top_sources[0].citation_returns == 2
 
 
+# Greeting turns are excluded from zero-hit rate even if older analytics rows were tagged incorrectly.
+def test_hub_analytics_summary_excludes_greetings_from_zero_hit_rate(monkeypatch) -> None:
+    monkeypatch.setattr(
+        store,
+        "service_client",
+        AnalyticsServiceClient(
+            {
+                "chat_events": [
+                    {
+                        "event_type": "answer_received",
+                        "created_at": "2026-04-02T10:00:00Z",
+                        "metadata": {"zero_hit": True, "answer_status": "greeting"},
+                    },
+                    {
+                        "event_type": "answer_received",
+                        "created_at": "2026-04-02T10:05:00Z",
+                        "metadata": {"zero_hit": True, "answer_status": "abstained"},
+                    },
+                ],
+                "chat_feedback": [],
+                "citation_feedback": [],
+                "sources": [],
+            }
+        ),
+    )
+
+    summary = store.get_hub_chat_analytics_summary("hub-1", days=30)
+
+    assert summary.total_answers == 2
+    assert summary.zero_hit_rate == 1.0
+
+
 def _citation_fixtures() -> list[Citation]:
     return [
         Citation(
@@ -1792,6 +1852,7 @@ def test_chat_smalltalk_bypasses_retrieval_and_reports_greeting_status(monkeypat
     llm_client = RecordingLLMClient("This must not be used.")
     embed_calls: list[str] = []
     match_calls: list[str] = []
+    persisted_answer_status: dict[str, str] = {}
     monkeypatch.setattr(store, "_embed_query", lambda text: embed_calls.append(text) or [1.0, 0.0])
     monkeypatch.setattr(
         store,
@@ -1799,6 +1860,11 @@ def test_chat_smalltalk_bypasses_retrieval_and_reports_greeting_status(monkeypat
         lambda client, hub_id, embedding, top_k, source_ids=None: match_calls.append(hub_id) or [],
     )
     monkeypatch.setattr(store, "llm_client", llm_client)
+    monkeypatch.setattr(
+        store,
+        "_persist_message_answer_status",
+        lambda message_id, answer_status: persisted_answer_status.update({"message_id": message_id, "answer_status": answer_status}),
+    )
 
     payload = ChatRequest(hub_id="11111111-1111-1111-1111-111111111111", question="hey")
     result = store.chat(fake_client, "user-1", payload)
@@ -1809,6 +1875,10 @@ def test_chat_smalltalk_bypasses_retrieval_and_reports_greeting_status(monkeypat
     assert llm_client.chat.completions.calls == []
     assert embed_calls == []
     assert match_calls == []
+    assert persisted_answer_status == {"message_id": "message-service-1", "answer_status": "greeting"}
+    answer_event = fake_client.inserted["chat_events"][1]
+    assert answer_event["metadata"]["zero_hit"] is False
+    assert answer_event["metadata"]["no_context_available"] is False
 
 
 # Non-greeting questions with no retrieval context surface answer_status="abstained".
