@@ -17,6 +17,7 @@ import { HubDashboardTabProvider, useHubDashboardTab, type HubDashboardTab } fro
 import { listHubs, searchChatMessages } from '../lib/api';
 import { CurrentHubProvider } from '../lib/CurrentHubContext';
 import { resolveHubAppearance } from '../lib/hubAppearance';
+import { useMediaQuery } from '../lib/useMediaQuery';
 
 type SidebarState = 'open' | 'collapsed' | 'hidden';
 const TABLET_SIDEBAR_MEDIA_QUERY = '(max-width: 1024px)';
@@ -60,6 +61,7 @@ function AppShellChrome({ children }: AppShellProps) {
   const { searchQuery, setSearchQuery } = useSearch();
   const { activeTab } = useHubTab();
   const { activeDashTab, setActiveDashTab } = useHubDashboardTab();
+  const isTabletViewport = useMediaQuery(TABLET_SIDEBAR_MEDIA_QUERY);
 
   const { activeAdminTab, setActiveAdminTab } = useHubDashboardTab();
 
@@ -292,7 +294,7 @@ function AppShellChrome({ children }: AppShellProps) {
                         </button>
                       ))}
                     </div>
-                    {(activeDashTab === 'faqs' || activeDashTab === 'guides') && (
+                    {(activeDashTab === 'faqs' || activeDashTab === 'guides') && !isTabletViewport && (
                       <div className="nav-search nav-search--dash">
                         <MagnifyingGlassIcon className="nav-search-icon" />
                         <input

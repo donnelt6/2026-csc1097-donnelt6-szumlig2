@@ -7,6 +7,12 @@ import { renderWithQueryClient } from "../test-utils";
 
 const replaceMock = vi.fn();
 let currentSearchParams = "tab=chat";
+let currentActiveTab = "chat";
+let currentActiveDashTab = "overview";
+const setSearchQueryMock = vi.fn();
+const setActiveDashTabMock = vi.fn();
+const setActiveAdminTabMock = vi.fn();
+const originalMatchMedia = window.matchMedia;
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: replaceMock, push: vi.fn() }),
@@ -32,16 +38,28 @@ vi.mock("../../components/navigation/NotificationsMenu", () => ({
 
 vi.mock("../../lib/HubTabContext", () => ({
   useHubTab: () => ({
-    activeTab: "chat",
+    activeTab: currentActiveTab,
   }),
   HubTabProvider: ({ children }: { children: React.ReactNode }) => children,
+}));
+
+vi.mock("../../lib/HubDashboardTabContext", () => ({
+  useHubDashboardTab: () => ({
+    activeDashTab: currentActiveDashTab,
+    setActiveDashTab: setActiveDashTabMock,
+    activeAdminTab: "overview",
+    setActiveAdminTab: setActiveAdminTabMock,
+    pendingDate: null,
+    setPendingDate: vi.fn(),
+  }),
+  HubDashboardTabProvider: ({ children }: { children: React.ReactNode }) => children,
 }));
 
 vi.mock("../../lib/SearchContext", () => ({
   SearchProvider: ({ children }: { children: React.ReactNode }) => children,
   useSearch: () => ({
     searchQuery: "",
-    setSearchQuery: vi.fn(),
+    setSearchQuery: setSearchQueryMock,
   }),
 }));
 
@@ -56,7 +74,13 @@ vi.mock("../../lib/api", () => ({
 describe("AppShell", () => {
   beforeEach(() => {
     currentSearchParams = "tab=chat";
+    currentActiveTab = "chat";
+    currentActiveDashTab = "overview";
     replaceMock.mockReset();
+    setSearchQueryMock.mockReset();
+    setActiveDashTabMock.mockReset();
+    setActiveAdminTabMock.mockReset();
+    window.matchMedia = originalMatchMedia;
     vi.mocked(listHubs).mockResolvedValue([
       {
         id: "hub-1",
@@ -104,6 +128,7 @@ describe("AppShell", () => {
 
   afterEach(() => {
     vi.clearAllMocks();
+    window.matchMedia = originalMatchMedia;
   });
 
   it("shows chat search results below the hub search bar and keeps sidebar chats visible", async () => {
@@ -167,4 +192,43 @@ describe("AppShell", () => {
       { scroll: false },
     );
   });
+
+  it("shows the dashboard nav search above the 1024px breakpoint", () => {
+    currentActiveTab = "dashboard";
+    currentActiveDashTab = "faqs";
+    window.matchMedia = vi.fn((query: string) => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+      addListener: () => undefined,
+      removeListener: () => undefined,
+      dispatchEvent: () => false,
+    }));
+
+    renderWithQueryClient(<AppShell><div>content</div></AppShell>);
+
+    expect(screen.getByPlaceholderText("Search FAQs...")).toBeInTheDocument();
+  });
+
+  it("removes the dashboard nav search at 1024px and below so the page-level fallback can take over", () => {
+    currentActiveTab = "dashboard";
+    currentActiveDashTab = "guides";
+    window.matchMedia = vi.fn((query: string) => ({
+      matches: query === "(max-width: 1024px)",
+      media: query,
+      onchange: null,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+      addListener: () => undefined,
+      removeListener: () => undefined,
+      dispatchEvent: () => false,
+    }));
+
+    renderWithQueryClient(<AppShell><div>content</div></AppShell>);
+
+    expect(screen.queryByPlaceholderText("Search guides...")).not.toBeInTheDocument();
+  });
+
 });

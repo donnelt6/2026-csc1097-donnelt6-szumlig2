@@ -2042,7 +2042,7 @@
 }
 
 .hdash__mobile-search {
-  display: none;
+  display: flex;
   position: relative;
   margin-bottom: 12px;
 }
