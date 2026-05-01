@@ -1441,6 +1441,9 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  flex: 1 1 0;
+  min-width: 0;
+  justify-content: center;
   padding: 10px 16px;
   font-size: 0.8125rem;
   font-weight: var(--font-medium);
@@ -1451,6 +1454,7 @@
   cursor: pointer;
   transition: color var(--transition-fast), border-color var(--transition-fast);
   margin-bottom: -1px;
+  text-align: center;
 }
 
 .add-source-modal__tab:hover {
@@ -1467,19 +1471,35 @@
   height: 16px;
 }
 
+.add-source-modal__tab-label {
+  min-width: 0;
+  line-height: 1.2;
+}
+
 @media (max-width: 480px) {
+  .add-source-modal {
+    width: calc(100vw - 24px);
+    max-width: calc(100vw - 24px);
+    max-height: calc(100dvh - 24px);
+    margin-top: 12px;
+  }
+
   .add-source-modal__header {
     padding: 20px 20px 12px;
   }
 
   .add-source-modal__tabs {
-    padding: 0 12px;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    padding: 0 10px;
   }
 
   .add-source-modal__tab {
-    padding: 10px 10px;
+    flex-direction: column;
+    gap: 3px;
+    padding: 10px 6px 9px;
     font-size: 0.75rem;
-    gap: 4px;
+    line-height: 1.2;
   }
 
   .add-source-modal__tab-icon {
@@ -1487,8 +1507,30 @@
     height: 14px;
   }
 
+  .add-source-modal__tab-label {
+    overflow-wrap: anywhere;
+    text-wrap: balance;
+  }
+
   .add-source-modal__body {
     padding: 16px 20px;
+  }
+
+  .add-source-modal__footer-row,
+  .add-source-modal__options-inline,
+  .add-source-modal__choice-row {
+    grid-template-columns: 1fr;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .add-source-modal__submit {
+    width: 100%;
+  }
+
+  .add-source-modal__queue {
+    padding: 0 20px 20px;
+    padding-top: 16px;
   }
 }
 
