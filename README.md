@@ -31,7 +31,6 @@ The main developer workspace guide is in `src/README.md`, with more detailed set
 ```text
 .
 |-- docs/                  Submission and project documents
-|-- res/                   Miscellaneous repository resources
 |-- src/                   Application workspace
 |   |-- apps/
 |   |   |-- api/
