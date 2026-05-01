@@ -45,7 +45,7 @@ import type {
   SourceSuggestion,
   SourceSuggestionStatus,
 } from "@shared/index";
-import { normalizeChatResponse } from "./chatResponse";
+import { normaliseChatResponse } from "./chatResponse";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 
@@ -343,7 +343,7 @@ export async function askQuestion(data: {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
   });
-  return normalizeChatResponse(await handle<ChatResponse>(res));
+  return normaliseChatResponse(await handle<ChatResponse>(res));
 }
 
 export async function submitChatFeedback(

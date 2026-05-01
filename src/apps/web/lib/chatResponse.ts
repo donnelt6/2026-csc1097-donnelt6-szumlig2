@@ -29,7 +29,7 @@ export function inferAnswerStatus(content: string, citations: Citation[]): ChatA
   return ABSTAIN_MARKERS.some((marker) => lowered.includes(marker)) ? "abstained" : "answered";
 }
 
-export function normalizeChatResponse(response: ChatResponseLike): ChatResponse {
+export function normaliseChatResponse(response: ChatResponseLike): ChatResponse {
   return {
     ...response,
     answer_status: response.answer_status ?? inferAnswerStatus(response.answer, response.citations),

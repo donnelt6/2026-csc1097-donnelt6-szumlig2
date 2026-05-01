@@ -162,7 +162,7 @@ describe("ChatPanel", () => {
       session_id: "session-1",
       session_title: "Assignment Help",
       flag_status: "none",
-    } as Awaited<ReturnType<typeof askQuestion>>;
+    } as unknown as Awaited<ReturnType<typeof askQuestion>>;
     vi.mocked(askQuestion).mockResolvedValue(staleResponse);
 
     renderWithQueryClient(

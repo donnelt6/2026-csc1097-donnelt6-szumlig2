@@ -7,10 +7,11 @@ import remarkGfm from "remark-gfm";
 import type {
   ChatResponse,
   ChatSessionSummary,
+  Citation,
   FlagReason,
   SessionMessage,
 } from "@shared/index";
-import { normalizeChatResponse } from "../../lib/chatResponse";
+import { normaliseChatResponse } from "../../lib/chatResponse";
 
 export const SCOPE_OPTIONS = [
   { value: "hub" as const, label: "Hub only" },
@@ -204,7 +205,7 @@ export function convertSessionMessagesToPairs(messages: SessionMessage[]): Messa
       continue;
     }
     lastPair.response = {
-      ...normalizeChatResponse({
+      ...normaliseChatResponse({
         answer: message.content,
         citations: message.citations,
         message_id: message.id,
