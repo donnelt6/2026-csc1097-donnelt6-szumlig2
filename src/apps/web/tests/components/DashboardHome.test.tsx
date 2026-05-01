@@ -34,8 +34,11 @@ vi.mock("../../lib/api", () => ({
 }));
 
 describe("DashboardHome", () => {
+  const originalMatchMedia = window.matchMedia;
+
   afterEach(() => {
     vi.clearAllMocks();
+    window.matchMedia = originalMatchMedia;
   });
 
   it("renders dashboard skeletons while home data is loading", () => {
@@ -104,6 +107,65 @@ describe("DashboardHome", () => {
     const thirdIcon = await screen.findByTestId("dashboard-hub-icon-hub-3");
     expect(thirdIcon).toHaveAttribute("data-icon-key", "chat");
     expect(thirdIcon).toHaveAttribute("data-color-key", "orange");
+  });
+
+  it("shows four recent hubs in the tablet two-column layout", async () => {
+    window.matchMedia = vi.fn((query: string) => ({
+      matches: query === "(max-width: 1100px) and (min-width: 481px)",
+      media: query,
+      onchange: null,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+      addListener: () => undefined,
+      removeListener: () => undefined,
+      dispatchEvent: () => false,
+    }));
+
+    vi.mocked(listHubs).mockResolvedValue([
+      {
+        id: "hub-1",
+        owner_id: "user-1",
+        name: "Launch Hub",
+        description: "Product launch",
+        created_at: "2025-01-01T00:00:00Z",
+      },
+      {
+        id: "hub-2",
+        owner_id: "user-1",
+        name: "Research Hub",
+        description: "Research notes",
+        created_at: "2025-01-02T00:00:00Z",
+      },
+      {
+        id: "hub-3",
+        owner_id: "user-1",
+        name: "Support Hub",
+        description: "Support scripts",
+        created_at: "2025-01-03T00:00:00Z",
+      },
+      {
+        id: "hub-4",
+        owner_id: "user-1",
+        name: "Planning Hub",
+        description: "Sprint plan",
+        created_at: "2025-01-04T00:00:00Z",
+      },
+      {
+        id: "hub-5",
+        owner_id: "user-1",
+        name: "Archive Hub",
+        description: "Older notes",
+        created_at: "2025-01-05T00:00:00Z",
+      },
+    ]);
+    vi.mocked(listReminders).mockResolvedValue([]);
+    vi.mocked(listActivity).mockResolvedValue([]);
+    vi.mocked(listChatSessions).mockResolvedValue([]);
+
+    renderWithQueryClient(<DashboardHome />);
+
+    expect(await screen.findByTestId("dashboard-hub-icon-hub-4")).toBeInTheDocument();
+    expect(screen.queryByTestId("dashboard-hub-icon-hub-5")).not.toBeInTheDocument();
   });
 
   it("shows actor attribution in recent activity entries", async () => {

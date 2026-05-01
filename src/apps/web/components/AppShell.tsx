@@ -19,6 +19,7 @@ import { CurrentHubProvider } from '../lib/CurrentHubContext';
 import { resolveHubAppearance } from '../lib/hubAppearance';
 
 type SidebarState = 'open' | 'collapsed' | 'hidden';
+const TABLET_SIDEBAR_MEDIA_QUERY = '(max-width: 1024px)';
 
 interface AppShellProps {
   children: React.ReactNode;
@@ -169,7 +170,7 @@ function AppShellChrome({ children }: AppShellProps) {
   }, [pathname]);
 
   useEffect(() => {
-    const mq = window.matchMedia('(max-width: 768px)');
+    const mq = window.matchMedia(TABLET_SIDEBAR_MEDIA_QUERY);
     const sync = () => {
       setMobileMenuOpen(false);
     };
@@ -191,7 +192,7 @@ function AppShellChrome({ children }: AppShellProps) {
   }, []);
 
   const handleMenuClick = useCallback(() => {
-    const isMobile = window.matchMedia('(max-width: 768px)').matches;
+    const isMobile = window.matchMedia(TABLET_SIDEBAR_MEDIA_QUERY).matches;
     if (isMobile) {
       setMobileMenuOpen(true);
     } else {
