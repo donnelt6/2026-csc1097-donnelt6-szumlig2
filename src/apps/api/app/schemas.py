@@ -376,6 +376,7 @@ class ChatResponse(BaseModel):
     active_flag_id: Optional[str] = None
     flag_status: str = "none"
     feedback_rating: Optional[str] = None
+    answer_status: Literal["answered", "abstained", "greeting"] = "answered"
 
 
 class HistoryMessage(BaseModel):
@@ -406,6 +407,7 @@ class SessionMessage(BaseModel):
     active_flag_id: Optional[str] = None
     flag_status: str = "none"
     feedback_rating: Optional[str] = None
+    answer_status: Optional[Literal["answered", "abstained", "greeting"]] = None
 
 
 class ChatSessionDetail(BaseModel):

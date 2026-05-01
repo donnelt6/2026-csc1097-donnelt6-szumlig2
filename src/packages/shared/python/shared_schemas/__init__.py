@@ -1,5 +1,6 @@
 from .models import (
     AssignableMembershipRole,
+    ChatAnswerStatus,
     ChatRequest,
     ChatResponse,
     ChatSessionDetail,
@@ -21,6 +22,7 @@ from .url_utils import canonicalize_web_url, extract_youtube_video_id, normalize
 
 __all__ = [
     "AssignableMembershipRole",
+    "ChatAnswerStatus",
     "ChatRequest",
     "ChatResponse",
     "ChatSessionDetail",

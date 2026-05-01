@@ -276,6 +276,7 @@ export async function installMockApi(page: Page, state: MockApiState) {
         active_flag_id: null,
         flag_status: "none",
         feedback_rating: null,
+        answer_status: "answered",
       });
     }
 
@@ -293,10 +294,11 @@ export async function installMockApi(page: Page, state: MockApiState) {
 }
 
 export async function signIn(page: Page) {
-  await page.goto("/auth");
+  await page.goto("/auth", { waitUntil: "domcontentloaded" });
+  await expect(page.getByLabel("Email")).toBeVisible();
   await page.getByLabel("Email").fill(TEST_EMAIL);
   await page.getByLabel("Password").fill(TEST_PASSWORD);
   await page.getByRole("button", { name: "Sign in" }).click();
-  await page.waitForURL((url) => url.pathname === "/");
+  await page.waitForURL((url) => url.pathname === "/", { waitUntil: "domcontentloaded" });
   await expect(page.getByTestId("brand-link")).toBeVisible();
 }

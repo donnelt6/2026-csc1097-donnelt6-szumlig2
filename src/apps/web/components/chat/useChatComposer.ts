@@ -86,11 +86,13 @@ export function useChatComposer({
     if (!nextQuestion) {
       return;
     }
+    setQuestion("");
+    resetTextareaHeight();
     const sent = await submitQuestion(nextQuestion);
     if (sent) {
-      setQuestion("");
-      resetTextareaHeight();
+      return;
     }
+    setQuestion((current) => (current.trim().length === 0 ? nextQuestion : current));
   }, [question, resetTextareaHeight, submitQuestion]);
 
   function handleComposerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {

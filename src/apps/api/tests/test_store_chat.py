@@ -132,6 +132,7 @@ def stub_session_helpers(monkeypatch) -> None:
         },
     )
     monkeypatch.setattr(store, "_update_chat_session_state", lambda session_id, **kwargs: None)
+    monkeypatch.setattr(store, "_persist_message_answer_status", lambda message_id, answer_status: None)
     monkeypatch.setattr(store, "_recent_conversation", lambda client, session_id: [])
     monkeypatch.setattr(store, "_recent_retrieval_context", lambda client, session_id: [])
     monkeypatch.setattr(store, "_generate_chat_session_title", lambda first_message: "Assignment Help")
@@ -633,9 +634,9 @@ def test_chat_reranks_before_relative_cutoff_for_low_similarity_fact_query(monke
         store,
         "_match_chunks",
         lambda client, hub_id, embedding, top_k, source_ids=None: [
-            _match("src-a", snippet="A1", similarity=0.49, embedding=[1.0, 0.0], chunk_index=0),
-            _match("src-a", snippet="A2", similarity=0.48, embedding=[0.91, 0.09], chunk_index=1),
-            _match("src-b", snippet="B1", similarity=0.47, embedding=[0.15, 0.85], chunk_index=2),
+            _match("src-a", snippet="A1", similarity=0.39, embedding=[1.0, 0.0], chunk_index=0),
+            _match("src-a", snippet="A2", similarity=0.38, embedding=[0.91, 0.09], chunk_index=1),
+            _match("src-b", snippet="B1", similarity=0.37, embedding=[0.15, 0.85], chunk_index=2),
         ],
     )
     monkeypatch.setattr(store, "llm_client", FakeLLMClient("Answer [1] [2]"))
@@ -789,9 +790,15 @@ def test_chat_draft_failure_does_not_persist_session(monkeypatch) -> None:
 def test_chat_persists_new_session_after_first_successful_send(monkeypatch) -> None:
     fake_client = FakeClient()
     persisted: dict[str, object] = {}
+    persisted_answer_status: dict[str, str] = {}
     monkeypatch.setattr(store, "_embed_query", lambda text: [1.0, 0.0])
     monkeypatch.setattr(store, "_match_chunks", lambda client, hub_id, embedding, top_k, source_ids=None: [])
     monkeypatch.setattr(store, "llm_client", FakeLLMClient("Hello! How can I help you today?"))
+    monkeypatch.setattr(
+        store,
+        "_persist_message_answer_status",
+        lambda message_id, answer_status: persisted_answer_status.update({"message_id": message_id, "answer_status": answer_status}),
+    )
 
     # Helper used by the surrounding test code.
     def fake_create_chat_session_with_messages(**kwargs):
@@ -814,7 +821,28 @@ def test_chat_persists_new_session_after_first_successful_send(monkeypatch) -> N
     assert persisted["user_content"] == "What is this?"
     assert persisted["assistant_content"] == "I don't have enough information from this hub's sources to answer that."
     assert persisted["source_ids"] == ["src-1", "src-2"]
+    assert persisted_answer_status == {"message_id": "message-42", "answer_status": "abstained"}
+    assert result.answer_status == "abstained"
     assert set(fake_client.inserted.keys()) == {"chat_events"}
+
+
+# Verifies that follow-up assistant inserts persist answer_status directly on the messages row.
+def test_chat_persists_answer_status_for_follow_up_assistant_messages(monkeypatch) -> None:
+    fake_client = FakeClient()
+    monkeypatch.setattr(store, "_embed_query", lambda text: [1.0, 0.0])
+    monkeypatch.setattr(store, "_match_chunks", lambda client, hub_id, embedding, top_k, source_ids=None: [])
+    monkeypatch.setattr(store, "llm_client", FakeLLMClient("This must not be used."))
+
+    payload = ChatRequest(
+        hub_id="11111111-1111-1111-1111-111111111111",
+        session_id="22222222-2222-2222-2222-222222222222",
+        question="What is this?",
+    )
+    result = store.chat(fake_client, "user-1", payload)
+
+    assert len(fake_client.inserted["messages"]) == 2
+    assert fake_client.inserted["messages"][1]["answer_status"] == "abstained"
+    assert result.answer_status == "abstained"
 
 
 # Verifies that anchor selection skips context dependent turns.
@@ -1675,3 +1703,303 @@ def test_hub_analytics_summary_uses_total_citations_shown_for_open_rate(monkeypa
     assert summary.citation_flag_rate == 0.0
     assert summary.top_sources[0].source_id == "src-2"
     assert summary.top_sources[0].citation_returns == 2
+
+
+# Greeting turns are excluded from zero-hit rate even if older analytics rows were tagged incorrectly.
+def test_hub_analytics_summary_excludes_greetings_from_zero_hit_rate(monkeypatch) -> None:
+    monkeypatch.setattr(
+        store,
+        "service_client",
+        AnalyticsServiceClient(
+            {
+                "chat_events": [
+                    {
+                        "event_type": "answer_received",
+                        "created_at": "2026-04-02T10:00:00Z",
+                        "metadata": {"zero_hit": True, "answer_status": "greeting"},
+                    },
+                    {
+                        "event_type": "answer_received",
+                        "created_at": "2026-04-02T10:05:00Z",
+                        "metadata": {"zero_hit": True, "answer_status": "abstained"},
+                    },
+                ],
+                "chat_feedback": [],
+                "citation_feedback": [],
+                "sources": [],
+            }
+        ),
+    )
+
+    summary = store.get_hub_chat_analytics_summary("hub-1", days=30)
+
+    assert summary.total_answers == 2
+    assert summary.zero_hit_rate == 1.0
+
+
+def _citation_fixtures() -> list[Citation]:
+    return [
+        Citation(
+            source_id="src-handbook",
+            snippet="VPN access is granted to new engineers via the IT helpdesk after onboarding.",
+            chunk_index=0,
+        ),
+        Citation(
+            source_id="src-policies",
+            snippet="Mandatory security training must be completed within the first thirty days of employment.",
+            chunk_index=1,
+        ),
+    ]
+
+
+# Inline [n] markers continue to surface their citation as before.
+def test_extract_grounded_chat_citations_inline_marker_only() -> None:
+    raw = (
+        "VPN access is granted via the IT helpdesk. [1]\n"
+        "QUOTES: {\"1\": [{\"paraphrase\": \"VPN goes through helpdesk\", "
+        "\"quote\": \"VPN access is granted to new engineers via the IT helpdesk\"}]}"
+    )
+    answer, citations = store._extract_grounded_chat_citations(raw, _citation_fixtures())
+    assert "[1]" in answer
+    assert [c.source_id for c in citations] == ["src-handbook"]
+
+
+# When inline markers are missing, fall back to QUOTES keys whose quotes verify against the snippet.
+def test_extract_grounded_chat_citations_quotes_fallback_with_verified_quotes() -> None:
+    raw = (
+        "VPN access is granted via the IT helpdesk after onboarding.\n"
+        "QUOTES: {\"1\": [{\"paraphrase\": \"VPN goes through helpdesk\", "
+        "\"quote\": \"VPN access is granted to new engineers via the IT helpdesk\"}]}"
+    )
+    answer, citations = store._extract_grounded_chat_citations(raw, _citation_fixtures())
+    assert "VPN access is granted" in answer
+    assert [c.source_id for c in citations] == ["src-handbook"]
+    assert citations[0].relevant_quotes
+
+
+# Without verified quotes the QUOTES fallback must not surface a citation, to avoid hallucinated pills.
+def test_extract_grounded_chat_citations_quotes_fallback_skips_unverified_quotes() -> None:
+    raw = (
+        "VPN access is granted via the IT helpdesk after onboarding.\n"
+        "QUOTES: {\"1\": [{\"paraphrase\": \"unrelated\", "
+        "\"quote\": \"blue dragons fly through outer space at midnight\"}]}"
+    )
+    _, citations = store._extract_grounded_chat_citations(raw, _citation_fixtures())
+    assert citations == []
+
+
+# When inline markers AND QUOTES both reference the same index, a single citation surfaces.
+def test_extract_grounded_chat_citations_inline_and_quotes_do_not_duplicate() -> None:
+    raw = (
+        "VPN access is granted via the IT helpdesk. [1]\n"
+        "QUOTES: {\"1\": [{\"paraphrase\": \"VPN goes through helpdesk\", "
+        "\"quote\": \"VPN access is granted to new engineers via the IT helpdesk\"}]}"
+    )
+    _, citations = store._extract_grounded_chat_citations(raw, _citation_fixtures())
+    assert len(citations) == 1
+    assert citations[0].source_id == "src-handbook"
+
+
+# With neither inline markers nor QUOTES JSON, no citations surface.
+def test_extract_grounded_chat_citations_no_inline_and_no_quotes() -> None:
+    raw = "VPN access is granted via the IT helpdesk after onboarding."
+    _, citations = store._extract_grounded_chat_citations(raw, _citation_fixtures())
+    assert citations == []
+
+
+# Malformed QUOTES JSON falls back to no-quotes (existing behaviour) and surfaces nothing.
+def test_extract_grounded_chat_citations_malformed_quotes_payload() -> None:
+    raw = (
+        "VPN access is granted via the IT helpdesk after onboarding.\n"
+        "QUOTES: {this is not valid json"
+    )
+    _, citations = store._extract_grounded_chat_citations(raw, _citation_fixtures())
+    assert citations == []
+
+
+# Empty completion content from the LLM falls back to the abstain text and logs a warning.
+def test_complete_chat_answer_empty_content_falls_back_to_abstain(monkeypatch, caplog) -> None:
+
+    class _EmptyCompletions:
+        def create(self, **kwargs):
+            return SimpleNamespace(
+                choices=[SimpleNamespace(message=SimpleNamespace(content=None))],
+                usage=None,
+            )
+
+    llm = SimpleNamespace(chat=SimpleNamespace(completions=_EmptyCompletions()))
+    monkeypatch.setattr(store, "llm_client", llm)
+
+    with caplog.at_level("WARNING"):
+        answer, usage = store._complete_chat_answer(
+            system_prompt="sys",
+            user_prompt="user",
+            history_messages=[],
+            scope=HubScope.hub,
+            context_block_count=1,
+            trace=None,
+            step_name="answer_generation",
+        )
+
+    assert answer == "I don't have enough information from this hub's sources to answer that."
+    assert usage is None
+    assert any("chat.empty_completion" in record.message for record in caplog.records)
+
+
+# Greeting questions bypass retrieval, return a friendly canned reply, and surface answer_status="greeting".
+def test_chat_smalltalk_bypasses_retrieval_and_reports_greeting_status(monkeypatch) -> None:
+    fake_client = FakeClient()
+    llm_client = RecordingLLMClient("This must not be used.")
+    embed_calls: list[str] = []
+    match_calls: list[str] = []
+    persisted_answer_status: dict[str, str] = {}
+    monkeypatch.setattr(store, "_embed_query", lambda text: embed_calls.append(text) or [1.0, 0.0])
+    monkeypatch.setattr(
+        store,
+        "_match_chunks",
+        lambda client, hub_id, embedding, top_k, source_ids=None: match_calls.append(hub_id) or [],
+    )
+    monkeypatch.setattr(store, "llm_client", llm_client)
+    monkeypatch.setattr(
+        store,
+        "_persist_message_answer_status",
+        lambda message_id, answer_status: persisted_answer_status.update({"message_id": message_id, "answer_status": answer_status}),
+    )
+
+    payload = ChatRequest(hub_id="11111111-1111-1111-1111-111111111111", question="hey")
+    result = store.chat(fake_client, "user-1", payload)
+
+    assert result.answer_status == "greeting"
+    assert result.citations == []
+    assert "Hi" in result.answer
+    assert llm_client.chat.completions.calls == []
+    assert embed_calls == []
+    assert match_calls == []
+    assert persisted_answer_status == {"message_id": "message-service-1", "answer_status": "greeting"}
+    answer_event = fake_client.inserted["chat_events"][1]
+    assert answer_event["metadata"]["zero_hit"] is False
+    assert answer_event["metadata"]["no_context_available"] is False
+
+
+# Non-greeting questions with no retrieval context surface answer_status="abstained".
+def test_chat_no_context_question_reports_abstained_status(monkeypatch) -> None:
+    fake_client = FakeClient()
+    llm_client = RecordingLLMClient("This must not be used.")
+    monkeypatch.setattr(store, "_embed_query", lambda text: [1.0, 0.0])
+    monkeypatch.setattr(store, "_match_chunks", lambda client, hub_id, embedding, top_k, source_ids=None: [])
+    monkeypatch.setattr(store, "llm_client", llm_client)
+
+    payload = ChatRequest(hub_id="11111111-1111-1111-1111-111111111111", question="What is the secret root password?")
+    result = store.chat(fake_client, "user-1", payload)
+
+    assert result.answer_status == "abstained"
+    assert result.citations == []
+
+
+# Grounded answers carry answer_status="answered" so the frontend keeps the citations panel and skips the empty-state copy.
+def test_chat_grounded_answer_reports_answered_status(monkeypatch) -> None:
+    fake_client = FakeClient()
+    monkeypatch.setattr(store, "_embed_query", lambda text: [1.0, 0.0])
+    monkeypatch.setattr(
+        store,
+        "_match_chunks",
+        lambda client, hub_id, embedding, top_k, source_ids=None: [
+            _match("src-a", snippet="A1", similarity=0.99, embedding=[1.0, 0.0], chunk_index=0),
+        ],
+    )
+    monkeypatch.setattr(store, "llm_client", FakeLLMClient("Direct answer with reference [1]"))
+
+    payload = ChatRequest(hub_id="11111111-1111-1111-1111-111111111111", question="What time does check-in open?")
+    result = store.chat(fake_client, "user-1", payload)
+
+    assert result.answer_status == "answered"
+    assert len(result.citations) == 1
+
+
+# Smalltalk intent surfaces the right category for greetings, thanks, and real questions.
+@pytest.mark.parametrize(
+    "question,expected",
+    [
+        ("hi", "greeting"),
+        ("Hi Caddie", "greeting"),
+        ("good morning", "greeting"),
+        ("how are you", "greeting"),
+        ("thanks", "thanks"),
+        ("thank you!", "thanks"),
+        ("ty", "thanks"),
+        ("cheers", "thanks"),
+        ("much appreciated", "thanks"),
+        ("appreciate it", "thanks"),
+        ("what steps are required for a new engineer to gain VPN access", None),
+        ("", None),
+    ],
+)
+def test_smalltalk_intent_categorises_questions(question: str, expected) -> None:
+    assert chat_helpers._smalltalk_intent(question) == expected
+
+
+# Safety net picks the citation whose snippet shares the most tokens with the answer, not citations[0].
+def test_safety_net_picks_highest_overlap_citation(monkeypatch) -> None:
+    fake_client = FakeClient()
+    monkeypatch.setattr(store, "_embed_query", lambda text: [1.0, 0.0])
+    monkeypatch.setattr(
+        store,
+        "_match_chunks",
+        lambda client, hub_id, embedding, top_k, source_ids=None: [
+            _match(
+                "src-onboarding",
+                snippet="Onboarding playbook covers laptop setup and HR forms during week one.",
+                similarity=0.92,
+                embedding=[1.0, 0.0],
+                chunk_index=0,
+            ),
+            _match(
+                "src-vpn",
+                snippet="VPN access is granted to new engineers via the IT helpdesk after onboarding.",
+                similarity=0.88,
+                embedding=[0.95, 0.05],
+                chunk_index=1,
+            ),
+        ],
+    )
+    answer_without_markers = (
+        "VPN access for new engineers is granted via the IT helpdesk once onboarding is complete, "
+        "which means the engineer should reach out to the helpdesk to enable VPN access during the "
+        "first week of work after the standard onboarding paperwork is finished."
+    )
+    monkeypatch.setattr(store, "llm_client", FakeLLMClient(answer_without_markers))
+
+    payload = ChatRequest(hub_id="11111111-1111-1111-1111-111111111111", question="how do new engineers get VPN access")
+    result = store.chat(fake_client, "user-1", payload)
+
+    assert len(result.citations) == 1
+    assert result.citations[0].source_id == "src-vpn"
+
+
+# Safety net attaches no citation when no snippet has meaningful overlap with the answer.
+def test_safety_net_abstains_when_overlap_below_threshold(monkeypatch) -> None:
+    fake_client = FakeClient()
+    monkeypatch.setattr(store, "_embed_query", lambda text: [1.0, 0.0])
+    monkeypatch.setattr(
+        store,
+        "_match_chunks",
+        lambda client, hub_id, embedding, top_k, source_ids=None: [
+            _match(
+                "src-unrelated",
+                snippet="Cafeteria menu rotates weekly and accepts vegetarian requests by Thursday.",
+                similarity=0.92,
+                embedding=[1.0, 0.0],
+                chunk_index=0,
+            ),
+        ],
+    )
+    answer_without_markers = (
+        "The mainframe rebooted at midnight and now requires a fresh kerberos ticket before any "
+        "downstream batch jobs can resume on the production cluster, so check the runbook before retrying."
+    )
+    monkeypatch.setattr(store, "llm_client", FakeLLMClient(answer_without_markers))
+
+    payload = ChatRequest(hub_id="11111111-1111-1111-1111-111111111111", question="what happened to the mainframe")
+    result = store.chat(fake_client, "user-1", payload)
+
+    assert result.citations == []

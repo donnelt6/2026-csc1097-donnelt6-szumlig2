@@ -16,6 +16,11 @@ _VAGUE_FOLLOW_UP_PHRASES = {
     "elaborate",
 }
 _DEICTIC_TOKENS = {"that", "this", "it", "those", "these", "there", "here"}
+_OVERLAP_STOPWORDS = {
+    "the", "a", "an", "and", "or", "of", "to", "in", "is", "it",
+    "for", "on", "with", "that", "this", "as", "be", "are", "was",
+    "were", "by", "at", "from",
+}
 _FOLLOW_UP_LEAD_TOKENS = {
     "why",
     "how",
@@ -356,6 +361,16 @@ def _looks_like_grounded_answer(answer: str) -> bool:
     return not any(marker in lowered for marker in abstention_markers)
 
 
+def _score_answer_snippet_overlap(answer: str, snippet: str) -> float:
+    answer_tokens = {t for t in re.findall(r"\b[\w']+\b", (answer or "").lower()) if t not in _OVERLAP_STOPWORDS}
+    snippet_tokens = {t for t in re.findall(r"\b[\w']+\b", (snippet or "").lower()) if t not in _OVERLAP_STOPWORDS}
+    if not answer_tokens or not snippet_tokens:
+        return 0.0
+    intersection = answer_tokens & snippet_tokens
+    union = answer_tokens | snippet_tokens
+    return len(intersection) / len(union)
+
+
 def _referenced_citation_indices(answer: str, max_index: int) -> List[int]:
     if not answer or max_index <= 0:
         return []
@@ -370,6 +385,47 @@ def _referenced_citation_indices(answer: str, max_index: int) -> List[int]:
             seen.add(idx)
             indices.append(idx)
     return indices
+
+
+_SMALLTALK_TRAILER = (
+    r"\s*[!.?,]*\s*(caddie|caddy|there|all|everyone|guys|y'?all|folks|team|friend)?"
+    r"\s*[!.?,]*\s*$"
+)
+_GREETING_PATTERN = re.compile(
+    r"^\s*(hi+|hey+|hello+|yo+|hiya|howdy|sup|wassup|"
+    r"good\s+(morning|afternoon|evening|day|night)|"
+    r"how\s+are\s+(you|u|ya|things)|how'?s\s+it\s+going|how'?s\s+things|"
+    r"what'?s\s+up|whatcha\s+doing|"
+    r"nice\s+to\s+meet\s+you|good\s+to\s+meet\s+you)"
+    + _SMALLTALK_TRAILER,
+    re.IGNORECASE,
+)
+_THANKS_PATTERN = re.compile(
+    r"^\s*(thanks?|thank\s+you|ty|cheers|much\s+appreciated|appreciate\s+(it|that))"
+    + _SMALLTALK_TRAILER,
+    re.IGNORECASE,
+)
+
+
+def _smalltalk_intent(question: str) -> Optional[str]:
+    normalized = (question or "").strip()
+    if not normalized or len(normalized) > 80:
+        return None
+    if _GREETING_PATTERN.match(normalized):
+        return "greeting"
+    if _THANKS_PATTERN.match(normalized):
+        return "thanks"
+    return None
+
+
+def _is_smalltalk(question: str) -> bool:
+    return _smalltalk_intent(question) is not None
+
+
+def _smalltalk_response(intent: str) -> str:
+    if intent == "thanks":
+        return "You're welcome! Let me know if there's anything else I can help with."
+    return "Hi! How can I help you with this hub?"
 
 
 def _is_exploratory_chat_question(question: str) -> bool:
@@ -498,7 +554,8 @@ def _hub_answer_system_prompt() -> str:
         "If the context is insufficient, say you don't have enough information. "
         "Every factual claim supported by the context must include an inline citation like [n] that matches the context list. "
         "Do not give an uncited factual answer. "
-        "If the user sends small talk or a greeting, respond politely and ask how you can help.\n\n"
+        "If the user includes a brief greeting or thanks alongside a real question, "
+        "acknowledge it in one short clause and answer the question.\n\n"
         "After your answer, on a new line, output QUOTES: followed by a JSON object.\n"
         "For each citation number you used, provide an array of objects with two fields:\n"
         '- "paraphrase": a short, clean summary of the point you are making (one sentence).\n'
@@ -580,6 +637,7 @@ __all__ = [
     "_hub_answer_repair_prompt",
     "_hub_answer_system_prompt",
     "_is_exploratory_chat_question",
+    "_is_smalltalk",
     "_is_vague_follow_up",
     "_looks_like_grounded_answer",
     "_match_quote_pairs_to_snippet",
@@ -590,4 +648,7 @@ __all__ = [
     "_parse_steps_from_text",
     "_preview_text",
     "_referenced_citation_indices",
+    "_score_answer_snippet_overlap",
+    "_smalltalk_intent",
+    "_smalltalk_response",
 ]

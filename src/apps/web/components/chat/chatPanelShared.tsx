@@ -11,6 +11,7 @@ import type {
   FlagReason,
   SessionMessage,
 } from "@shared/index";
+import { normaliseChatResponse } from "../../lib/chatResponse";
 
 export const SCOPE_OPTIONS = [
   { value: "hub" as const, label: "Hub only" },
@@ -204,14 +205,17 @@ export function convertSessionMessagesToPairs(messages: SessionMessage[]): Messa
       continue;
     }
     lastPair.response = {
-      answer: message.content,
-      citations: message.citations,
-      message_id: message.id,
-      session_id: "",
-      session_title: "",
-      active_flag_id: message.active_flag_id,
-      flag_status: message.flag_status,
-      feedback_rating: message.feedback_rating,
+      ...normaliseChatResponse({
+        answer: message.content,
+        citations: message.citations,
+        message_id: message.id,
+        session_id: "",
+        session_title: "",
+        active_flag_id: message.active_flag_id,
+        flag_status: message.flag_status,
+        feedback_rating: message.feedback_rating,
+        answer_status: message.answer_status,
+      }),
     };
   }
   return pairs;

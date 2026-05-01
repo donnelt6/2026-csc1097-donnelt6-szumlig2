@@ -48,7 +48,21 @@ class AnalyticsStoreMixin:
         average_latency_ms = round(sum(_safe_float((row.get("metadata") or {}).get("latency_ms")) for row in answer_events) / total_answers, 2) if total_answers else 0.0
         total_tokens = sum(_safe_int((row.get("metadata") or {}).get("total_tokens")) for row in answer_events)
         rewrite_usage_rate = round(sum(1 for row in answer_events if (row.get("metadata") or {}).get("rewrite_used")) / total_answers, 3) if total_answers else 0.0
-        zero_hit_rate = round(sum(1 for row in answer_events if (row.get("metadata") or {}).get("zero_hit")) / total_answers, 3) if total_answers else 0.0
+        retrieval_answer_events = [
+            row
+            for row in answer_events
+            if (row.get("metadata") or {}).get("answer_status") != "greeting"
+        ]
+        retrieval_answer_count = len(retrieval_answer_events)
+        zero_hit_rate = (
+            round(
+                sum(1 for row in retrieval_answer_events if (row.get("metadata") or {}).get("zero_hit"))
+                / retrieval_answer_count,
+                3,
+            )
+            if retrieval_answer_count
+            else 0.0
+        )
 
         # Rank sources by how often they were returned and interacted with so the summary can surface the most-used material.
         source_counts: Dict[str, Dict[str, int]] = defaultdict(lambda: {"returns": 0, "opens": 0, "flags": 0})

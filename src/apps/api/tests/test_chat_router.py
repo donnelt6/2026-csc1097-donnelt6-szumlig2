@@ -271,10 +271,11 @@ def test_get_chat_session_messages(client, monkeypatch) -> None:
         messages=[
             SessionMessage(
                 id="message-1",
-                role="user",
-                content="How do I submit assignments?",
+                role="assistant",
+                content="Hi! How can I help you with this hub?",
                 citations=[],
                 created_at="2026-01-01T00:00:00Z",
+                answer_status="greeting",
             )
         ],
     )
@@ -293,7 +294,8 @@ def test_get_chat_session_messages(client, monkeypatch) -> None:
     assert resp.headers["X-RateLimit-Limit"] == "120"
     data = resp.json()
     assert data["session"]["id"] == "session-1"
-    assert data["messages"][0]["content"] == "How do I submit assignments?"
+    assert data["messages"][0]["content"] == "Hi! How can I help you with this hub?"
+    assert data["messages"][0]["answer_status"] == "greeting"
 
 
 # Verifies that search chat messages.
