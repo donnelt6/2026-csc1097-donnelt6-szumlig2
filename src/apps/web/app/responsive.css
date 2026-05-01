@@ -367,8 +367,8 @@
 }
 
 @media (max-width: 480px) {
-  .hubs-page {
-    padding: 16px;
+  .page-content--hubs .hubs-page {
+    padding: 16px 10px;
   }
 
   .hubs-page-title {
