@@ -20,6 +20,8 @@ from .app import logger, settings
 
 
 def scan_source_suggestions() -> dict:
+    # Run hub suggestion scans behind per-hub locks so multiple worker nodes do
+    # not generate duplicate suggestions for the same active hub.
     client = _common._get_supabase_client()
     now = datetime.now(timezone.utc)
     eligible_hubs = _list_eligible_source_suggestion_hubs(client, now=now)
@@ -48,6 +50,8 @@ def scan_source_suggestions() -> dict:
 
 
 def _get_redis_client() -> redis.Redis:
+    # Upstash-style rediss URLs may encode SSL requirements in the querystring,
+    # so normalize them before constructing the Redis client.
     redis_url = settings.redis_url
     client_kwargs: dict = {}
 
@@ -87,6 +91,8 @@ def _get_redis_client() -> redis.Redis:
 
 
 def _acquire_source_suggestion_lock(hub_id: str) -> Optional[tuple[redis.Redis, str, str]]:
+    # Store a random token in Redis so only the lock owner can safely release it
+    # after a scan completes or fails.
     client = _get_redis_client()
     key = f"locks:source-suggestions:{hub_id}"
     token = str(uuid.uuid4())
@@ -112,6 +118,8 @@ def _release_source_suggestion_lock(lock: tuple[redis.Redis, str, str]) -> None:
 
 
 def _list_eligible_source_suggestion_hubs(client: Client, now: Optional[datetime] = None) -> list[dict]:
+    # Eligibility depends on recent hub activity, enough complete sources, and
+    # no already-pending suggestions waiting for review.
     now = now or datetime.now(timezone.utc)
     hubs_response = client.table("hubs").select("id,last_source_suggestion_scan_at").execute()
     hubs = hubs_response.data or []
@@ -160,6 +168,8 @@ def _filter_eligible_source_suggestion_hubs(
     pending_hub_ids: set[str],
     now: datetime,
 ) -> list[dict]:
+    # Keep the final eligibility rules separate so tests can exercise them
+    # without setting up live Supabase responses.
     eligible: list[dict] = []
     cooldown = timedelta(minutes=max(1, settings.suggested_sources_hub_cooldown_minutes))
     min_sources = max(1, settings.suggested_sources_min_complete_sources)
@@ -182,6 +192,8 @@ def _filter_eligible_source_suggestion_hubs(
 
 
 def _generate_source_suggestions_for_hub(client: Client, hub_id: str, now: Optional[datetime] = None) -> dict:
+    # Build compact hub context, ask the model for public sources, then insert
+    # only suggestions that are genuinely new for that hub.
     now = now or datetime.now(timezone.utc)
     seed_source_ids, context_text = _build_source_suggestion_context(client, hub_id)
     if len(seed_source_ids) < settings.suggested_sources_min_complete_sources or not context_text.strip():
@@ -210,6 +222,8 @@ def _generate_source_suggestions_for_hub(client: Client, hub_id: str, now: Optio
 
 
 def _build_source_suggestion_context(client: Client, hub_id: str) -> tuple[list[str], str]:
+    # Feed the model recent complete-source excerpts instead of whole documents
+    # so prompt size stays bounded and suggestion generation remains cheap.
     source_rows = (
         client.table("sources")
         .select("id,type,original_name,ingestion_metadata,created_at")
@@ -271,6 +285,8 @@ def _build_source_suggestion_context(client: Client, hub_id: str) -> tuple[list[
 
 
 def _discover_source_suggestions(context_text: str) -> tuple[list[dict], dict]:
+    # Use the Responses API with web search so the worker can suggest public
+    # follow-up sources rather than only recombining hub-local material.
     if not settings.openai_api_key:
         logger.warning("Skipping source suggestions because OPENAI_API_KEY is missing")
         return [], {"error": "missing_openai_api_key"}
@@ -328,6 +344,7 @@ def _normalize_source_suggestion_candidates(
     seed_source_ids: list[str],
     search_metadata: dict,
 ) -> list[dict]:
+    # Normalize and validate model output before any row reaches the database.
     normalized: list[dict] = []
     for candidate in candidates:
         row = _normalize_source_suggestion_candidate(
@@ -348,6 +365,8 @@ def _normalize_source_suggestion_candidate(
     seed_source_ids: list[str],
     search_metadata: dict,
 ) -> Optional[dict]:
+    # Coerce model output into either a canonical web target or a canonical
+    # YouTube target so duplicate checks stay deterministic.
     raw_url = str(candidate.get("url") or "").strip()
     if not raw_url:
         return None
@@ -407,6 +426,8 @@ def _load_existing_source_suggestion_targets(client: Client, hub_id: str) -> set
 
 
 def _load_existing_source_targets(client: Client, hub_id: str) -> set[tuple[str, str]]:
+    # Compare against already-ingested sources as well as pending suggestions so
+    # the model cannot keep proposing the same target in different scans.
     rows = client.table("sources").select("type,ingestion_metadata").eq("hub_id", hub_id).execute().data or []
     targets: set[tuple[str, str]] = set()
     for row in rows:
@@ -432,6 +453,8 @@ def _filter_new_source_suggestions(
     existing_suggestion_targets: set[tuple[str, str]],
     limit: int,
 ) -> list[dict]:
+    # Keep batch output small and biased toward including at least one YouTube
+    # suggestion when the model found a credible video candidate.
     deduped: list[dict] = []
     seen_targets = set(existing_source_targets) | set(existing_suggestion_targets)
     for candidate in candidates:
@@ -506,6 +529,8 @@ def _coerce_confidence(value: object) -> float:
 
 
 def _parse_source_suggestion_candidates(raw: str) -> list[dict]:
+    # Be forgiving about fenced-code-block wrappers because model JSON output is
+    # occasionally wrapped despite the instruction to return a bare array.
     text = (raw or "").strip()
     if not text:
         return []

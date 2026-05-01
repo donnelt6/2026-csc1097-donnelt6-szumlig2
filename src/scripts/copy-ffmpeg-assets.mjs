@@ -1,3 +1,4 @@
+// Copies browser FFmpeg runtime assets into the web app's public folder for manual media upload compression.
 import { copyFileSync, existsSync, mkdirSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";

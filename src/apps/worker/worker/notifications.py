@@ -10,6 +10,8 @@ from .app import settings
 
 
 def dispatch_reminders() -> dict:
+    # Scan both "due now" and "lead reminder" windows in one pass so beat only
+    # needs a single scheduled task for reminder dispatch.
     client = _common._get_supabase_client()
     now = datetime.now(timezone.utc)
     lead_hours = max(1, settings.reminder_lead_hours)
@@ -67,6 +69,8 @@ def _dispatch_for_reminder(
     now: datetime,
     hub_policy_cache: dict[str, dict],
 ) -> int:
+    # Expand one reminder into one or more channel notifications using the
+    # hub-level reminder policy and per-reminder overrides.
     hub_id = reminder.get("hub_id")
     if not hub_id:
         return 0
@@ -104,6 +108,8 @@ def _create_notification_if_needed(
     scheduled_for: datetime,
     now: datetime,
 ) -> bool:
+    # Use an idempotency key so overlapping beat windows do not duplicate
+    # notifications for the same reminder/channel/schedule combination.
     key = f"{reminder['id']}:{kind}:{scheduled_for.isoformat()}:{channel}"
     existing = (
         client.table("notifications")
@@ -146,10 +152,14 @@ def _update_notification(
 
 
 def _mark_reminder_sent(client: Client, reminder_id: str, now: datetime) -> None:
+    # Only due-time notifications mark the reminder itself as sent; lead
+    # notifications are advisory and should not complete the lifecycle.
     client.table("reminders").update({"status": "sent", "sent_at": now.isoformat()}).eq("id", reminder_id).execute()
 
 
 def _get_hub_policy(client: Client, hub_id: str, cache: dict[str, dict]) -> dict:
+    # Cache hub policies within one dispatch run because many reminders may
+    # belong to the same hub during a beat interval.
     cached = cache.get(hub_id)
     if cached is not None:
         return cached
@@ -164,6 +174,8 @@ def _get_hub_policy(client: Client, hub_id: str, cache: dict[str, dict]) -> dict
 
 
 def _normalize_channels(value: Optional[list]) -> list[str]:
+    # Default to in-app delivery so older hubs without explicit policy still
+    # produce visible reminder notifications.
     if not value:
         return ["in_app"]
     channels: list[str] = []

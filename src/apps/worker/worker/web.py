@@ -14,6 +14,8 @@ from .app import settings
 
 
 def _validate_public_url(url: str) -> str:
+    # Reject malformed or non-web URLs before any crawl attempt reaches the
+    # network or downstream extraction logic.
     parsed = urlparse(url)
     if parsed.scheme not in {"http", "https"}:
         raise ValueError("URL scheme must be http or https")
@@ -27,6 +29,8 @@ def _validate_public_url(url: str) -> str:
 
 
 def _ensure_public_host(hostname: str) -> None:
+    # Resolve hostnames defensively so worker crawls cannot be redirected into
+    # private or loopback infrastructure.
     ip_list: list[ipaddress.IPv4Address | ipaddress.IPv6Address] = []
     try:
         ip_list.append(ipaddress.ip_address(hostname))
@@ -47,6 +51,8 @@ def _ensure_public_host(hostname: str) -> None:
 
 
 def _allowed_by_robots(url: str, user_agent: str) -> bool:
+    # Treat missing or unreadable robots files as allowed so public pages do
+    # not fail closed on transient robots fetch issues.
     parsed = urlparse(url)
     robots_url = f"{parsed.scheme}://{parsed.netloc}/robots.txt"
     try:
@@ -62,6 +68,8 @@ def _allowed_by_robots(url: str, user_agent: str) -> bool:
 
 
 def _fetch_url_content(url: str) -> tuple[bytes, str, str]:
+    # Stream responses with a byte cap so large downloads fail early instead of
+    # consuming unbounded memory during web ingestion.
     headers = {"User-Agent": settings.web_user_agent}
     max_bytes = max(1, settings.web_max_bytes)
     current_url = url
@@ -94,6 +102,8 @@ def _fetch_url_content(url: str) -> tuple[bytes, str, str]:
 
 
 def _extract_web_text(raw: bytes, content_type: str) -> tuple[str, Optional[str]]:
+    # Prefer readability-style article extraction, but fall back to a simpler
+    # HTML-to-text pass so ingestion still succeeds on messy pages.
     encoding = "utf-8"
     match = re.search(r"charset=([\w-]+)", content_type, re.IGNORECASE)
     if match:
@@ -133,6 +143,8 @@ def _html_to_text(html: str) -> str:
 
 
 def _build_pseudo_doc(title: Optional[str], url: str, crawl_at: str, content_type: str, text: str) -> str:
+    # Store crawled pages as markdown-like snapshots so refresh and reprocess
+    # flows can share the same downstream chunking path.
     header_title = title or url
     lines = [
         f"# {header_title}",

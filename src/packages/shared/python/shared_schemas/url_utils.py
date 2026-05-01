@@ -59,6 +59,7 @@ def canonicalize_web_url(url: str) -> Optional[str]:
     filtered_items: list[tuple[str, str]] = []
     for key, values in sorted(query.items()):
         normalized_key = key.lower()
+        # Drop common tracking parameters so the same page does not normalize as multiple URLs.
         if normalized_key.startswith("utm_") or normalized_key in {"fbclid", "gclid"}:
             continue
         for value in values:

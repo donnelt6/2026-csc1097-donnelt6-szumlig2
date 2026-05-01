@@ -12,6 +12,8 @@ def _get_attr(obj: object, name: str, default: object = None) -> object:
 
 
 def _extract_response_text(response: object) -> str:
+    # Responses API payloads can expose text in multiple shapes, so callers get
+    # one normalized string regardless of SDK response layout.
     text = _get_attr(response, "output_text")
     if isinstance(text, str) and text.strip():
         return text
@@ -33,6 +35,8 @@ def _extract_response_text(response: object) -> str:
 
 
 def _extract_usage(response: object) -> Optional[dict]:
+    # Preserve usage data when available, but stay tolerant of plain dict or
+    # SDK object representations.
     usage = _get_attr(response, "usage")
     if usage is None:
         return None
@@ -45,6 +49,8 @@ def _extract_usage(response: object) -> Optional[dict]:
 
 
 def _extract_web_search_results(response: object) -> list[object]:
+    # Suggested-source discovery only needs lightweight search result metadata,
+    # not the full mixed response object graph.
     output = _get_attr(response, "output", []) or []
     results: list[object] = []
     for item in output:

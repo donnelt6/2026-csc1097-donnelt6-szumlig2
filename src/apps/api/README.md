@@ -11,6 +11,7 @@ It sits between the Next.js frontend and the backing services used for auth, sto
 - Validate request and response shapes with Pydantic models
 - Read and write product data through the store layer
 - Enqueue background ingestion work for the worker
+- Coordinate source creation flows for file uploads, web URLs, YouTube imports, and manual media fallbacks
 - Run chat retrieval and answer generation
 - Produce FAQ and guide content using stored source material
 
@@ -52,6 +53,10 @@ Most requests follow this path:
 Background ingestion adds one more step:
 
 6. `app/services/queue.py` enqueues worker jobs for asynchronous processing
+
+Manual media recovery for YouTube adds a related source flow:
+
+7. The API can create a linked file source when a failed YouTube source is eligible for manual audio or video upload fallback
 
 ## Folder Guide
 

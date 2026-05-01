@@ -26,6 +26,8 @@ _YOUTUBE_FAILURE_METADATA_KEYS = {
 
 
 def _classify_youtube_failure(message: str) -> tuple[str, bool, str]:
+    # Map low-level ingestion failures into stable codes and user-facing
+    # fallback guidance that the web app can interpret consistently.
     lowered = message.strip().lower()
     if "blocked the hosted worker with a bot check" in lowered:
         return (
@@ -93,6 +95,8 @@ def _mirror_youtube_fallback_parent_status(
     source_metadata: Optional[dict] = None,
     source_might_be_youtube_fallback: bool = False,
 ) -> None:
+    # Linked manual media uploads update their failed YouTube parent through
+    # metadata so the UI can show recovery progress on the original source row.
     metadata = dict(source_metadata or {})
     if not metadata:
         if not source_might_be_youtube_fallback:
@@ -120,6 +124,8 @@ def _mirror_youtube_fallback_parent_status(
 
 
 def ingest_source(self, source_id: str, hub_id: str, storage_path: str) -> dict:
+    # Handle file-backed sources, including manual media fallback uploads that
+    # need transcription before the normal chunking pipeline can run.
     logger.info("worker.ingest.start source_id=%s", source_id)
     client = _common._get_supabase_client()
     source_metadata = _storage._get_source_metadata(client, source_id)
@@ -172,6 +178,8 @@ def ingest_source(self, source_id: str, hub_id: str, storage_path: str) -> dict:
 
 
 def ingest_web_source(self, source_id: str, hub_id: str, url: str, storage_path: str) -> dict:
+    # Crawl, snapshot, and ingest a web page into the same chunk pipeline used
+    # by uploaded documents.
     logger.info("worker.web_ingest.start source_id=%s url=%s", source_id, url)
     client = _common._get_supabase_client()
     _update_source(client, source_id, status="processing", clear_failure_reason=True)
@@ -222,6 +230,8 @@ def ingest_youtube_source(
     allow_auto_captions: Optional[bool] = None,
     video_id: Optional[str] = None,
 ) -> dict:
+    # Ingest caption text plus lightweight video metadata, and preserve enough
+    # failure metadata for manual fallback when hosted imports break.
     logger.info("worker.youtube_ingest.start source_id=%s url=%s", source_id, url)
     client = _common._get_supabase_client()
     existing_metadata = _storage._get_source_metadata(client, source_id)
@@ -301,6 +311,8 @@ def _ingest_text_for_source(
     text: str,
     extra_metadata: Optional[dict],
 ) -> int:
+    # All ingestion entrypoints converge here once they have normalized text,
+    # keeping chunking, embeddings, and reminder detection consistent.
     chunks = _chunk_text(text, settings.chunk_size, settings.chunk_overlap)
     if not chunks:
         raise ValueError("No chunks produced from extracted text")
@@ -334,6 +346,8 @@ def _ingest_text_for_source(
 
 
 def _chunk_text(text: str, chunk_size: int, overlap: int) -> List[str]:
+    # Chunk by words with overlap because retrieval quality matters more than
+    # preserving original formatting boundaries for these source types.
     words = text.split()
     if not words:
         return []
@@ -350,6 +364,8 @@ def _chunk_text(text: str, chunk_size: int, overlap: int) -> List[str]:
 
 
 def _embed_chunks(chunks: List[str]) -> List[List[float]]:
+    # Batch embedding calls to stay within payload limits while keeping retries
+    # scoped to smaller groups of chunks.
     if not settings.openai_api_key:
         raise RuntimeError("OPENAI_API_KEY missing in worker environment")
     client = OpenAI(api_key=settings.openai_api_key)
@@ -368,6 +384,8 @@ def _insert_chunks(
     embeddings: List[List[float]],
     created_at: str,
 ) -> None:
+    # Insert chunk rows in batches so large sources do not build a single huge
+    # PostgREST payload.
     rows = []
     for idx, (text, embedding) in enumerate(zip(chunks, embeddings, strict=False)):
         rows.append(
@@ -400,6 +418,8 @@ def _update_source(
     source_metadata: Optional[dict] = None,
     source_might_be_youtube_fallback: bool = False,
 ) -> None:
+    # Wrap storage-layer source updates so YouTube fallback metadata mirroring
+    # stays attached to every status transition.
     _storage._update_source(
         client,
         source_id,

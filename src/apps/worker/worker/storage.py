@@ -10,6 +10,8 @@ from .app import settings
 
 
 def _download_from_storage(storage_path: str) -> bytes:
+    # Fetch source bytes through the storage REST endpoint so workers do not
+    # depend on browser-style signed upload flows.
     if not settings.supabase_url or not settings.supabase_service_role_key:
         raise RuntimeError("Supabase credentials missing for storage download")
     safe_path = quote(storage_path, safe="/")
@@ -25,6 +27,8 @@ def _download_from_storage(storage_path: str) -> bytes:
 
 
 def _upload_pseudo_doc(client: Client, storage_path: str, content: str) -> None:
+    # Web and YouTube ingestions replace the original input with a normalized
+    # text snapshot that can be reprocessed later without refetching upstream.
     if not storage_path:
         raise ValueError("Storage path missing for pseudo document")
     payload = content.encode("utf-8")
@@ -40,6 +44,8 @@ def _upload_pseudo_doc(client: Client, storage_path: str, content: str) -> None:
 
 
 def _clear_existing_chunks_before(client: Client, source_id: str, cutoff: str) -> None:
+    # Keep only the newest ingestion pass so refresh and reprocess runs do not
+    # leave stale chunk rows behind.
     client.table("source_chunks").delete().eq("source_id", source_id).lt("created_at", cutoff).execute()
 
 
@@ -49,6 +55,8 @@ def _source_exists(client: Client, source_id: str) -> bool:
 
 
 def _get_source_metadata(client: Client, source_id: str) -> dict:
+    # Callers treat missing or malformed metadata as an empty dict so task
+    # retries can rebuild state without extra branching.
     response = (
         client.table("sources")
         .select("ingestion_metadata")
@@ -70,6 +78,8 @@ def _update_source(
     ingestion_metadata: Optional[dict] = None,
     clear_failure_reason: bool = False,
 ) -> None:
+    # Centralize partial source-row updates so task code can keep status and
+    # metadata writes consistent across file, web, and YouTube flows.
     payload: dict = {"status": status}
     if failure_reason is not None or clear_failure_reason:
         payload["failure_reason"] = failure_reason

@@ -46,6 +46,7 @@ The main developer workspace guide is in `src/README.md`, with more detailed set
 - File upload ingestion for knowledge sources
 - Web page ingestion with refresh and reprocessing support
 - YouTube transcript ingestion
+- Manual audio/video upload fallback for recoverable YouTube ingestion failures
 - Retrieval-augmented chat with citations and optional web search
 - AI-generated onboarding FAQs
 - AI-generated step-by-step onboarding guides
@@ -150,5 +151,6 @@ The mocked E2E suite runs the real web app with fake auth and mocked API traffic
 
 - The API expects Supabase Auth JWTs for user-scoped routes.
 - The worker uses the Supabase service role key for ingestion and storage-side operations.
+- Recoverable YouTube failures can fall back to manual media uploads using `mp3`, `mp4`, or `m4a` files.
 - Local development expects Redis plus the required Supabase and OpenAI configuration.
 - Deployment and promotion notes currently live in `src/README.md` and `.gitlab-ci.yml`.

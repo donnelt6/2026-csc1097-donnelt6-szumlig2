@@ -25,6 +25,8 @@ def _fetch_youtube_transcript(
     language: Optional[str],
     allow_auto_captions: Optional[bool],
 ) -> tuple[str, dict, dict]:
+    # Resolve metadata first, then select and download exactly one caption track
+    # so the downstream ingestion path receives normalized transcript text.
     try:
         from yt_dlp import YoutubeDL
     except Exception as exc:
@@ -100,6 +102,8 @@ def _build_youtube_ydl_opts(cookiefile: Optional[str] = None) -> dict:
 
 @contextmanager
 def _youtube_cookiefile_path():
+    # Accept mounted cookie files or secret-provided cookie text without making
+    # callers care how hosted environments expose the credentials.
     configured_file = settings.youtube_cookies_file.strip()
     if configured_file:
         yield configured_file
@@ -146,6 +150,8 @@ def _select_caption_track(
     preferred_language: Optional[str],
     allow_auto: bool,
 ) -> tuple[str, str, str, str]:
+    # Prefer manual captions, then auto captions, then English fallbacks before
+    # giving up entirely on transcript extraction.
     subtitles = info.get("subtitles") or {}
     auto_caps = (info.get("automatic_captions") or {}) if allow_auto else {}
 
@@ -227,6 +233,8 @@ def _select_caption_format(lang: str, formats: list[dict]) -> Optional[tuple[str
 
 
 def _download_caption_text(url: str) -> bytes:
+    # Retry only transient network and upstream-status failures so rate-limited
+    # or temporarily unavailable caption URLs do not fail on the first attempt.
     max_bytes = max(1, settings.youtube_max_bytes)
     retry_statuses = {429, 500, 502, 503, 504}
     max_attempts = 3
@@ -270,6 +278,8 @@ def _download_caption_text(url: str) -> bytes:
 
 
 def _parse_caption_text(raw: bytes, ext: str) -> str:
+    # Caption endpoints return several subtitle formats, so normalize them into
+    # plain transcript text before chunking.
     text = raw.decode("utf-8", errors="ignore")
     ext_lower = (ext or "").lower()
     if ext_lower in {"vtt", "srt"}:
@@ -346,6 +356,8 @@ def _format_duration(seconds: Optional[int]) -> Optional[str]:
 
 
 def _build_youtube_pseudo_doc(info: dict, url: str, fetched_at: str, captions_meta: dict, text: str) -> str:
+    # Persist transcript snapshots with enough metadata to support reprocess
+    # flows and source detail views without another YouTube fetch.
     title = info.get("title") or "YouTube Video"
     lines: list[str] = [f"# {title}"]
     if url:

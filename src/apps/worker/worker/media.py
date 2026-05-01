@@ -33,6 +33,8 @@ def _is_supported_media_path(storage_path: str) -> bool:
 
 
 def _transcribe_media_bytes(raw: bytes, storage_path: str) -> tuple[str, dict]:
+    # Manual media uploads reuse OpenAI transcription, but record enough
+    # metadata for later debugging of size and preprocessing decisions.
     ext = _media_extension(storage_path)
     if ext not in SUPPORTED_MEDIA_EXTENSIONS:
         raise ValueError("Unsupported media format for transcription")
@@ -78,6 +80,8 @@ def _transcribe_media_bytes(raw: bytes, storage_path: str) -> tuple[str, dict]:
 
 
 def _prepare_transcription_input(raw: bytes, storage_path: str) -> tuple[str, bytes, dict]:
+    # Use the original upload when possible, and only invoke FFmpeg when the
+    # file exceeds the direct transcription size limit.
     ext = _media_extension(storage_path)
     upload_name = Path(storage_path).name or f"upload{ext}"
     original_bytes = len(raw)
@@ -107,6 +111,8 @@ def _prepare_transcription_input(raw: bytes, storage_path: str) -> tuple[str, by
 
 
 def _compress_media_for_transcription(raw: bytes, storage_path: str) -> tuple[str, bytes]:
+    # Transcode large uploads into lower-bitrate mono MP3 files so oversized
+    # browser uploads can still fit within the transcription API cap.
     ffmpeg_binary = shutil.which(settings.ffmpeg_binary)
     if not ffmpeg_binary:
         raise RuntimeError("FFmpeg is required to transcribe media files above the direct transcription size limit")
@@ -129,6 +135,8 @@ def _compress_media_for_transcription(raw: bytes, storage_path: str) -> tuple[st
 
 
 def _run_ffmpeg_preprocess(ffmpeg_binary: str, input_path: Path, output_path: Path, bitrate: str) -> None:
+    # Keep the FFmpeg invocation centralized so retries and error reporting stay
+    # consistent across bitrate fallback attempts.
     if output_path.exists():
         output_path.unlink()
     try:
