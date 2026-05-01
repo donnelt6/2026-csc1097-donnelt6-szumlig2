@@ -1,6 +1,6 @@
 # Caddie
 
-Caddie is an AI-assisted onboarding and knowledge hub for teams. It lets users create shared hubs, upload internal material, ingest web pages and YouTube transcripts, ask cited questions over that content, generate onboarding FAQs and guides, manage reminders, and collaborate with role-based membership controls.
+Caddie is an AI-assisted onboarding and professional documentation assistant. It lets users create shared hubs, upload internal material, ingest web pages, Audio/Video files and YouTube transcripts, ask cited questions over that content, generate onboarding FAQs and guides, manage reminders, and collaborate with role-based membership controls.
 
 
 ## What Caddie Includes
