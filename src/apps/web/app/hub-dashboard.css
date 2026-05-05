@@ -2176,6 +2176,7 @@
   -webkit-line-clamp: 2;
   line-clamp: 2;
   -webkit-box-orient: vertical;
+  overflow: hidden;
   overflow-wrap: anywhere;
   word-break: break-word;
   hyphens: auto;
@@ -2196,6 +2197,7 @@
   line-clamp: 2;
   margin-top: 0;
   margin-bottom: 0;
+  max-height: calc(1.625em * 2);
   min-height: calc(1.625em * 2);
 }
 
