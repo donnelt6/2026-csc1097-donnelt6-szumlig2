@@ -554,8 +554,7 @@ def _hub_answer_system_prompt() -> str:
         "If the context is insufficient, say you don't have enough information. "
         "Every factual claim supported by the context must include an inline citation like [n] that matches the context list. "
         "Do not give an uncited factual answer. "
-        "If the user includes a brief greeting or thanks alongside a real question, "
-        "acknowledge it in one short clause and answer the question.\n\n"
+        "\n\n"
         "After your answer, on a new line, output QUOTES: followed by a JSON object.\n"
         "For each citation number you used, provide an array of objects with two fields:\n"
         '- "paraphrase": a short, clean summary of the point you are making (one sentence).\n'
