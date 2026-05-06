@@ -14,6 +14,8 @@ const GREETING_ANSWERS = new Set([
   "You're welcome! Let me know if there's anything else I can help with.",
 ]);
 
+const EMPTY_ANSWER_FALLBACK = "I don't have enough information from this hub's sources to answer that.";
+
 export type ChatResponseLike = Omit<ChatResponse, "answer_status"> & {
   answer_status?: ChatAnswerStatus;
 };
@@ -30,8 +32,10 @@ export function inferAnswerStatus(content: string, citations: Citation[]): ChatA
 }
 
 export function normaliseChatResponse(response: ChatResponseLike): ChatResponse {
+  const answer = response.answer.trim() ? response.answer : EMPTY_ANSWER_FALLBACK;
   return {
     ...response,
-    answer_status: response.answer_status ?? inferAnswerStatus(response.answer, response.citations),
+    answer,
+    answer_status: response.answer_status ?? inferAnswerStatus(answer, response.citations),
   };
 }

@@ -70,6 +70,9 @@ export function useChatSession({ hubId, sources, onSourceSelectionChange }: UseC
   const pendingSessionSourceIdsRef = useRef<string[] | null>(null);
   const hasActivatedNewSessionDraftRef = useRef(false);
   const activeLoadTokenRef = useRef(0);
+  const activeSessionIdRef = useRef<string | null>(null);
+  const locallyPersistedSessionIdsRef = useRef(new Set<string>());
+  const pendingPersistedSessionQueryRef = useRef<string | null>(null);
 
   function invalidateActiveLoadToken() {
     // Session navigation must invalidate both in-flight loads and pending sends.
@@ -152,6 +155,11 @@ export function useChatSession({ hubId, sources, onSourceSelectionChange }: UseC
   useEffect(() => {
     hasActivatedNewSessionDraftRef.current = false;
   }, [hubId, initialSessionParam]);
+
+  useEffect(() => {
+    locallyPersistedSessionIdsRef.current.clear();
+    pendingPersistedSessionQueryRef.current = null;
+  }, [hubId]);
 
   useEffect(() => {
     const previousIds = previousCompleteSourceIdsRef.current;
@@ -287,6 +295,7 @@ export function useChatSession({ hubId, sources, onSourceSelectionChange }: UseC
     } else {
       pendingSessionSourceIdsRef.current = null;
     }
+    activeSessionIdRef.current = session.id;
     setActiveSessionId(session.id);
     persistLastSessionId(session.id);
     setMessages(convertSessionMessagesToPairs(sessionMessages));
@@ -299,6 +308,7 @@ export function useChatSession({ hubId, sources, onSourceSelectionChange }: UseC
     const cached = sessionSourceCacheRef.current.get(null);
     const currentCompleteIds = completeSourceIdsRef.current;
     setDraftState(nextDraft);
+    activeSessionIdRef.current = null;
     setActiveSessionId(null);
     setMessages(nextDraft.messages);
     setScope(nextDraft.scope);
@@ -375,12 +385,28 @@ export function useChatSession({ hubId, sources, onSourceSelectionChange }: UseC
           return;
         }
 
-        const cachedSessionId = readLastSessionId();
-        const preferredSessionId = initialSessionParam ?? cachedSessionId;
-
-        if (preferredSessionId && sessions.some((session) => session.id === preferredSessionId)) {
+        if (initialSessionParam) {
           try {
-            const detail = await getChatSessionMessages(preferredSessionId, hubId);
+            const detail = await getChatSessionMessages(initialSessionParam, hubId);
+            if (isStale()) {
+              return;
+            }
+            hydrateSession(detail.session, detail.messages);
+            updateSessionCache((current) => upsertSessionSummary(current, detail.session));
+            syncSessionQuery(detail.session.id, { preserveMessage: true });
+            return;
+          } catch (error) {
+            if (!isStale()) {
+              setPanelError(error instanceof Error ? error.message : String(error));
+            }
+            syncSessionQuery(null);
+          }
+        }
+
+        const cachedSessionId = readLastSessionId();
+        if (cachedSessionId && sessions.some((session) => session.id === cachedSessionId)) {
+          try {
+            const detail = await getChatSessionMessages(cachedSessionId, hubId);
             if (isStale()) {
               return;
             }
@@ -426,7 +452,13 @@ export function useChatSession({ hubId, sources, onSourceSelectionChange }: UseC
   useEffect(() => {
     if (isBootstrapping) return;
     if (currentSessionParam === "new") {
-      if (activeSessionId !== null || !hasActivatedNewSessionDraftRef.current) {
+      if (
+        activeSessionIdRef.current &&
+        pendingPersistedSessionQueryRef.current === activeSessionIdRef.current
+      ) {
+        return;
+      }
+      if (activeSessionIdRef.current !== null || !hasActivatedNewSessionDraftRef.current) {
         hasActivatedNewSessionDraftRef.current = true;
         invalidateActiveLoadToken();
         sessionSourceCacheRef.current.delete(null);
@@ -434,7 +466,15 @@ export function useChatSession({ hubId, sources, onSourceSelectionChange }: UseC
       }
       return;
     }
-    if (currentSessionParam && currentSessionParam !== activeSessionId) {
+    if (
+      currentSessionParam &&
+      locallyPersistedSessionIdsRef.current.has(currentSessionParam) &&
+      currentSessionParam === activeSessionIdRef.current
+    ) {
+      pendingPersistedSessionQueryRef.current = null;
+      return;
+    }
+    if (currentSessionParam && currentSessionParam !== activeSessionIdRef.current) {
       const loadToken = invalidateActiveLoadToken();
       void openSession(currentSessionParam, undefined, false, loadToken, false);
     }
@@ -445,6 +485,7 @@ export function useChatSession({ hubId, sources, onSourceSelectionChange }: UseC
       isBootstrapping ||
       activeSessionId === null ||
       currentSessionParam === "new" ||
+      locallyPersistedSessionIdsRef.current.has(activeSessionId) ||
       sessionList.some((session) => session.id === activeSessionId)
     ) {
       return;
@@ -588,7 +629,13 @@ export function useChatSession({ hubId, sources, onSourceSelectionChange }: UseC
         last_message_at: now,
       };
 
+      // The newly created session is valid before every session-list subscriber
+      // has observed the optimistic cache write; keep the completed answer visible
+      // during that short URL/cache catch-up window.
+      locallyPersistedSessionIdsRef.current.add(nextSummary.id);
       updateSessionCache((current) => moveSessionToTop(upsertSessionSummary(current, nextSummary), nextSummary.id));
+      activeSessionIdRef.current = response.session_id;
+      pendingPersistedSessionQueryRef.current = response.session_id;
       setActiveSessionId(response.session_id);
       setScope(requestScope);
       setSelectedSourceIds(normalizedPersistedSourceIds);
