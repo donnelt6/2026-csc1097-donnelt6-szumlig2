@@ -282,35 +282,36 @@ export const ChatPanel = forwardRef<ChatPanelHandle, Props>(function ChatPanel(
                   {message.timestamp && (
                     <span className="chat__timestamp chat__timestamp--user">{formatMessageTime(message.timestamp)}</span>
                   )}
-                  <div
-                    ref={(element) => assignMessageRef(message.response?.message_id ?? null, element)}
-                    className={`chat__message chat__message--ai${highlightedMessageId !== null && message.response?.message_id === highlightedMessageId ? " chat__message--highlighted" : ""}`}
-                  >
-                    <div className="chat__avatar chat__avatar--ai">
-                      <svg
-                        className="chat__avatar-mark"
-                        viewBox="0 0 256 256"
-                        aria-hidden="true"
-                        focusable="false"
-                      >
-                        <path
-                          d="M184.4 78.8C169.5 64.8 149.4 56 127.2 56C83.5 56 48 91.5 48 135.2C48 178.9 83.5 214.4 127.2 214.4C149.7 214.4 170 205 184.4 190L162.4 168C153.6 176.9 141.3 182.4 127.8 182.4C101.5 182.4 80 160.9 80 134.6C80 108.3 101.5 86.8 127.8 86.8C141.2 86.8 153.4 92.2 162.2 101L184.4 78.8Z"
-                          fill="#000000"
-                        />
-                      </svg>
-                    </div>
-                    <div className="chat__bubble chat__bubble--ai">
-                      {message.isLoading && (
-                        <div className="chat__typing">
-                          <span className="chat__dot" />
-                          <span className="chat__dot" />
-                          <span className="chat__dot" />
-                        </div>
-                      )}
-                      {message.error && <p className="chat__error">Error: {message.error}</p>}
-                      {message.response && (
-                        <>
-                          {(() => {
+                  {(message.isLoading || message.error || message.response) && (
+                    <div
+                      ref={(element) => assignMessageRef(message.response?.message_id ?? null, element)}
+                      className={`chat__message chat__message--ai${highlightedMessageId !== null && message.response?.message_id === highlightedMessageId ? " chat__message--highlighted" : ""}`}
+                    >
+                      <div className="chat__avatar chat__avatar--ai">
+                        <svg
+                          className="chat__avatar-mark"
+                          viewBox="0 0 256 256"
+                          aria-hidden="true"
+                          focusable="false"
+                        >
+                          <path
+                            d="M184.4 78.8C169.5 64.8 149.4 56 127.2 56C83.5 56 48 91.5 48 135.2C48 178.9 83.5 214.4 127.2 214.4C149.7 214.4 170 205 184.4 190L162.4 168C153.6 176.9 141.3 182.4 127.8 182.4C101.5 182.4 80 160.9 80 134.6C80 108.3 101.5 86.8 127.8 86.8C141.2 86.8 153.4 92.2 162.2 101L184.4 78.8Z"
+                            fill="#000000"
+                          />
+                        </svg>
+                      </div>
+                      <div className="chat__bubble chat__bubble--ai">
+                        {message.isLoading && (
+                          <div className="chat__typing">
+                            <span className="chat__dot" />
+                            <span className="chat__dot" />
+                            <span className="chat__dot" />
+                          </div>
+                        )}
+                        {message.error && <p className="chat__error">Error: {message.error}</p>}
+                        {message.response && (
+                          <>
+                            {(() => {
                             const currentFeedback = feedbackByMessageId[message.response.message_id] ?? message.response.feedback_rating ?? null;
                             return (
                               <>
@@ -464,12 +465,13 @@ export const ChatPanel = forwardRef<ChatPanelHandle, Props>(function ChatPanel(
                                 </div>
                               </>
                             );
-                          })()}
-                        </>
-                      )}
+                            })()}
+                          </>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                  {!message.isLoading && message.timestamp && (
+                  )}
+                  {!message.isLoading && (message.error || message.response) && message.timestamp && (
                     <span className="chat__timestamp chat__timestamp--ai">
                       {formatMessageTime(message.timestamp)}
                     </span>

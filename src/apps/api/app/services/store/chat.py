@@ -67,6 +67,7 @@ from .common_helpers import (
 
 
 _HUB_ABSTAIN_ANSWER = "I don't have enough information from this hub's sources to answer that."
+_CHAT_EMPTY_COMPLETION_MAX_ATTEMPTS = 3
 _SESSION_MESSAGE_ABSTAIN_MARKERS = (
     "don't have enough information",
     "do not have enough information",
@@ -1245,6 +1246,8 @@ class ChatStoreMixin:
         citations: List[Citation],
     ) -> tuple[str, List[Citation]]:
         answer, quotes = _extract_quotes(raw_answer)
+        if not answer.strip():
+            return _HUB_ABSTAIN_ANSWER, []
         hydrated_citations = [citation.model_copy(deep=True) for citation in citations]
         verified_quote_indices: List[int] = []
         for idx_str, pairs in quotes.items():
@@ -1289,8 +1292,25 @@ class ChatStoreMixin:
         trace: Optional[ChatTraceRecorder],
         step_name: str,
     ) -> tuple[str, Optional[Dict[str, Any]]]:
-        if trace:
-            with trace.step(step_name, scope=scope.value, context_block_count=context_block_count) as step:
+        last_usage_payload: Optional[Dict[str, Any]] = None
+        for attempt in range(1, _CHAT_EMPTY_COMPLETION_MAX_ATTEMPTS + 1):
+            if trace:
+                with trace.step(step_name, scope=scope.value, context_block_count=context_block_count, attempt=attempt) as step:
+                    completion = self.llm_client.chat.completions.create(
+                        model=self.chat_model,
+                        messages=[
+                            {"role": "system", "content": system_prompt},
+                            *history_messages,
+                            {"role": "user", "content": user_prompt},
+                        ],
+                        temperature=0.2,
+                    )
+                    usage_payload = completion.usage.model_dump() if completion.usage else None
+                    step.output = {
+                        "total_tokens": _total_tokens_from_usage(usage_payload),
+                        "empty_completion": not bool((completion.choices[0].message.content or "").strip()),
+                    }
+            else:
                 completion = self.llm_client.chat.completions.create(
                     model=self.chat_model,
                     messages=[
@@ -1300,27 +1320,26 @@ class ChatStoreMixin:
                     ],
                     temperature=0.2,
                 )
-                step.output = {"total_tokens": _total_tokens_from_usage(completion.usage.model_dump() if completion.usage else None)}
-        else:
-            completion = self.llm_client.chat.completions.create(
-                model=self.chat_model,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    *history_messages,
-                    {"role": "user", "content": user_prompt},
-                ],
-                temperature=0.2,
-            )
-        usage_payload = completion.usage.model_dump() if completion.usage else None
-        content = completion.choices[0].message.content
-        if not content:
+                usage_payload = completion.usage.model_dump() if completion.usage else None
+
+            last_usage_payload = usage_payload
+            content = completion.choices[0].message.content or ""
+            if content.strip():
+                return content, usage_payload
             logger.warning(
-                "chat.empty_completion model=%s total_tokens=%s",
+                "chat.empty_completion model=%s attempt=%d/%d total_tokens=%s",
                 self.chat_model,
+                attempt,
+                _CHAT_EMPTY_COMPLETION_MAX_ATTEMPTS,
                 _total_tokens_from_usage(usage_payload),
             )
-            return _HUB_ABSTAIN_ANSWER, usage_payload
-        return content, usage_payload
+        logger.warning(
+            "chat.empty_completion_exhausted model=%s attempts=%d total_tokens=%s",
+            self.chat_model,
+            _CHAT_EMPTY_COMPLETION_MAX_ATTEMPTS,
+            _total_tokens_from_usage(last_usage_payload),
+        )
+        return _HUB_ABSTAIN_ANSWER, last_usage_payload
 
     # -------------------------------------------------------------------------
     # Main chat execution and feedback flows
